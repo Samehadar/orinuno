@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: orinuno-test
+
+orinuno:
+  kodik:
+    api-url: https://kodik-api.com
+    token: test-token
+    request-delay-ms: 0
+  parse:
+    rate-limit-per-minute: 1000
+  decoder:
+    timeout-seconds: 10
+    max-retries: 1
+  proxy:
+    enabled: false
+    rotation-strategy: round-robin
+
+logging:
+  level:
+    com.orinuno: DEBUG

@@ -1,0 +1,90 @@
+server:
+  port: ${APP_PORT:8080}
+
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "health,prometheus,info"
+  server:
+    port: ${APP_ACTUATOR:8081}
+
+spring:
+  application:
+    name: orinuno
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:orinuno}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  liquibase:
+    change-log: classpath:com/orinuno/db/changelog/liquibase-changelog.yaml
+    contexts: ${LIQUIBASE_CONTEXTS:default}
+
+mybatis:
+  mapper-locations: classpath:com/orinuno/db/mapper/*.xml
+  type-aliases-package: com.orinuno.model
+  configuration:
+    map-underscore-to-camel-case: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+orinuno:
+  kodik:
+    api-url: ${KODIK_API_URL:https://kodik-api.com}
+    token: ${KODIK_TOKEN:}
+    request-delay-ms: ${KODIK_REQUEST_DELAY_MS:500}
+  parse:
+    rate-limit-per-minute: ${PARSE_RATE_LIMIT_PER_MINUTE:30}
+  decoder:
+    timeout-seconds: ${DECODER_TIMEOUT_SECONDS:30}
+    max-retries: ${DECODER_MAX_RETRIES:3}
+    link-ttl-hours: ${DECODER_LINK_TTL_HOURS:20}
+    refresh-interval-ms: ${DECODER_REFRESH_INTERVAL_MS:3600000}
+    refresh-batch-size: ${DECODER_REFRESH_BATCH_SIZE:50}
+  security:
+    api-key: ${ORINUNO_API_KEY:}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+  proxy:
+    enabled: ${PROXY_ENABLED:false}
+    rotation-strategy: ${PROXY_ROTATION_STRATEGY:round-robin}
+  storage:
+    base-path: ${STORAGE_BASE_PATH:./data/videos}
+    max-disk-usage-mb: ${STORAGE_MAX_DISK_USAGE_MB:10240}
+  playwright:
+    enabled: ${PLAYWRIGHT_ENABLED:true}
+    headless: ${PLAYWRIGHT_HEADLESS:true}
+    page-timeout-seconds: ${PLAYWRIGHT_PAGE_TIMEOUT_SECONDS:30}
+    navigation-timeout-ms: ${PLAYWRIGHT_NAVIGATION_TIMEOUT_MS:15000}
+    video-wait-ms: ${PLAYWRIGHT_VIDEO_WAIT_MS:30000}
+    hls-concurrency: ${PLAYWRIGHT_HLS_CONCURRENCY:16}
+
+---
+spring.config.activate.on-profile: local
+
+logging:
+  level:
+    com.orinuno: ${LOG_LEVEL:DEBUG}
+    org.springframework.web: ${WEB_LOG_LEVEL:WARN}
+    org.mybatis: ${MYBATIS_LOG_LEVEL:DEBUG}
+
+---
+spring.config.activate.on-profile: prod
+
+springdoc:
+  swagger-ui.enabled: false
+  api-docs.enabled: false
