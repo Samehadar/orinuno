@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260410120000_create_kodik_content.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260410120100_create_kodik_episode_variant.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260410120200_create_kodik_proxy.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260410120300_add_mp4_link_decoded_at.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260411120000_add_local_filepath.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260416120000_add_material_data.sql
