@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.ContentRepository">
+
+    <resultMap id="contentResultMap" type="com.orinuno.model.KodikContent">
+        <id property="id" column="id"/>
+        <result property="kodikId" column="kodik_id"/>
+        <result property="type" column="type"/>
+        <result property="title" column="title"/>
+        <result property="titleOrig" column="title_orig"/>
+        <result property="otherTitle" column="other_title"/>
+        <result property="year" column="year"/>
+        <result property="kinopoiskId" column="kinopoisk_id"/>
+        <result property="imdbId" column="imdb_id"/>
+        <result property="shikimoriId" column="shikimori_id"/>
+        <result property="worldartLink" column="worldart_link"/>
+        <result property="screenshots" column="screenshots"/>
+        <result property="materialData" column="material_data"/>
+        <result property="kinopoiskRating" column="kinopoisk_rating"/>
+        <result property="imdbRating" column="imdb_rating"/>
+        <result property="shikimoriRating" column="shikimori_rating"/>
+        <result property="genres" column="genres"/>
+        <result property="blockedCountries" column="blocked_countries"/>
+        <result property="camrip" column="camrip"/>
+        <result property="lgbt" column="lgbt"/>
+        <result property="lastSeason" column="last_season"/>
+        <result property="lastEpisode" column="last_episode"/>
+        <result property="episodesCount" column="episodes_count"/>
+        <result property="quality" column="quality"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="contentResultMap">
+        SELECT * FROM kodik_content WHERE id = #{id}
+    </select>
+
+    <select id="findByKinopoiskId" resultMap="contentResultMap">
+        SELECT * FROM kodik_content WHERE kinopoisk_id = #{kinopoiskId} LIMIT 1
+    </select>
+
+    <select id="findByTitleAndYear" resultMap="contentResultMap">
+        SELECT * FROM kodik_content WHERE title = #{title} AND year = #{year} LIMIT 1
+    </select>
+
+    <select id="findAll" resultMap="contentResultMap">
+        SELECT * FROM kodik_content
+        ORDER BY ${sortBy} ${order}
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="findReadyForExport" resultMap="contentResultMap">
+        SELECT DISTINCT c.* FROM kodik_content c
+        INNER JOIN kodik_episode_variant ev ON c.id = ev.content_id
+        WHERE ev.mp4_link IS NOT NULL
+        <if test="updatedSince != null">AND c.updated_at &gt; #{updatedSince}</if>
+        ORDER BY c.updated_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM kodik_content
+    </select>
+
+    <select id="countReadyForExport" resultType="long">
+        SELECT COUNT(DISTINCT c.id) FROM kodik_content c
+        INNER JOIN kodik_episode_variant ev ON c.id = ev.content_id
+        WHERE ev.mp4_link IS NOT NULL
+        <if test="updatedSince != null">AND c.updated_at &gt; #{updatedSince}</if>
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kodik_content (kodik_id, type, title, title_orig, other_title, year,
+            kinopoisk_id, imdb_id, shikimori_id, worldart_link, screenshots,
+            material_data, kinopoisk_rating, imdb_rating, shikimori_rating, genres, blocked_countries,
+            camrip, lgbt, last_season, last_episode, episodes_count, quality)
+        VALUES (#{kodikId}, #{type}, #{title}, #{titleOrig}, #{otherTitle}, #{year},
+            #{kinopoiskId}, #{imdbId}, #{shikimoriId}, #{worldartLink}, #{screenshots},
+            #{materialData}, #{kinopoiskRating}, #{imdbRating}, #{shikimoriRating}, #{genres}, #{blockedCountries},
+            #{camrip}, #{lgbt}, #{lastSeason}, #{lastEpisode}, #{episodesCount}, #{quality})
+    </insert>
+
+    <update id="update">
+        UPDATE kodik_content SET
+            kodik_id = #{kodikId},
+            type = #{type},
+            title = #{title},
+            title_orig = #{titleOrig},
+            other_title = #{otherTitle},
+            year = #{year},
+            kinopoisk_id = #{kinopoiskId},
+            imdb_id = #{imdbId},
+            shikimori_id = #{shikimoriId},
+            worldart_link = #{worldartLink},
+            screenshots = #{screenshots},
+            material_data = #{materialData},
+            kinopoisk_rating = #{kinopoiskRating},
+            imdb_rating = #{imdbRating},
+            shikimori_rating = #{shikimoriRating},
+            genres = #{genres},
+            blocked_countries = #{blockedCountries},
+            camrip = #{camrip},
+            lgbt = #{lgbt},
+            last_season = #{lastSeason},
+            last_episode = #{lastEpisode},
+            episodes_count = #{episodesCount},
+            quality = #{quality}
+        WHERE id = #{id}
+    </update>
+
+    <insert id="upsertByKinopoiskId" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kodik_content (kodik_id, type, title, title_orig, other_title, year,
+            kinopoisk_id, imdb_id, shikimori_id, worldart_link, screenshots,
+            material_data, kinopoisk_rating, imdb_rating, shikimori_rating, genres, blocked_countries,
+            camrip, lgbt, last_season, last_episode, episodes_count, quality)
+        VALUES (#{kodikId}, #{type}, #{title}, #{titleOrig}, #{otherTitle}, #{year},
+            #{kinopoiskId}, #{imdbId}, #{shikimoriId}, #{worldartLink}, #{screenshots},
+            #{materialData}, #{kinopoiskRating}, #{imdbRating}, #{shikimoriRating}, #{genres}, #{blockedCountries},
+            #{camrip}, #{lgbt}, #{lastSeason}, #{lastEpisode}, #{episodesCount}, #{quality})
+        ON DUPLICATE KEY UPDATE
+            kodik_id = VALUES(kodik_id),
+            type = VALUES(type),
+            title = VALUES(title),
+            title_orig = VALUES(title_orig),
+            other_title = VALUES(other_title),
+            year = VALUES(year),
+            imdb_id = VALUES(imdb_id),
+            shikimori_id = VALUES(shikimori_id),
+            worldart_link = VALUES(worldart_link),
+            screenshots = VALUES(screenshots),
+            material_data = COALESCE(VALUES(material_data), material_data),
+            kinopoisk_rating = COALESCE(VALUES(kinopoisk_rating), kinopoisk_rating),
+            imdb_rating = COALESCE(VALUES(imdb_rating), imdb_rating),
+            shikimori_rating = COALESCE(VALUES(shikimori_rating), shikimori_rating),
+            genres = COALESCE(VALUES(genres), genres),
+            blocked_countries = COALESCE(VALUES(blocked_countries), blocked_countries),
+            camrip = VALUES(camrip),
+            lgbt = VALUES(lgbt),
+            last_season = VALUES(last_season),
+            last_episode = VALUES(last_episode),
+            episodes_count = VALUES(episodes_count),
+            quality = VALUES(quality),
+            id = LAST_INSERT_ID(id)
+    </insert>
+
+    <delete id="deleteById">
+        DELETE FROM kodik_content WHERE id = #{id}
+    </delete>
+
+</mapper>

@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.EpisodeVariantRepository">
+
+    <resultMap id="variantResultMap" type="com.orinuno.model.KodikEpisodeVariant">
+        <id property="id" column="id"/>
+        <result property="contentId" column="content_id"/>
+        <result property="seasonNumber" column="season_number"/>
+        <result property="episodeNumber" column="episode_number"/>
+        <result property="translationId" column="translation_id"/>
+        <result property="translationTitle" column="translation_title"/>
+        <result property="translationType" column="translation_type"/>
+        <result property="quality" column="quality"/>
+        <result property="kodikLink" column="kodik_link"/>
+        <result property="mp4Link" column="mp4_link"/>
+        <result property="mp4LinkDecodedAt" column="mp4_link_decoded_at"/>
+        <result property="localFilepath" column="local_filepath"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant WHERE id = #{id}
+    </select>
+
+    <select id="findByContentId" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant WHERE content_id = #{contentId}
+        ORDER BY season_number, episode_number, translation_id
+    </select>
+
+    <select id="findByContentIdWithoutMp4" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant
+        WHERE content_id = #{contentId} AND mp4_link IS NULL
+        ORDER BY season_number, episode_number
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
+            translation_id, translation_title, translation_type, quality, kodik_link, mp4_link)
+        VALUES (#{contentId}, #{seasonNumber}, #{episodeNumber},
+            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink}, #{mp4Link})
+    </insert>
+
+    <!-- PF3: COALESCE, never overwrite valid mp4_link with NULL -->
+    <insert id="upsertWithCoalesce">
+        INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
+            translation_id, translation_title, translation_type, quality, kodik_link, mp4_link)
+        VALUES (#{contentId}, #{seasonNumber}, #{episodeNumber},
+            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink}, #{mp4Link})
+        ON DUPLICATE KEY UPDATE
+            translation_title = VALUES(translation_title),
+            translation_type = VALUES(translation_type),
+            quality = VALUES(quality),
+            kodik_link = VALUES(kodik_link),
+            mp4_link = COALESCE(VALUES(mp4_link), mp4_link)
+    </insert>
+
+    <insert id="batchUpsertWithCoalesce">
+        <foreach collection="list" item="v" separator=";">
+            INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
+                translation_id, translation_title, translation_type, quality, kodik_link, mp4_link)
+            VALUES (#{v.contentId}, #{v.seasonNumber}, #{v.episodeNumber},
+                #{v.translationId}, #{v.translationTitle}, #{v.translationType},
+                #{v.quality}, #{v.kodikLink}, #{v.mp4Link})
+            ON DUPLICATE KEY UPDATE
+                translation_title = VALUES(translation_title),
+                translation_type = VALUES(translation_type),
+                quality = VALUES(quality),
+                kodik_link = VALUES(kodik_link),
+                mp4_link = COALESCE(VALUES(mp4_link), mp4_link)
+        </foreach>
+    </insert>
+
+    <update id="updateMp4Link">
+        UPDATE kodik_episode_variant
+        SET mp4_link = #{mp4Link}, mp4_link_decoded_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <select id="findExpiredLinks" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant
+        WHERE mp4_link IS NOT NULL
+          AND mp4_link_decoded_at IS NOT NULL
+          AND mp4_link_decoded_at &lt; DATE_SUB(NOW(), INTERVAL #{hoursThreshold} HOUR)
+        ORDER BY mp4_link_decoded_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findFailedDecode" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant
+        WHERE mp4_link IS NULL AND kodik_link IS NOT NULL
+        ORDER BY updated_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="updateLocalFilepath">
+        UPDATE kodik_episode_variant
+        SET local_filepath = #{localFilepath}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findDownloaded" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant
+        WHERE local_filepath IS NOT NULL
+        ORDER BY updated_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <delete id="deleteByContentId">
+        DELETE FROM kodik_episode_variant WHERE content_id = #{contentId}
+    </delete>
+
+</mapper>
