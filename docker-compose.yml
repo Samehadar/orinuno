@@ -1,0 +1,46 @@
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: orinuno
+    ports:
+      - "3316:3306"
+    volumes:
+      - orinuno-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8085:8080"
+      - "8086:8081"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: orinuno
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      KODIK_TOKEN: ${KODIK_TOKEN:-}
+      SPRING_PROFILES_ACTIVE: local
+    restart: unless-stopped
+
+  demo:
+    build: ./demo
+    depends_on:
+      - app
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_URL: ""
+      VITE_API_KEY: ""
+
+volumes:
+  orinuno-db:
