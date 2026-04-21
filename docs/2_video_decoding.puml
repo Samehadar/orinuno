@@ -1,0 +1,67 @@
+@startuml video_decoding
+!theme cerulean
+skinparam backgroundColor #FEFEFE
+skinparam sequenceArrowThickness 2
+
+title Video Link Decoding — 8 Steps
+
+actor Consumer
+participant "ParseController" as PC
+participant "ParserService" as PS
+participant "VideoDecoderService" as KVDS #LightSalmon
+participant "Kodik CDN\nsolodcdn.com" as CDN #LightCoral
+database "MySQL" as DB #LightGreen
+
+Consumer -> PC : POST /api/v1/parse/decode/58?force=false
+activate PC
+
+PC -> PS : decodeForContent(58)
+activate PS
+
+PS -> DB : SELECT * FROM kodik_episode_variant\nWHERE content_id=58 AND mp4_link IS NULL
+DB --> PS : List<KodikEpisodeVariant> (pending)
+
+loop for each pending variant (with request delay)
+    PS -> KVDS : decode(kodikLink)
+    activate KVDS
+
+    note over KVDS, CDN : Step 1-2: Load iframe page
+    KVDS -> CDN : GET https://kodik.info/seria/{id}/...
+    activate CDN
+    CDN --> KVDS : HTML page with embedded JS params
+    deactivate CDN
+
+    note over KVDS : Step 3: Regex extract\nurlParams, type, hash, id
+
+    note over KVDS, CDN : Step 4: Load player JavaScript
+    KVDS -> CDN : GET /assets/js/app.player_*.js
+    activate CDN
+    CDN --> KVDS : JavaScript source code
+    deactivate CDN
+
+    note over KVDS : Step 5: Extract POST URL\nvia atob("...") in JS source
+
+    note over KVDS, CDN : Step 6: POST video info request
+    KVDS -> CDN : POST /gvi\nContent-Type: application/x-www-form-urlencoded\ntype, hash, id, urlParams, bad_user=false
+    activate CDN
+    CDN --> KVDS : JSON {"links":{"720":[{"src":"encoded..."}]}}
+    deactivate CDN
+
+    note over KVDS #FFECB3 : Step 7: ROT13 decode (shift +18 mod 26)\n"abc" -> "stu"
+
+    note over KVDS #FFECB3 : Step 8: URL-safe Base64 decode\n"-" -> "+", "_" -> "/", pad "="
+
+    KVDS --> PS : Map<"720", "https://p12.solodcdn.com/...">
+    deactivate KVDS
+
+    PS -> PS : selectBestQuality()\npick highest resolution
+
+    PS -> DB : UPDATE kodik_episode_variant\nSET mp4_link = ?, mp4_link_decoded_at = NOW()\nWHERE id = ?
+end
+
+PS --> PC : done
+deactivate PS
+
+PC --> Consumer : 200 OK
+deactivate PC
+@enduml

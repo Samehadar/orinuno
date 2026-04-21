@@ -1,0 +1,54 @@
+@startuml export_flow
+!theme cerulean
+skinparam backgroundColor #FEFEFE
+skinparam sequenceArrowThickness 2
+
+title Export Ready Content
+
+actor Consumer
+participant "ExportController\n/api/v1/export" as EC
+participant "ExportDataService" as EDS
+database "MySQL" as DB #LightGreen
+
+Consumer -> EC : GET /api/v1/export/ready\n?page=0&size=20&updatedSince=2026-04-10T00:00
+activate EC
+
+EC -> EDS : getReadyForExport(pageRequest, updatedSince)
+activate EDS
+
+EDS -> DB : SELECT DISTINCT c.* FROM kodik_content c\nJOIN kodik_episode_variant ev\n  ON c.id = ev.content_id\nWHERE ev.mp4_link IS NOT NULL\n  AND c.updated_at > ?updatedSince\nORDER BY c.updated_at DESC\nLIMIT 20 OFFSET 0
+DB --> EDS : List<KodikContent>
+
+EDS -> DB : SELECT COUNT(DISTINCT c.id) ...
+DB --> EDS : total count
+
+loop for each content
+    EDS -> DB : SELECT * FROM kodik_episode_variant\nWHERE content_id = ?\n  AND mp4_link IS NOT NULL
+    DB --> EDS : List<KodikEpisodeVariant>
+
+    note over EDS : Group variants into:\nSeasonExportDto\n  > EpisodeExportDto\n      > VariantExportDto
+end
+
+EDS --> EC : PageResponse<ContentExportDto>
+deactivate EDS
+
+EC --> Consumer : 200 OK\n\n{"content":[{...}],\n "page":0,"size":20,\n "totalElements":5,\n "totalPages":1}
+deactivate EC
+
+note over Consumer #E8F5E9
+Response ContentExportDto:
+  id, type, title, titleOrig, year,
+  kinopoiskId, imdbId, shikimoriId,
+  screenshots: [url, ...],
+  seasons: [
+    { seasonNumber: 1, episodes: [
+      { episodeNumber: 1, variants: [
+        { translationTitle: "AniDUB",
+          translationType: "voice",
+          quality: "WEB-DLRip 720p",
+          mp4Link: "https://..." }
+      ]}
+    ]}
+  ]
+end note
+@enduml

@@ -1,0 +1,154 @@
+@startuml video_download_playwright
+!theme cerulean
+skinparam backgroundColor #FEFEFE
+skinparam sequenceArrowThickness 2
+skinparam participantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam maxMessageSize 180
+
+title Video Download via Playwright + HLS
+
+actor Consumer
+participant "DownloadController\n/api/v1/download" as DC
+participant "VideoDownloadService" as VDS
+participant "PlaywrightVideoFetcher" as PVF #LightSalmon
+participant "Headless Chromium\n(Playwright)" as CHROME #LightYellow
+participant "Kodik Player\nkodikplayer.com" as KP #LightCoral
+participant "Kodik CDN\nsolodcdn.com" as CDN #LightCoral
+participant "KodikVideoDecoderService" as KVDS #LightGray
+participant "WebClient\n(kodikCdnWebClient)" as WC #LightGray
+database "MySQL" as DB #LightGreen
+collections "Local FS\n./data/videos/" as FS #Wheat
+
+Consumer -> DC : POST /api/v1/download/{variantId}
+activate DC
+
+DC -> VDS : downloadVariant(variantId)
+activate VDS
+
+VDS -> DB : findById(variantId)
+DB --> VDS : KodikEpisodeVariant
+
+alt Playwright available (primary strategy)
+
+    VDS -> PVF : downloadVideo(kodikLink, targetPath)
+    activate PVF
+
+    note over PVF #E8F5E9
+    **WHY Playwright?**
+    solodcdn.com CDN blocks direct
+    HTTP requests (returns 0 bytes).
+    Only real browser context with
+    proper cookies gets actual content.
+    end note
+
+    PVF -> CHROME : newContext(UA, viewport 1280x720)
+    activate CHROME
+
+    == Phase 1: Navigate to player ==
+
+    CHROME -> KP : GET /seria/{id}/{hash}/720p
+    activate KP
+    KP --> CHROME : HTML + JS (player page)
+    deactivate KP
+
+    == Phase 2: Trigger playback ==
+
+    note over PVF, CHROME
+    waitForTimeout(2000ms)
+    then: JS click play button selectors
+    then: click center of page (640, 360)
+    then: waitForTimeout(1000ms)
+    then: video.play() again
+    end note
+
+    CHROME -> KP : POST /ftor\n(AJAX, triggered by player JS)
+    activate KP
+    KP --> CHROME : JSON with encoded video URLs
+    deactivate KP
+
+    note over CHROME : Player processes VAST ads\n(vast_ended event)
+
+    == Phase 3: Intercept video URL ==
+
+    CHROME -> CDN : GET /s/m/{base64path}\n(initiated by <video> element)
+    note over PVF #FFFDE7
+    **onResponse listener** catches
+    URL matching "solodcdn.com/s/m/"
+    and resolves CompletableFuture
+    end note
+
+    == Phase 4: Download via APIRequestContext ==
+
+    note over PVF #E8F5E9
+    **WHY APIRequestContext instead of fetch()?**
+    Browser's fetch() is blocked by CORS.
+    APIRequestContext is server-side but
+    inherits cookies from BrowserContext.
+    end note
+
+    PVF -> CDN : context.request().get(videoUrl)\n(with browser cookies, bypasses CORS)
+    activate CDN
+    CDN --> PVF : Response body (may be HLS manifest or MP4)
+    deactivate CDN
+
+    == Phase 5: Handle response type ==
+
+    alt Response starts with "#EXTM3U" (HLS manifest)
+        note over PVF #FFF3E0
+        **WHY HLS?**
+        CDN returns HLS manifest (.m3u8)
+        instead of MP4 for many videos.
+        Manifest lists ~200-1300 .ts segments
+        of ~6 seconds each.
+        end note
+
+        note over PVF #E8F5E9
+        Extract cookies from BrowserContext.
+        Create java.net.http.HttpClient with cookies.
+        **APIRequestContext is NOT thread-safe**
+        (single WebSocket), so we use HttpClient.
+        end note
+
+        par 8 threads (hlsConcurrency, configurable)
+            PVF -> CDN : HttpClient.send(segment.ts)\n(with browser cookies)
+            CDN --> PVF : .ts segment bytes (~300KB each)
+        end
+
+        PVF -> FS : write all segments in order (extension .ts)
+    else Direct MP4 response
+        PVF -> FS : write MP4 bytes
+    end
+
+    deactivate CHROME
+
+    PVF --> VDS : filePath (absolute)
+    deactivate PVF
+
+else Playwright failed — fallback to WebClient
+
+    note over VDS #FFEBEE
+    Fallback: decode links via
+    KodikVideoDecoderService,
+    download via WebClient.
+    **Almost always returns 0 bytes**
+    due to CDN blocking.
+    end note
+
+    VDS -> KVDS : decode(kodikLink)
+    KVDS --> VDS : Map<quality, cdnUrl>
+    VDS -> WC : fetchWithRedirects(cdnUrl)
+    WC -> CDN : GET /s/m/...
+    CDN --> WC : **0 bytes** (blocked)
+    WC --> VDS : empty response
+    VDS --> VDS : throw "0 bytes"
+
+end
+
+VDS -> DB : UPDATE kodik_episode_variant\nSET local_filepath = ?
+VDS --> DC : DownloadState(COMPLETED, filepath)
+deactivate VDS
+
+DC --> Consumer : 200 OK\n{"status":"COMPLETED","filepath":"..."}
+deactivate DC
+@enduml

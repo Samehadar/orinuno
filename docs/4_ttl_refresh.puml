@@ -1,0 +1,71 @@
+@startuml ttl_refresh
+!theme cerulean
+skinparam backgroundColor #FEFEFE
+skinparam sequenceArrowThickness 2
+
+title Background Tasks — TTL Refresh & Retry
+
+participant "Spring @Scheduled" as SCH #LightBlue
+participant "ParserService" as PS
+participant "VideoDecoderService" as KVDS #LightSalmon
+participant "Kodik CDN" as CDN #LightCoral
+database "MySQL" as DB #LightGreen
+
+== refreshExpiredLinks (every refresh-interval-ms, default 1h) ==
+
+SCH -> PS : refreshExpiredLinks()
+activate PS
+
+PS -> DB : SELECT * FROM kodik_episode_variant\nWHERE mp4_link IS NOT NULL\n  AND mp4_link_decoded_at < NOW() - INTERVAL ? HOUR\nLIMIT 50
+DB --> PS : List<expired variants>
+
+alt no expired links
+    note over PS : log: "No expired links to refresh"
+else has expired links
+    loop for each expired variant
+        PS -> KVDS : decode(kodikLink)
+        activate KVDS
+        KVDS -> CDN : 8-step decode
+        CDN --> KVDS : fresh mp4 URLs
+        KVDS --> PS : Map<quality, url>
+        deactivate KVDS
+
+        PS -> DB : UPDATE mp4_link = ?,\nmp4_link_decoded_at = NOW()
+    end
+end
+
+PS --> SCH : done
+deactivate PS
+
+== retryFailedDecodes (same interval + 30min offset) ==
+
+SCH -> PS : retryFailedDecodes()
+activate PS
+
+PS -> DB : SELECT * FROM kodik_episode_variant\nWHERE mp4_link IS NULL\n  AND kodik_link IS NOT NULL\nLIMIT 50
+DB --> PS : List<failed variants>
+
+loop for each failed variant
+    PS -> KVDS : decode(kodikLink)\nwith Retry.backoff(maxRetries, 2s)
+    activate KVDS
+
+    loop retry on failure (max 3)
+        KVDS -> CDN : attempt decode
+        alt success
+            CDN --> KVDS : mp4 URLs
+        else transient failure
+            note over KVDS : wait 2s, 4s, 8s...
+        end
+    end
+
+    KVDS --> PS : Map<quality, url> | empty on final failure
+    deactivate KVDS
+
+    opt decode succeeded
+        PS -> DB : UPDATE mp4_link = ?,\nmp4_link_decoded_at = NOW()
+    end
+end
+
+PS --> SCH : done
+deactivate PS
+@enduml
