@@ -1,0 +1,46 @@
+name: Render PlantUML diagrams
+
+on:
+  push:
+    paths:
+      - 'docs/*.puml'
+      - '.github/workflows/render-diagrams.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare output directory
+        run: mkdir -p docs/images
+
+      - name: Render .puml files to SVG
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/docs:/data" \
+            -w /data \
+            plantuml/plantuml:latest \
+            -tsvg -o images '*.puml'
+
+      - name: Render .puml files to PNG (fallback for viewers without SVG)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/docs:/data" \
+            -w /data \
+            plantuml/plantuml:latest \
+            -tpng -o images '*.puml'
+
+      - name: Commit rendered images
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: re-render PlantUML diagrams [skip ci]"
+          file_pattern: 'docs/images/*.svg docs/images/*.png'
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com

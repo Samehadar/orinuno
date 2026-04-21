@@ -1,0 +1,120 @@
+@startuml hls_manifest
+!theme cerulean
+skinparam backgroundColor #FEFEFE
+skinparam sequenceArrowThickness 2
+skinparam participantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam maxMessageSize 200
+
+title HLS Manifest Retrieval — GET /api/v1/hls/{variantId}/manifest
+
+actor Consumer
+participant "HlsController\n/api/v1/hls" as HC
+participant "HlsManifestService" as HMS
+participant "EpisodeVariantRepository" as EVR
+participant "KodikVideoDecoderService" as KVDS #LightSalmon
+participant "ProxyWebClientService" as PWS #LightYellow
+participant "WebClient\n(kodikCdnWebClient)" as WC
+participant "Kodik Player / CDN\n(kodikplayer.com, solodcdn.com)" as CDN #LightCoral
+database "MySQL" as DB #LightGreen
+
+== Flow A — GET /{variantId}/url (just decoded URL) ==
+
+Consumer -> HC : GET /api/v1/hls/{variantId}/url
+activate HC
+HC -> HMS : getHlsUrl(variantId)
+activate HMS
+
+HMS -> EVR : findById(variantId)
+EVR -> DB : SELECT * FROM kodik_episode_variant\nWHERE id = ?
+DB --> EVR : variant
+EVR --> HMS : KodikEpisodeVariant
+
+alt variant == null
+    HMS --> HC : error "Variant not found"
+    HC --> Consumer : 400 Bad Request
+else kodik_link == null
+    HMS --> HC : error "No kodik_link"
+    HC --> Consumer : 400 Bad Request
+else normal path
+    HMS -> KVDS : decode(kodikLink)
+    note over KVDS, CDN #FFF3E0
+    Full decoder pipeline — see **video_decoding.puml**
+    (iframe → JS params → endpoint discovery → POST → ROT13 → Base64).
+    Always runs fresh (TTL bypass) to guarantee a valid link.
+    end note
+    KVDS --> HMS : Map<quality, cdnUrl>
+    HMS -> HMS : selectBestQuality()\nfilter meta keys (_), pick max numeric key
+    HMS -> HMS : toHlsUrl(mp4Url)\nappend ":hls:manifest.m3u8"\nif not already .m3u8
+    HMS --> HC : HlsResult(url, null)
+    HC --> Consumer : 200 OK\n{"url": "https://.../manifest.m3u8"}
+end
+deactivate HMS
+deactivate HC
+
+== Flow B — GET /{variantId}/manifest (absolutized playlist) ==
+
+Consumer -> HC : GET /api/v1/hls/{variantId}/manifest
+activate HC
+
+HC -> HMS : getAbsolutizedManifest(variantId)
+activate HMS
+
+HMS -> HMS : getHlsUrl(variantId)\n(same as Flow A → m3u8Url)
+note right of HMS #E8F5E9
+Internally reuses Flow A:
+variant lookup + decode + quality select.
+end note
+
+HMS -> PWS : executeWithProxyFallback(\n  kodikCdnWebClient,\n  client → GET m3u8Url)
+activate PWS
+
+alt proxy pool has a candidate
+    PWS -> PWS : proxyProviderService.getNextProxy()
+    PWS -> PWS : buildProxiedWebClient(proxy)
+    PWS -> CDN : GET m3u8Url\nReferer: kodikplayer.com\n(via proxy host:port)
+    activate CDN
+    alt proxy succeeds
+        CDN --> PWS : raw M3U8 body
+    else proxy fails
+        CDN --> PWS : error
+        PWS -> PWS : log.warn proxy {host} failed\nproxyProviderService.reportFailure(id)
+        PWS -> CDN : GET m3u8Url (direct, no proxy)
+        CDN --> PWS : raw M3U8 body
+    end
+    deactivate CDN
+else no proxy configured
+    PWS -> CDN : GET m3u8Url (direct via kodikCdnWebClient)
+    activate CDN
+    CDN --> PWS : raw M3U8 body
+    deactivate CDN
+end
+
+PWS --> HMS : raw manifest text
+deactivate PWS
+
+HMS -> HMS : absolutizeManifest(raw, manifestUrl)
+
+note over HMS #FFFDE7
+**URL absolutization** (`absolutizeManifest`):
+for each line in M3U8:
+ • "#..." or empty → passthrough
+ • starts with "http://" / "https://" / "//" → passthrough
+ • starts with "/" → prepend scheme + host of manifestUrl
+ • relative → prepend dirname(manifestUrl) + "/"
+end note
+
+HMS --> HC : HlsResult(url, absolutized)
+deactivate HMS
+
+HC --> Consumer : 200 OK\nContent-Type: application/vnd.apple.mpegurl\n<absolutized playlist>
+deactivate HC
+
+note over Consumer, CDN #E8F5E9
+The returned manifest lists **fully qualified URLs**
+so any downstream player / downloader can pull
+segments directly from the Kodik CDN without knowing
+the original base URL.
+end note
+
+@enduml

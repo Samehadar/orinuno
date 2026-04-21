@@ -1,0 +1,59 @@
+@startuml architecture_overview
+!include <C4/C4_Container>
+
+LAYOUT_WITH_LEGEND()
+LAYOUT_TOP_DOWN()
+
+title Orinuno — Container Diagram (C4 level 2)
+
+Person(consumer, "Consumer", "Any HTTP client — web/app/backend — that needs Kodik content: search results, mp4/HLS links, downloaded files.")
+
+System_Boundary(orinuno, "Orinuno service") {
+
+    Container(demo, "Demo UI", "Vue 3 + Vite + Tailwind", "Optional SPA at :3000\nSearch, details, HLS player,\nhealth + schema-drift dashboard")
+
+    Container(api, "REST API", "Spring Boot 3 + WebFlux\nJava 21", "7 controllers under /api/v1/*:\nParse, Content, Export,\nHLS, Download, Stream, Health")
+
+    Container(parser, "Parser & Decoder", "Spring @Service", "ParserService, KodikApiClient,\nKodikApiRateLimiter,\nKodikResponseMapper (schema drift),\nKodikVideoDecoderService\n(brute-force ROT + Base64 +\ndynamic endpoint discovery)")
+
+    Container(hls, "HLS / Download / Stream", "Spring @Service", "HlsManifestService,\nVideoDownloadService,\nPlaywrightVideoFetcher\n(headless Chromium → HLS .ts\ndownload → ffmpeg remux → .mp4)")
+
+    Container(proxy, "Proxy layer", "Spring @Service", "ProxyProviderService (round-robin),\nProxyWebClientService\n(automatic direct-fallback on failure)")
+
+    ContainerDb(mysql, "MySQL 8", "MyBatis + Liquibase", "kodik_content (+ material_data JSON),\nkodik_episode_variant\n(mp4_link, TTL, local_filepath),\nkodik_proxy")
+
+    Container(storage, "Local FS", "Filesystem", "./data/videos/\nDownloaded .mp4 files\nwith quota enforcement")
+}
+
+System_Ext(kapi, "Kodik REST API", "https://kodik-api.com\n7 endpoints: /search, /list,\n/translations/v2, /genres,\n/countries, /years, /qualities/v2")
+
+System_Ext(kplayer, "Kodik Player", "https://kodikplayer.com\nObfuscated video URLs\nROT13(+shift)+URL-safe Base64")
+
+System_Ext(kcdn, "Kodik CDN", "https://*.solodcdn.com\nHLS manifests + .ts segments\nBrowser-context + cookies required")
+
+Rel(consumer, api, "REST", "HTTPS / JSON")
+Rel(consumer, demo, "Browser", "HTTPS")
+Rel(demo, api, "Fetch data", "HTTPS / JSON")
+
+Rel(api, parser, "Calls", "Java method")
+Rel(api, hls, "Calls", "Java method")
+
+Rel(parser, kapi, "Search, list, reference data", "HTTPS POST\n(rate-limited)")
+Rel(parser, kplayer, "Fetch player page + JS\nfor video link decoding", "HTTPS GET/POST\n(via proxy)")
+
+Rel(hls, parser, "Decode on demand", "Java method")
+Rel(hls, kcdn, "GET .m3u8 manifest,\nlater .ts segments", "HTTPS GET\n(via Playwright +\nbrowser cookies)")
+
+Rel(parser, proxy, "Optional wrapping", "Java method")
+Rel(hls, proxy, "Optional wrapping", "Java method")
+Rel(proxy, kplayer, "If enabled", "HTTPS via proxy")
+Rel(proxy, kcdn, "If enabled", "HTTPS via proxy")
+
+Rel(parser, mysql, "Upsert content + variants", "JDBC")
+Rel(hls, mysql, "Read variant, write filepath", "JDBC")
+Rel(api, mysql, "Query content / variants", "JDBC")
+
+Rel(hls, storage, "Write downloaded .mp4", "File I/O")
+Rel(api, storage, "Serve stream\n(+ Range support)", "File I/O")
+
+@enduml

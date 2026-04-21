@@ -1,0 +1,135 @@
+@startuml kodik_api_flow
+!theme cerulean
+skinparam backgroundColor #FEFEFE
+skinparam sequenceArrowThickness 2
+skinparam participantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam maxMessageSize 200
+
+title Kodik API Flow — search / list / reference endpoints (raw-response-first + schema drift + rate limiter)
+
+actor Consumer
+participant "ParseController\nContentController" as PC
+participant "ParserService\nContentService" as PS
+participant "KodikApiClient" as KAC
+participant "KodikApiRateLimiter\n(Semaphore token-bucket)" as RL #LightYellow
+participant "WebClient\n(kodikApiWebClient)" as WC
+participant "Kodik API\nkodik-api.com" as KAPI #LightCoral
+participant "KodikResponseMapper" as KRM #LightBlue
+participant "ContentService" as CS
+database "MySQL" as DB #LightGreen
+
+== 1. Request arrives ==
+
+Consumer -> PC : POST /api/v1/parse/search\n{"title":"Chainsaw Man","decodeLinks":false}
+activate PC
+
+PC -> PS : search(request)
+activate PS
+
+== 2. Build params and acquire rate-limit permit ==
+
+PS -> KAC : search(KodikSearchRequest)\n(70+ possible filters)
+activate KAC
+
+KAC -> KAC : buildSearchParams()\ntoken + with_material_data +\nwith_seasons + with_episodes +\ntitle / ids / genres / ratings ...
+
+KAC -> RL : wrapWithRateLimit(Mono)
+activate RL
+
+alt permit available (< rate-limit-per-minute)
+    note over RL #E8F5E9
+    tryAcquire() — permit granted.
+    Scheduler releases permits
+    every 60s / maxPermits.
+    end note
+else all permits used
+    note over RL #FFEBEE
+    Caller gets "rate limited" error
+    and retries later.
+    end note
+    RL --> KAC : error
+end
+deactivate RL
+
+== 3. HTTP POST (raw response first) ==
+
+RL -> WC : POST https://kodik-api.com/search\nform-urlencoded(params)
+activate WC
+WC -> KAPI : HTTPS POST
+activate KAPI
+KAPI --> WC : JSON body
+deactivate KAPI
+WC --> KAC : Map<String,Object>  (NO DTO yet)
+deactivate WC
+
+note over KAC #FFFDE7
+**Raw-response-first** — response is always
+decoded into Map first, so new/unknown fields
+are never silently dropped.
+end note
+
+== 4. Schema drift detection ==
+
+KAC -> KRM : mapAndDetectChanges(raw, KodikSearchResponse.class)
+activate KRM
+
+KRM -> KRM : extractKnownFields(DTO)\nvia reflection + @JsonProperty
+KRM -> KRM : diff(raw.keys, known)
+alt unknown keys found
+    KRM -> KRM : log.warn("schema drift: {unknown} in {DTO}")
+    KRM -> KRM : recordDrift(DTO, unknown)\n→ detectedDrifts (ConcurrentHashMap)\n→ totalDriftsDetected.incrementAndGet()
+end
+
+KRM -> KRM : check nested results[0]\ndetect drift in Result type
+
+KRM -> KRM : objectMapper.convertValue(raw, DTO)
+KRM --> KAC : KodikSearchResponse (typed)
+deactivate KRM
+
+KAC --> PS : KodikSearchResponse
+deactivate KAC
+
+== 5. Persist (only for /search + /list flows) ==
+
+loop for each search result
+    PS -> CS : findOrCreateContent(content)
+    activate CS
+
+    CS -> DB : SELECT * FROM kodik_content\nWHERE kinopoisk_id = ?
+    alt content exists
+        CS -> DB : UPDATE kodik_content SET ...,\nmaterial_data = ?
+    else new content
+        CS -> DB : INSERT INTO kodik_content (..., material_data)
+    end
+    CS --> PS : KodikContent (with id)
+    deactivate CS
+
+    PS -> CS : saveVariants(variants)
+    activate CS
+    CS -> DB : INSERT INTO kodik_episode_variant ...\nON DUPLICATE KEY UPDATE\nmp4_link = COALESCE(VALUES(mp4_link), mp4_link)
+    CS --> PS : done
+    deactivate CS
+end
+
+PS --> PC : List<KodikContent>
+deactivate PS
+
+PC --> Consumer : 200 OK\nList<ContentDto>
+deactivate PC
+
+== 6. Reference endpoints (no persistence) ==
+
+group GET /translations/v2, /genres, /countries, /years, /qualities/v2
+    Consumer -> KAC : translationsRaw() / genresRaw() / ...
+    KAC -> RL : wrapWithRateLimit
+    RL -> WC : POST /translations/v2 (token only)
+    WC -> KAPI : HTTPS POST
+    KAPI --> WC : JSON
+    WC --> KAC : Map<String,Object>
+    KAC -> KRM : detectSchemaChanges(raw, SimpleListResponse.class)
+    KRM --> KAC : (drift logged if any)
+    KAC --> Consumer : raw Map (reference data)
+end
+
+@enduml
