@@ -1,0 +1,30 @@
+---
+description: Database conventions for orinuno
+globs: 
+  - src/main/resources/com/orinuno/db/**/*
+  - src/main/java/com/orinuno/repository/**/*.java
+alwaysApply: false
+---
+
+# Database Conventions
+
+## Migrations
+
+- All migrations are Liquibase SQL files in `src/main/resources/com/orinuno/db/changelog/scripts/`
+- File naming: `YYYYMMDDHHMMSS_description.sql`
+- Each file starts with `--liquibase formatted sql` and `--changeset orinuno:YYYYMMDDHHMMSS`
+- Register every new migration in `liquibase-changelog.yaml`
+- Engine: InnoDB, charset: utf8mb4, collation: utf8mb4_unicode_ci
+
+## MyBatis
+
+- Mapper interfaces in `com.orinuno.repository` with `@Mapper` annotation
+- XML mappers in `src/main/resources/com/orinuno/db/mapper/`
+- Always define `resultMap` — do not rely on auto-mapping
+- Use `#{param}` for parameterized values, `${param}` only for pre-validated sort/order fields
+
+## Critical Rules
+
+- **COALESCE upsert**: When upserting `kodik_episode_variant`, use `COALESCE(VALUES(mp4_link), mp4_link)` to preserve existing decoded links
+- **TTL tracking**: `updateMp4Link` must always set `mp4_link_decoded_at = NOW()`
+- Table `kodik_episode_variant` has a composite unique key `(content_id, season_number, episode_number, translation_id)` — use `ON DUPLICATE KEY UPDATE` for upserts

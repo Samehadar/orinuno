@@ -1,0 +1,27 @@
+---
+description: REST API conventions for orinuno
+globs: src/main/java/com/orinuno/controller/**/*.java
+alwaysApply: false
+---
+
+# API Conventions
+
+## Endpoints
+
+- All REST endpoints live under `/api/v1/`
+- Controllers return `ResponseEntity<T>` or `Mono<ResponseEntity<T>>`
+- Never expose entity classes directly in API responses — always use DTOs
+- Pagination: `page` (0-based), `size`, `sortBy` (whitelisted), `order` (ASC/DESC)
+- Use `@Operation(summary = "...")` from SpringDoc on every endpoint
+
+## Security
+
+- If `orinuno.security.api-key` is configured, `ApiKeyAuthFilter` checks `X-API-KEY` header
+- Health endpoints (`/api/v1/health/*`) are always open
+- Swagger/actuator endpoints are not protected by API key
+
+## SQL Injection Prevention
+
+- `sortBy` and `order` parameters MUST be validated against a whitelist before passing to MyBatis
+- Never use `${...}` interpolation in MyBatis XML without prior validation
+- Use `#{...}` (parameterized) for all user-supplied values
