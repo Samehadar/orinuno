@@ -1,0 +1,47 @@
+---
+description: Project architecture and conventions for orinuno
+alwaysApply: true
+---
+
+# orinuno — Project Rules
+
+## Stack
+
+Java 21, Spring Boot 3.4.6 (WebFlux), MyBatis, MySQL 8.0, Liquibase, SpringDoc OpenAPI, Lombok, Testcontainers.
+
+## Architecture
+
+- `com.orinuno.controller` — REST controllers: Content, Parse, Export, Health
+- `com.orinuno.service` — business logic: ParserService, ContentService, ExportDataService, KodikVideoDecoderService
+- `com.orinuno.repository` — MyBatis mapper interfaces
+- `com.orinuno.model` — JPA-like entities (KodikContent, KodikEpisodeVariant, KodikProxy)
+- `com.orinuno.model.dto` — DTOs for API responses (ContentDto, ContentExportDto, etc.)
+- `com.orinuno.mapper` — entity↔dto converters (ContentMapper, EntityFactory)
+- `com.orinuno.client` — HTTP client to Kodik API
+- `com.orinuno.configuration` — Spring configs, properties, filters
+- SQL queries are in MyBatis XML files: `src/main/resources/com/orinuno/db/mapper/*.xml`
+- Database migrations: `src/main/resources/com/orinuno/db/changelog/scripts/`
+
+## Conventions
+
+- This is an **open-source standalone** project. No imports from private projects (backend-master, kinodostup, etc.).
+- No comments in code unless explaining non-obvious intent.
+- Do not rename existing methods or fields without explicit request.
+- Do not perform major refactoring unless explicitly asked.
+- Kodik API domain is `kodik-api.com` (with hyphen). Never use `kodikapi.com`.
+- Always use `COALESCE` when upserting `mp4_link` to avoid overwriting valid links with NULL.
+- SQL parameters using `${...}` (string interpolation) must be validated via whitelist before passing to MyBatis.
+- Use Lombok `@Data`, `@Builder`, `@RequiredArgsConstructor` consistently.
+- DTOs are records where possible (`ContentExportDto`), entities are Lombok `@Data` classes.
+- Tests use `WebTestClient.bindToController` for unit tests, Testcontainers for integration tests.
+
+## Configuration
+
+All config is under `orinuno.*` namespace in `application.yml`. Properties class: `OrinunoProperties`.
+Security: optional API key via `orinuno.security.api-key`. CORS: `orinuno.cors.allowed-origins`.
+
+## Git
+
+- Never change git config.
+- Never commit or push without explicit user permission.
+- Never commit real API tokens or secrets (.env files are gitignored).

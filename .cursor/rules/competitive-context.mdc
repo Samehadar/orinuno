@@ -1,0 +1,58 @@
+---
+description: Competitive landscape and reference projects for orinuno
+alwaysApply: true
+---
+
+# Competitive Context & Reference Projects
+
+## Before Starting Work
+
+Before implementing new features or working on backlog items, **read `BACKLOG.md`** in the project root. It contains:
+- Prioritized backlog with 23 tasks
+- Detailed competitive analysis against 4 reference projects
+- Schema drift audit results
+- Kodik protection mechanisms documentation
+- Feature comparison table
+
+## Reference Projects (we do NOT develop these — inspiration only)
+
+These projects solve similar problems and serve as reference for feature ideas, API coverage gaps, and implementation approaches. Their source code is available locally for reading:
+
+| Project | Stack | Path | What to learn from it |
+|---------|-------|------|----------------------|
+| **kodik-api** | Rust, serde, reqwest | `../kodik-api-rust/` | Full Kodik REST API coverage, enum types for content/filters, strict response typing |
+| **kodikwrapper** | TypeScript, Node.js | `../kodikwrapper/` | Dynamic video-info endpoint discovery from player JS, token auto-discovery, brute-force ROT cipher |
+| **AnimeParsers** | Python, requests, aiohttp | `../AnimeParsers/` | Multi-source parsers (Kodik + Aniboom + JutSu + Shikimori), `KodikSearch`/`KodikList` fluent API, token auto-discovery via `get_token()` |
+| **KodikDownloader** | Java 17, Android, Retrofit | `../KodikDownloader/` | Android MVVM architecture, batch download delegation to ADM/IDM, ROT13 +18 decode, dynamic endpoint discovery |
+
+## Key Insights from Competitive Analysis
+
+1. **AnimeParsers has full Kodik API client** — `KodikSearch`, `KodikList`, `get_translations()` with 40+ filter parameters and pagination. Not just a "basic parser".
+2. **kodikwrapper's brute-force** tries all 26 ROT shifts — we adopted this approach.
+3. **kodik-api (Rust)** covers all 7 Kodik REST endpoints with strong typing — we matched this coverage.
+4. **KodikDownloader** uses fixed ROT shift +18 without brute-force — fragile if Kodik changes the algorithm.
+5. **Only orinuno** has: schema drift detection, persistent storage, REST API for consumers, scheduled TTL refresh, health monitoring, and automated API stability tests.
+
+## Our Unique Advantages (do not regress)
+
+- Schema drift detection (`KodikResponseMapper` + `/api/v1/health/schema-drift`)
+- Raw response first pattern (all Kodik responses → `Map<String, Object>` → then DTO mapping)
+- 67+ live API stability tests in `KodikApiStabilityTest`
+- Video download pipeline (Playwright + HLS + ffmpeg remux)
+- Export API for backend-master integration
+
+## Known Gaps vs Competitors
+
+- No multi-source support (Aniboom, JutSu, Shikimori, Sibnet) — see BACKLOG IDEA-AP-1..4
+- No token auto-discovery — see BACKLOG IDEA-KW-1
+- No enum types for content kinds/filters — see BACKLOG IDEA-RUST-1..2
+- No async job queue for long-running operations — see BACKLOG TD-1
+
+## Kodik API Notes
+
+- Domain: `kodik-api.com` (with hyphen), NOT `kodikapi.com`
+- All endpoints are POST (not GET)
+- API has no versioning or stability guarantees — that's why we have schema drift detection
+- Video links use ROT cipher with shift that can change — that's why we have brute-force
+- CDN links expire (TTL) — that's why we have scheduled refresh
+- Player JS obfuscation changes periodically — that's why we have dynamic endpoint discovery

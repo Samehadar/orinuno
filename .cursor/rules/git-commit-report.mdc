@@ -1,0 +1,16 @@
+---
+description: After every git commit, show a summary BEFORE pushing
+alwaysApply: true
+---
+
+# Post-Commit Report
+
+After every successful `git commit`, run `git log -1 --format='%H%n%an <%ae>%n%ai%n%s%n%b'` and display a summary to the user **BEFORE pushing**:
+
+- **Commit hash** (full)
+- **Author** (name and email)
+- **Date**
+- **Commit message** (subject + body)
+- **Branch** name
+
+Wait for user confirmation before running `git push`. This gives the user a chance to review and amend if needed.
