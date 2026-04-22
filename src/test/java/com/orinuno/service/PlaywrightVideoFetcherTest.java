@@ -73,7 +73,7 @@ class PlaywrightVideoFetcherTest {
         assertThat(props.isHeadless()).isTrue();
         assertThat(props.getPageTimeoutSeconds()).isEqualTo(30);
         assertThat(props.getNavigationTimeoutMs()).isEqualTo(15000);
-        assertThat(props.getVideoWaitMs()).isEqualTo(20000);
-        assertThat(props.getHlsConcurrency()).isEqualTo(8);
+        assertThat(props.getVideoWaitMs()).isEqualTo(30000);
+        assertThat(props.getHlsConcurrency()).isEqualTo(16);
     }
 }
