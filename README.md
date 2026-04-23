@@ -2,6 +2,9 @@
 
 Standalone open-source service for parsing video content from [Kodik](https://kodik.info). Provides REST API for searching, decoding video links, exporting structured content data, and streaming HLS manifests.
 
+> **Status:** experimental · educational purpose · not affiliated with Kodik.
+> See [DISCLAIMER.md](./DISCLAIMER.md) before you run this in production.
+
 ## Features
 
 ### Kodik API Client
@@ -357,4 +360,21 @@ src/main/java/com/orinuno/
 
 ## License
 
-MIT
+Released under the [MIT License](./LICENSE) — Copyright (c) 2026 Vitaly Lyutarevich.
+
+## Disclaimer
+
+This project is published for research and educational purposes and is **not
+affiliated with, endorsed by, or sponsored by** Kodik. Users are solely
+responsible for complying with Kodik's Terms of Service, applicable copyright
+law, and any other regulations that govern their use of the software.
+
+Please read [DISCLAIMER.md](./DISCLAIMER.md) in full before using this project.
+
+## Takedown requests
+
+If you are a rights holder or platform representative and you believe content
+in this repository should be adjusted or removed, open a
+`[takedown]`-prefixed issue at
+<https://github.com/Samehadar/orinuno/issues> or contact the maintainer via
+<https://lyutarevich.com/>. Reasonable requests will be handled in good faith.
