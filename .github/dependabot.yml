@@ -13,9 +13,12 @@ updates:
       - dependencies
       - java
     commit-message:
-      prefix: chore(deps)
-      prefix-development: chore(deps-dev)
+      prefix: chore
+      prefix-development: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       spring:
         patterns:
@@ -44,8 +47,11 @@ updates:
       - dependencies
       - github-actions
     commit-message:
-      prefix: ci(deps)
+      prefix: ci
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       actions:
         update-types:
@@ -64,8 +70,11 @@ updates:
       - dependencies
       - docker
     commit-message:
-      prefix: chore(deps)
+      prefix: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: "/demo"
@@ -80,8 +89,11 @@ updates:
       - docker
       - demo
     commit-message:
-      prefix: chore(deps)
+      prefix: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: "/demo"
@@ -96,9 +108,12 @@ updates:
       - npm
       - demo
     commit-message:
-      prefix: chore(deps)
-      prefix-development: chore(deps-dev)
+      prefix: chore
+      prefix-development: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       vue-ecosystem:
         patterns:
