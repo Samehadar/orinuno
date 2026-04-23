@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest an idea or improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the problem, not the solution. The solution is optional — a clear problem is more valuable.
+      placeholder: I can't filter search results by release year, so I end up scrolling through hundreds of entries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: A solution you have in mind (optional)
+      description: If you already have an approach — how would you solve it. Skip if you're not sure.
+    validations:
+      required: false
