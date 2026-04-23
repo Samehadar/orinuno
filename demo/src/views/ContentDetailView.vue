@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import type { ContentDto, DownloadState, EpisodeVariantDto } from '../api/types'
+import ScreenshotImage from '../components/ScreenshotImage.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -373,13 +374,18 @@ onUnmounted(stopAllPolling)
 
       <!-- Screenshots -->
       <div v-if="content.screenshots?.length" class="flex gap-2 mb-6 overflow-x-auto pb-2">
-        <img
+        <div
           v-for="(src, idx) in content.screenshots.slice(0, 5)"
           :key="idx"
-          :src="src.startsWith('//') ? 'https:' + src : src"
-          class="h-32 rounded-lg object-cover flex-shrink-0 border border-white/5"
-          loading="lazy"
-        />
+          class="h-32 w-56 rounded-lg overflow-hidden flex-shrink-0 border border-white/5 bg-[#0d1020]"
+        >
+          <ScreenshotImage
+            :src="src"
+            :alt="'Screenshot ' + (idx + 1)"
+            img-class="w-full h-full object-cover"
+            placeholder-class="w-full h-full flex items-center justify-center text-2xl opacity-20"
+          />
+        </div>
       </div>
 
       <!-- Ratings row -->
