@@ -1,0 +1,32 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what actually happened.
+      placeholder: |
+        I called `curl http://localhost:8080/api/v1/parse/search?title=Naruto`
+        and got HTTP 500 instead of a result set.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace (optional)
+      description: Any relevant server output. Feel free to trim.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Version (optional)
+      description: Commit SHA, release tag, or Docker image tag you ran.
+      placeholder: "master@4a56e4d or v1.0.0"
+    validations:
+      required: false
