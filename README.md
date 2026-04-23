@@ -214,9 +214,9 @@ orinuno:
   kodik:
     api-url: https://kodik-api.com       # Kodik API base URL
     token: ""                             # Your Kodik API token (required)
-    request-delay-ms: 500                 # Delay between API requests (ms)
+    request-delay-ms: 500                 # Delay between API requests (ms). Conservative default; tune responsibly (see "Responsible use")
   parse:
-    rate-limit-per-minute: 30             # Max Kodik API calls per minute (rate limiter)
+    rate-limit-per-minute: 30             # Max Kodik API calls per minute (token-bucket). Lower it to be gentler; never exceed the quota attached to your token
   decoder:
     timeout-seconds: 30                   # Decoder timeout per link
     max-retries: 3                        # Max decode retry attempts
@@ -370,6 +370,28 @@ responsible for complying with Kodik's Terms of Service, applicable copyright
 law, and any other regulations that govern their use of the software.
 
 Please read [DISCLAIMER.md](./DISCLAIMER.md) in full before using this project.
+
+## Responsible use
+
+Orinuno is intentionally shipped with **conservative defaults** — the Kodik
+client sleeps `request-delay-ms: 500` between calls, the token bucket allows
+only `rate-limit-per-minute: 30`, and CDN link TTL refresh is batched. These
+knobs are exposed in `application.yml` so you can **tune them to your
+situation**, but please do so responsibly:
+
+- **Lower** the numbers if your use case is casual browsing, a single user,
+  or a test environment — being gentler never hurts.
+- **Keep the defaults** for typical integration work; they were picked to
+  stay well within Kodik's public API expectations.
+- **Raise the numbers only** when you have explicit approval from Kodik for
+  a higher quota, a dedicated token, or when running against a fully local
+  sandbox that you control. Never ramp up to abuse a shared public endpoint.
+
+The project is **not** designed for mass scraping, public mirrors, or
+commercial re-distribution of third-party video content. See
+[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) §2 "Responsible-use guidelines"
+for the full list of what we ask contributors and users not to do, and
+[DISCLAIMER.md](./DISCLAIMER.md) for the legal framing.
 
 ## Takedown requests
 
