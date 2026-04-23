@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import type { ContentDto, ParseRequest } from '../api/types'
+import ScreenshotImage from '../components/ScreenshotImage.vue'
 
 const router = useRouter()
 const query = ref('')
@@ -147,16 +148,11 @@ function typeColor(type: string) {
         @click="router.push({ name: 'content-detail', params: { id: item.id } })"
       >
         <div class="relative h-44 overflow-hidden bg-[#0d1020]">
-          <img
-            v-if="item.screenshots?.length"
-            :src="item.screenshots[0].startsWith('//') ? 'https:' + item.screenshots[0] : item.screenshots[0]"
+          <ScreenshotImage
+            :src="item.screenshots?.[0]"
             :alt="item.title"
-            class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-            loading="lazy"
+            img-class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
-          <div v-else class="w-full h-full flex items-center justify-center text-4xl opacity-20">
-            🎬
-          </div>
           <div class="absolute inset-0 bg-gradient-to-t from-[var(--color-bg-deep)] via-transparent to-transparent" />
           <span :class="['badge absolute top-2 right-2', typeColor(item.type)]">
             {{ item.type }}
