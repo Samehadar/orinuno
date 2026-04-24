@@ -71,13 +71,20 @@ public class KodikApiClient {
     // ======================== LIST ========================
 
     public Mono<Map<String, Object>> listRaw(KodikListRequest request) {
+        Mono<Map<String, Object>> response;
         if (request.getNextPageUrl() != null && !request.getNextPageUrl().isBlank()) {
             log.info("Kodik API /list next page");
-            return rateLimiter.wrapWithRateLimit(postForMapAbsoluteUrl(request.getNextPageUrl()));
+            response =
+                    rateLimiter.wrapWithRateLimit(postForMapAbsoluteUrl(request.getNextPageUrl()));
+        } else {
+            MultiValueMap<String, String> params = buildListParams(request);
+            log.info("Kodik API /list with {} params", params.size());
+            response =
+                    rateLimiter.wrapWithRateLimit(
+                            postForMap("/list", params, KodikFunction.GET_LIST));
         }
-        MultiValueMap<String, String> params = buildListParams(request);
-        log.info("Kodik API /list with {} params", params.size());
-        return rateLimiter.wrapWithRateLimit(postForMap("/list", params, KodikFunction.GET_LIST));
+        return response.doOnNext(
+                raw -> responseMapper.detectSchemaChanges(raw, KodikSearchResponse.class));
     }
 
     /**
