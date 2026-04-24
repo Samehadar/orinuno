@@ -37,12 +37,17 @@ shipped yet.
 
 ## Schema drift telemetry
 
-`GET /api/v1/health/schema-drift` returns a JSON map keyed by
-`DTO.field`, with the count of occurrences and the last-seen timestamp.
-An empty object means no drift since the process started.
+`GET /api/v1/health/schema-drift` returns a JSON map keyed by context
+label (e.g. `KodikSearchResponse`, `MaterialData[anime-serial]`), with
+the unknown fields, first/last-seen timestamps, and `hitCount` of
+responses that drifted. An empty object means no drift since the process
+started.
 
-This is the single most useful endpoint to watch over time — a sudden jump
-in the count is the earliest signal that Kodik changed something.
+This is the single most useful endpoint to watch over time — a sudden
+jump in `hitCount` or a new context label is the earliest signal that
+Kodik changed something. See
+[architecture → schema drift](/orinuno/architecture/schema-drift/) for
+full coverage details and the `orinuno.drift.*` config keys.
 
 ## Logs
 
