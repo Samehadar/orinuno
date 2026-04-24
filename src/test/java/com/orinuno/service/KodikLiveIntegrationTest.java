@@ -41,6 +41,19 @@ class KodikLiveIntegrationTest {
         registry.add("spring.datasource.password", mysql::getPassword);
         registry.add("orinuno.kodik.token", () -> System.getenv("KODIK_TOKEN"));
         registry.add("orinuno.kodik.request-delay-ms", () -> "200");
+        registry.add(
+                "orinuno.kodik.token-file",
+                () -> {
+                    try {
+                        java.nio.file.Path dir =
+                                java.nio.file.Files.createTempDirectory("kodik-tokens-it-");
+                        return dir.resolve("kodik_tokens.json").toAbsolutePath().toString();
+                    } catch (java.io.IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+        registry.add("orinuno.kodik.validate-on-startup", () -> "false");
+        registry.add("orinuno.kodik.auto-discovery-enabled", () -> "false");
     }
 
     @Autowired private WebTestClient webTestClient;

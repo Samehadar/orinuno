@@ -29,7 +29,10 @@ services:
       DB_USERNAME: root
       DB_PASSWORD: root
       KODIK_TOKEN: ${KODIK_TOKEN:-}
+      KODIK_TOKEN_FILE: /app/data/kodik_tokens.json
       SPRING_PROFILES_ACTIVE: local
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
 
   demo:

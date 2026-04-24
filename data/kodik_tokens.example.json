@@ -1,0 +1,22 @@
+{
+  "stable": [
+    {
+      "value": "<replace-with-real-token>",
+      "functions_availability": {
+        "base_search": true,
+        "base_search_by_id": true,
+        "get_list": true,
+        "search": true,
+        "search_by_id": true,
+        "get_info": true,
+        "get_link": true,
+        "get_m3u8_playlist_link": true
+      },
+      "last_checked": "2026-01-01T00:00:00Z",
+      "note": "human-readable comment"
+    }
+  ],
+  "unstable": [],
+  "legacy": [],
+  "dead": []
+}

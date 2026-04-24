@@ -22,6 +22,7 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 | DTOs | `src/main/java/com/orinuno/model/dto/` |
 | Entities | `src/main/java/com/orinuno/model/` |
 | Kodik API client | `src/main/java/com/orinuno/client/` |
+| Kodik token registry | `src/main/java/com/orinuno/token/` |
 | Mappers (entity↔dto) | `src/main/java/com/orinuno/mapper/` |
 | Tests | `src/test/java/com/orinuno/` |
 | Properties | `src/main/resources/application.yml` |
@@ -64,6 +65,7 @@ Kodik uses a custom obfuscation: ROT13 with shift +18 (mod 26) + URL-safe Base64
 
 - **Open-source standalone**: No dependencies on any private backend project. No company-specific references, tokens, or imports.
 - **Kodik API domain**: `kodik-api.com` (with hyphen). NOT `kodikapi.com`.
+- **Kodik tokens**: Managed by `KodikTokenRegistry` over `data/kodik_tokens.json` (gitignored). Tier model + `functions_availability` matrix mirror AnimeParsers' `kdk_tokns/tokens.json`. Full contract in `data/TOKENS.md`. Never commit real token values. First boot seeds from `KODIK_TOKEN` env, or scrapes `kodik-add.com/add-players.min.js` as a legacy fallback.
 - **COALESCE upsert**: When upserting `kodik_episode_variant`, never overwrite a valid `mp4_link` with NULL. Use `COALESCE(VALUES(mp4_link), mp4_link)`.
 - **SQL injection protection**: `sortBy` and `order` parameters in `ContentController` are whitelisted. MyBatis `${...}` interpolation is used only for these validated fields.
 - **API key auth**: When `orinuno.security.api-key` is set, all `/api/v1/content`, `/api/v1/parse`, `/api/v1/export` require `X-API-KEY` header.

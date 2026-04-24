@@ -4,9 +4,13 @@ import com.orinuno.client.dto.KodikListRequest;
 import com.orinuno.client.dto.KodikSearchRequest;
 import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.token.KodikFunction;
+import com.orinuno.token.KodikTokenException;
+import com.orinuno.token.KodikTokenRegistry;
+import com.orinuno.token.KodikTokenValidator;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -15,20 +19,33 @@ import reactor.core.publisher.Mono;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class KodikApiClient {
 
     private final WebClient kodikApiWebClient;
     private final OrinunoProperties properties;
     private final KodikResponseMapper responseMapper;
     private final KodikApiRateLimiter rateLimiter;
+    private final KodikTokenRegistry tokenRegistry;
+
+    public KodikApiClient(
+            @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
+            OrinunoProperties properties,
+            KodikResponseMapper responseMapper,
+            KodikApiRateLimiter rateLimiter,
+            KodikTokenRegistry tokenRegistry) {
+        this.kodikApiWebClient = kodikApiWebClient;
+        this.properties = properties;
+        this.responseMapper = responseMapper;
+        this.rateLimiter = rateLimiter;
+        this.tokenRegistry = tokenRegistry;
+    }
 
     // ======================== SEARCH ========================
 
     public Mono<Map<String, Object>> searchRaw(KodikSearchRequest request) {
         MultiValueMap<String, String> params = buildSearchParams(request);
         log.info("Kodik API /search with {} params", params.size());
-        return rateLimiter.wrapWithRateLimit(postForMap("/search", params));
+        return rateLimiter.wrapWithRateLimit(postForMap("/search", params, pickFunction(request)));
     }
 
     public Mono<KodikSearchResponse> search(KodikSearchRequest request) {
@@ -51,47 +68,103 @@ public class KodikApiClient {
         }
         MultiValueMap<String, String> params = buildListParams(request);
         log.info("Kodik API /list with {} params", params.size());
-        return rateLimiter.wrapWithRateLimit(postForMap("/list", params));
+        return rateLimiter.wrapWithRateLimit(postForMap("/list", params, KodikFunction.GET_LIST));
     }
 
     // ======================== REFERENCE ENDPOINTS ========================
 
     public Mono<Map<String, Object>> translationsRaw() {
         log.info("Kodik API /translations/v2");
-        return rateLimiter.wrapWithRateLimit(postForMap("/translations/v2", tokenOnly()));
+        return rateLimiter.wrapWithRateLimit(
+                postForMap("/translations/v2", emptyParams(), KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> genresRaw() {
         log.info("Kodik API /genres");
-        return rateLimiter.wrapWithRateLimit(postForMap("/genres", tokenOnly()));
+        return rateLimiter.wrapWithRateLimit(
+                postForMap("/genres", emptyParams(), KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> countriesRaw() {
         log.info("Kodik API /countries");
-        return rateLimiter.wrapWithRateLimit(postForMap("/countries", tokenOnly()));
+        return rateLimiter.wrapWithRateLimit(
+                postForMap("/countries", emptyParams(), KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> yearsRaw() {
         log.info("Kodik API /years");
-        return rateLimiter.wrapWithRateLimit(postForMap("/years", tokenOnly()));
+        return rateLimiter.wrapWithRateLimit(
+                postForMap("/years", emptyParams(), KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> qualitiesRaw() {
         log.info("Kodik API /qualities/v2");
-        return rateLimiter.wrapWithRateLimit(postForMap("/qualities/v2", tokenOnly()));
+        return rateLimiter.wrapWithRateLimit(
+                postForMap("/qualities/v2", emptyParams(), KodikFunction.GET_INFO));
     }
 
     // ======================== INTERNAL ========================
 
     private Mono<Map<String, Object>> postForMap(
-            String path, MultiValueMap<String, String> params) {
+            String path, MultiValueMap<String, String> params, KodikFunction function) {
+        return executeWithTokenFailover(path, params, function, 0);
+    }
+
+    private Mono<Map<String, Object>> executeWithTokenFailover(
+            String path,
+            MultiValueMap<String, String> paramsWithoutToken,
+            KodikFunction function,
+            int attempt) {
+        String token;
+        try {
+            token = tokenRegistry.currentToken(function);
+        } catch (KodikTokenException.NoWorkingTokenException ex) {
+            return Mono.error(ex);
+        }
+
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>(paramsWithoutToken);
+        params.add("token", token);
+
         return kodikApiWebClient
                 .post()
                 .uri(uriBuilder -> uriBuilder.path(path).queryParams(params).build())
                 .retrieve()
                 .bodyToMono(
                         new org.springframework.core.ParameterizedTypeReference<
-                                Map<String, Object>>() {});
+                                Map<String, Object>>() {})
+                .flatMap(
+                        response -> {
+                            Object error = response == null ? null : response.get("error");
+                            if (error != null
+                                    && KodikTokenValidator.INVALID_TOKEN_ERROR.equals(
+                                            error.toString())) {
+                                tokenRegistry.markInvalid(token, function);
+                                int maxAttempts =
+                                        Math.max(
+                                                1,
+                                                properties
+                                                        .getKodik()
+                                                        .getTokenFailoverMaxAttempts());
+                                if (attempt + 1 >= maxAttempts) {
+                                    return Mono.error(
+                                            new KodikTokenException.TokenRejectedException(
+                                                    "Kodik rejected every token available for"
+                                                            + " function "
+                                                            + function.getJsonKey()
+                                                            + " after "
+                                                            + (attempt + 1)
+                                                            + " attempt(s)"));
+                                }
+                                log.warn(
+                                        "Kodik rejected token {} for {}, trying next (attempt {})",
+                                        KodikTokenRegistry.mask(token),
+                                        function.getJsonKey(),
+                                        attempt + 2);
+                                return executeWithTokenFailover(
+                                        path, paramsWithoutToken, function, attempt + 1);
+                            }
+                            return Mono.just(response);
+                        });
     }
 
     private Mono<Map<String, Object>> postForMapAbsoluteUrl(String absoluteUrl) {
@@ -104,15 +177,32 @@ public class KodikApiClient {
                                 Map<String, Object>>() {});
     }
 
-    private MultiValueMap<String, String> tokenOnly() {
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
-        params.add("token", properties.getKodik().getToken());
-        return params;
+    private MultiValueMap<String, String> emptyParams() {
+        return new LinkedMultiValueMap<>();
+    }
+
+    private KodikFunction pickFunction(KodikSearchRequest r) {
+        if (isSet(r.getShikimoriId())
+                || isSet(r.getKinopoiskId())
+                || isSet(r.getImdbId())
+                || isSet(r.getMdlId())
+                || isSet(r.getWorldartAnimationId())
+                || isSet(r.getWorldartCinemaId())
+                || isSet(r.getWorldartLink())
+                || isSet(r.getId())) {
+            return KodikFunction.BASE_SEARCH_BY_ID;
+        }
+        return KodikFunction.BASE_SEARCH;
+    }
+
+    private static boolean isSet(Object value) {
+        if (value == null) return false;
+        String str = value.toString();
+        return !str.isBlank();
     }
 
     private MultiValueMap<String, String> buildSearchParams(KodikSearchRequest r) {
         MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
-        p.add("token", properties.getKodik().getToken());
         p.add("with_seasons", "true");
         p.add("with_episodes", "true");
         p.add("with_material_data", "true");
@@ -181,7 +271,6 @@ public class KodikApiClient {
 
     private MultiValueMap<String, String> buildListParams(KodikListRequest r) {
         MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
-        p.add("token", properties.getKodik().getToken());
         p.add("with_material_data", "true");
 
         addIfPresent(p, "limit", r.getLimit());
