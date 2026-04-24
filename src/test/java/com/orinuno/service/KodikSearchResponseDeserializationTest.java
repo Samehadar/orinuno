@@ -36,7 +36,10 @@ class KodikSearchResponseDeserializationTest {
                             "kinopoisk_id": "1234567",
                             "imdb_id": "tt1234567",
                             "shikimori_id": "54321",
+                            "mdl_id": "56743-mei-gui-qi-shi",
                             "worldart_link": "http://worldart.ru/animation/12345",
+                            "worldart_animation_id": "10534",
+                            "worldart_cinema_id": "7788",
                             "quality": "BDRip 720p",
                             "camrip": false,
                             "lgbt": false,
@@ -67,6 +70,10 @@ class KodikSearchResponseDeserializationTest {
         assertThat(result.getKinopoiskId()).isEqualTo("1234567");
         assertThat(result.getImdbId()).isEqualTo("tt1234567");
         assertThat(result.getShikimoriId()).isEqualTo("54321");
+        assertThat(result.getMdlId()).isEqualTo("56743-mei-gui-qi-shi");
+        assertThat(result.getWorldartLink()).isEqualTo("http://worldart.ru/animation/12345");
+        assertThat(result.getWorldartAnimationId()).isEqualTo("10534");
+        assertThat(result.getWorldartCinemaId()).isEqualTo("7788");
         assertThat(result.getQuality()).isEqualTo("BDRip 720p");
         assertThat(result.getCamrip()).isFalse();
         assertThat(result.getScreenshots()).hasSize(2);
