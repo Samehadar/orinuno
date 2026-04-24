@@ -38,7 +38,7 @@ jobs:
             -tpng -o images '*.puml'
 
       - name: Commit rendered images
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "docs: re-render PlantUML diagrams [skip ci]"
           file_pattern: 'docs/images/*.svg docs/images/*.png'
