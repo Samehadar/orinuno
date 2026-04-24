@@ -66,8 +66,17 @@ public class KodikSearchResponse {
         @JsonProperty("shikimori_id")
         private String shikimoriId;
 
+        @JsonProperty("mdl_id")
+        private String mdlId;
+
         @JsonProperty("worldart_link")
         private String worldartLink;
+
+        @JsonProperty("worldart_animation_id")
+        private String worldartAnimationId;
+
+        @JsonProperty("worldart_cinema_id")
+        private String worldartCinemaId;
 
         private String quality;
         private Boolean camrip;
