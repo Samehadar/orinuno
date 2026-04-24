@@ -27,7 +27,7 @@ public class ParseController {
     @PostMapping("/search")
     @Operation(summary = "Search and parse content from Kodik")
     public Mono<ResponseEntity<List<ContentDto>>> search(@Valid @RequestBody ParseRequestDto request) {
-        log.info("🔍 Parse request: {}", request);
+        log.info("🔍 Parse request: {}", sanitizeForLog(request));
         return parserService.search(request)
                 .map(contents -> contents.stream().map(ContentMapper::toDto).toList())
                 .map(ResponseEntity::ok);
@@ -42,5 +42,13 @@ public class ParseController {
                 ? parserService.forceDecodeForContent(contentId)
                 : parserService.decodeForContent(contentId);
         return action.thenReturn(ResponseEntity.ok().<Void>build());
+    }
+
+    // Strip CR/LF so user-provided fields cannot forge extra log lines.
+    private static String sanitizeForLog(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.toString().replace('\n', '_').replace('\r', '_');
     }
 }
