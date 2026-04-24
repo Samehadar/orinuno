@@ -14,19 +14,25 @@
     "sync-diagrams": "node scripts/sync-diagrams.mjs"
   },
   "dependencies": {
-    "@astrojs/check": "^0.9.4",
-    "@astrojs/mdx": "^4.3.6",
-    "@astrojs/starlight": "^0.35.2",
-    "astro": "^5.14.1",
-    "astro-mermaid": "^1.0.6",
+    "@astrojs/check": "^0.9.8",
+    "@astrojs/mdx": "^5.0.4",
+    "@astrojs/starlight": "^0.38.4",
+    "astro": "^6.1.9",
+    "astro-mermaid": "^2.0.1",
     "mermaid": "^11.12.0",
     "sharp": "^0.34.1",
-    "starlight-links-validator": "^0.17.0",
-    "starlight-openapi": "^0.21.1",
+    "starlight-links-validator": "^0.23.0",
+    "starlight-openapi": "^0.25.0",
     "typescript": "^5.9.2"
   },
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.12.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "yaml@<2.8.3": "^2.8.3",
+      "uuid@<14.0.0": "^14.0.0"
+    }
   }
 }

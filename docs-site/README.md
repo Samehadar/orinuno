@@ -5,8 +5,8 @@ Deployed to GitHub Pages at <https://samehadar.github.io/orinuno/>.
 
 ## Local development
 
-Requires Node.js 20+ and pnpm. If pnpm is not installed, enable it via
-Corepack (bundled with Node):
+Requires Node.js 22.12+ and pnpm (Astro 6 no longer supports Node 20). If
+pnpm is not installed, enable it via Corepack (bundled with Node):
 
 ```sh
 corepack enable
