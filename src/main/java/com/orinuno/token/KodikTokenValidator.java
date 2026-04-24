@@ -1,5 +1,7 @@
 package com.orinuno.token;
 
+import com.orinuno.client.KodikResponseMapper;
+import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.configuration.OrinunoProperties;
 import java.time.Duration;
 import java.util.EnumMap;
@@ -46,14 +48,17 @@ public class KodikTokenValidator {
     private final WebClient kodikApiWebClient;
     private final OrinunoProperties properties;
     private final KodikTokenRegistry registry;
+    private final KodikResponseMapper responseMapper;
 
     public KodikTokenValidator(
             @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
             OrinunoProperties properties,
-            KodikTokenRegistry registry) {
+            KodikTokenRegistry registry,
+            KodikResponseMapper responseMapper) {
         this.kodikApiWebClient = kodikApiWebClient;
         this.properties = properties;
         this.registry = registry;
+        this.responseMapper = responseMapper;
     }
 
     /**
@@ -140,7 +145,7 @@ public class KodikTokenValidator {
         return probe("/list", params, tokenValue, "list");
     }
 
-    private boolean probe(
+    boolean probe(
             String path,
             MultiValueMap<String, String> params,
             String tokenValue,
@@ -169,6 +174,12 @@ public class KodikTokenValidator {
                         error);
                 return false;
             }
+            // Known coupling: probes share the same DriftDetector as runtime traffic, so their
+            // sample bumps the detector's totalChecks/firstSeen alongside real /search and /list
+            // calls. That's intentional today — probe payloads are real Kodik responses and any
+            // drift visible to validators is also visible to users. If a future TrafficAnalyzer
+            // splits probe vs. user traffic, route this call through a separate detector instance.
+            responseMapper.detectSchemaChanges(response, KodikSearchResponse.class);
             return true;
         } catch (RuntimeException ex) {
             log.debug(
