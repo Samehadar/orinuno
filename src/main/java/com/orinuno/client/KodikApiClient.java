@@ -1,13 +1,21 @@
 package com.orinuno.client;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.orinuno.client.dto.KodikListRequest;
 import com.orinuno.client.dto.KodikSearchRequest;
 import com.orinuno.client.dto.KodikSearchResponse;
+import com.orinuno.client.dto.reference.KodikCountryDto;
+import com.orinuno.client.dto.reference.KodikGenreDto;
+import com.orinuno.client.dto.reference.KodikQualityDto;
+import com.orinuno.client.dto.reference.KodikReferenceResponse;
+import com.orinuno.client.dto.reference.KodikTranslationDto;
+import com.orinuno.client.dto.reference.KodikYearDto;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.token.KodikFunction;
 import com.orinuno.token.KodikTokenException;
 import com.orinuno.token.KodikTokenRegistry;
 import com.orinuno.token.KodikTokenValidator;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -15,6 +23,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Slf4j
@@ -71,6 +80,37 @@ public class KodikApiClient {
         return rateLimiter.wrapWithRateLimit(postForMap("/list", params, KodikFunction.GET_LIST));
     }
 
+    /**
+     * Auto-paginating wrapper over {@link #listRaw(KodikListRequest)} that walks {@code next_page}
+     * until Kodik stops returning it, emitting each individual result item.
+     *
+     * <p>Internal utility for discovery / bulk sync scenarios — not exposed as a REST endpoint,
+     * because iterating the full catalog synchronously would hold an HTTP connection open for
+     * hours. Revisit once async jobs (TD-1) are available.
+     */
+    public Flux<Map<String, Object>> listAll(KodikListRequest request) {
+        return listRaw(request)
+                .expand(
+                        raw -> {
+                            Object next = raw.get("next_page");
+                            if (!(next instanceof String s) || s.isBlank()) {
+                                return Mono.empty();
+                            }
+                            return listRaw(KodikListRequest.builder().nextPageUrl(s).build());
+                        })
+                .flatMapIterable(
+                        raw -> {
+                            Object results = raw.get("results");
+                            if (!(results instanceof List<?> list)) {
+                                return List.of();
+                            }
+                            return list.stream()
+                                    .filter(Map.class::isInstance)
+                                    .map(item -> (Map<String, Object>) item)
+                                    .toList();
+                        });
+    }
+
     // ======================== REFERENCE ENDPOINTS ========================
 
     public Mono<Map<String, Object>> translationsRaw() {
@@ -101,6 +141,63 @@ public class KodikApiClient {
         log.info("Kodik API /qualities/v2");
         return rateLimiter.wrapWithRateLimit(
                 postForMap("/qualities/v2", emptyParams(), KodikFunction.GET_INFO));
+    }
+
+    // ============= REFERENCE ENDPOINTS (typed, drift-detected) ==============
+
+    public Mono<KodikReferenceResponse<KodikTranslationDto>> translations() {
+        return translationsRaw()
+                .map(
+                        raw ->
+                                responseMapper.mapAndDetectChanges(
+                                        raw,
+                                        new TypeReference<
+                                                KodikReferenceResponse<KodikTranslationDto>>() {},
+                                        KodikTranslationDto.class));
+    }
+
+    public Mono<KodikReferenceResponse<KodikGenreDto>> genres() {
+        return genresRaw()
+                .map(
+                        raw ->
+                                responseMapper.mapAndDetectChanges(
+                                        raw,
+                                        new TypeReference<
+                                                KodikReferenceResponse<KodikGenreDto>>() {},
+                                        KodikGenreDto.class));
+    }
+
+    public Mono<KodikReferenceResponse<KodikCountryDto>> countries() {
+        return countriesRaw()
+                .map(
+                        raw ->
+                                responseMapper.mapAndDetectChanges(
+                                        raw,
+                                        new TypeReference<
+                                                KodikReferenceResponse<KodikCountryDto>>() {},
+                                        KodikCountryDto.class));
+    }
+
+    public Mono<KodikReferenceResponse<KodikYearDto>> years() {
+        return yearsRaw()
+                .map(
+                        raw ->
+                                responseMapper.mapAndDetectChanges(
+                                        raw,
+                                        new TypeReference<
+                                                KodikReferenceResponse<KodikYearDto>>() {},
+                                        KodikYearDto.class));
+    }
+
+    public Mono<KodikReferenceResponse<KodikQualityDto>> qualities() {
+        return qualitiesRaw()
+                .map(
+                        raw ->
+                                responseMapper.mapAndDetectChanges(
+                                        raw,
+                                        new TypeReference<
+                                                KodikReferenceResponse<KodikQualityDto>>() {},
+                                        KodikQualityDto.class));
     }
 
     // ======================== INTERNAL ========================

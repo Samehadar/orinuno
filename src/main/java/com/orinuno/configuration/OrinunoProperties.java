@@ -1,5 +1,6 @@
 package com.orinuno.configuration;
 
+import com.orinuno.drift.DriftSamplingProperties;
 import java.util.List;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -46,6 +47,8 @@ public class OrinunoProperties {
     private PlaywrightProperties playwright = new PlaywrightProperties();
     private SecurityProperties security = new SecurityProperties();
     private CorsProperties cors = new CorsProperties();
+    private CacheProperties cache = new CacheProperties();
+    private DriftSamplingProperties drift = new DriftSamplingProperties();
 
     @Data
     public static class SecurityProperties {
@@ -77,5 +80,16 @@ public class OrinunoProperties {
         private int navigationTimeoutMs = 15000;
         private int videoWaitMs = 30000;
         private int hlsConcurrency = 16;
+    }
+
+    @Data
+    public static class CacheProperties {
+        private ReferenceCacheProperties reference = new ReferenceCacheProperties();
+    }
+
+    @Data
+    public static class ReferenceCacheProperties {
+        private boolean enabled = true;
+        private long ttlSeconds = 21_600;
     }
 }

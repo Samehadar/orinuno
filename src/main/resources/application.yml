@@ -78,6 +78,15 @@ orinuno:
     navigation-timeout-ms: ${PLAYWRIGHT_NAVIGATION_TIMEOUT_MS:15000}
     video-wait-ms: ${PLAYWRIGHT_VIDEO_WAIT_MS:30000}
     hls-concurrency: ${PLAYWRIGHT_HLS_CONCURRENCY:16}
+  cache:
+    reference:
+      enabled: ${ORINUNO_CACHE_REFERENCE_ENABLED:true}
+      ttl-seconds: ${ORINUNO_CACHE_REFERENCE_TTL_SECONDS:21600}
+  drift:
+    enabled: ${ORINUNO_DRIFT_ENABLED:true}
+    item-sampling:
+      mode: ${ORINUNO_DRIFT_ITEM_SAMPLING_MODE:FIRST_N}
+      limit: ${ORINUNO_DRIFT_ITEM_SAMPLING_LIMIT:10}
 
 ---
 spring.config.activate.on-profile: local

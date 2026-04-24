@@ -1,6 +1,7 @@
 package com.orinuno.controller;
 
 import com.orinuno.client.KodikResponseMapper;
+import com.orinuno.drift.DriftRecord;
 import com.orinuno.model.KodikProxy;
 import com.orinuno.service.DecoderHealthTracker;
 import com.orinuno.service.ProxyProviderService;
@@ -57,8 +58,7 @@ public class HealthController {
     @Operation(summary = "Kodik API schema drift detection status")
     public ResponseEntity<Map<String, Object>> schemaDrift() {
         Map<String, Object> result = new LinkedHashMap<>();
-        Map<String, KodikResponseMapper.DriftRecord> drifts =
-                kodikResponseMapper.getDetectedDrifts();
+        Map<String, DriftRecord> drifts = kodikResponseMapper.getDetectedDrifts();
         boolean hasDrifts = !drifts.isEmpty();
 
         result.put("status", hasDrifts ? "DRIFT_DETECTED" : "CLEAN");

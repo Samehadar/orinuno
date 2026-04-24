@@ -140,3 +140,43 @@ export interface SchemaDriftHealth {
   affectedTypes: number
   drifts: SchemaDriftEntry[]
 }
+
+export interface ReferenceResponse<T> {
+  time: string
+  total: number
+  results: T[]
+}
+
+export interface KodikTranslation {
+  id: number
+  title: string
+  count: number
+}
+
+export interface KodikGenre {
+  title: string
+  count: number
+}
+
+export interface KodikCountry {
+  title: string
+  count: number
+}
+
+export interface KodikYear {
+  year: number
+  count: number
+}
+
+export interface KodikQuality {
+  title: string
+  count: number
+}
+
+export type ReferenceKind =
+  | 'translations'
+  | 'genres'
+  | 'countries'
+  | 'years'
+  | 'qualities'
+

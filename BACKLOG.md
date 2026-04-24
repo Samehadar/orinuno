@@ -61,15 +61,14 @@
 - Сравнение snapshots схемы между деплоями
 - Автогенерация diff-отчётов
 
-### TD-4: Reference endpoints возвращают только raw Map
+### TD-4: Reference endpoints возвращают только raw Map — **DONE** (2026-04-24)
 
-**Приоритет:** Низкий
-**Статус:** Архитектурное решение
-**Файлы:** `KodikApiClient.java`
+**Статус:** Реализовано вместе с IDEA-1/2/3.
 
-Эндпоинты `translationsRaw()`, `genresRaw()`, `countriesRaw()`, `yearsRaw()`, `qualitiesRaw()` возвращают `Map<String, Object>` без десериализации в типизированные DTO. Это осознанный выбор (raw response first для обнаружения дрифтов), но для потребителей API было бы удобнее иметь типизированные DTO.
-
-**Решение:** Создать DTO-классы `KodikTranslationsResponse`, `KodikGenresResponse` и т.д., маппить через `KodikResponseMapper.mapAndDetectChanges()`, как это делается для `/search`.
+**Что сделано:**
+- `KodikReferenceResponse<T>` + пять record-DTO (`KodikTranslationDto`, `KodikGenreDto`, `KodikCountryDto`, `KodikYearDto`, `KodikQualityDto`).
+- Перегрузка `KodikResponseMapper.mapAndDetectChanges(Map, TypeReference<T>, Class<?> itemType)` с двухуровневой проверкой дрифта (envelope + items).
+- Пять типизированных методов в `KodikApiClient` (`translations()`, `genres()`, `countries()`, `years()`, `qualities()`), вызываемых `ReferenceService` и `ReferenceController`.
 
 ### TD-5: PlaywrightVideoFetcher тесты нестабильны
 
@@ -272,95 +271,25 @@ Sibnet — крупнейший сибирский видеохостинг с *
 
 ## 3. Идеи для реализации
 
-### IDEA-1: REST endpoint для reference данных
+### IDEA-1: REST endpoint для reference данных — **DONE** (2026-04-24)
 
-**Приоритет:** Средний
-**Сложность:** Низкая
-**Файлы:** Новый `ReferenceController.java`
+**Статус:** Реализовано. `ReferenceController` публикует пять эндпоинтов: `GET /api/v1/reference/translations|genres|countries|years|qualities`, каждый с параметром `?fresh=true` для обхода кэша. Demo UI (`ReferenceView.vue`) предоставляет интерфейс для всех пяти словарей с фильтрацией и переключателем cache/fresh.
 
-Сейчас `translationsRaw()`, `genresRaw()` и т.д. доступны только как внутренние методы `KodikApiClient`. Нужно выставить их как REST:
+### IDEA-2: Кэширование reference данных — **DONE** (2026-04-24)
 
-```
-GET /api/v1/reference/translations
-GET /api/v1/reference/genres
-GET /api/v1/reference/countries
-GET /api/v1/reference/years
-GET /api/v1/reference/qualities
-```
+**Статус:** Реализовано через Caffeine. Переключатель `orinuno.cache.reference.enabled` (default `true`) меняет `CacheManager` на `NoOpCacheManager` при отключении. TTL настраивается через `orinuno.cache.reference.ttl-seconds` (default 6h). `fresh=true` на контроллере обходит кэш per-request. Тесты: `ReferenceCacheIntegrationTest` (enabled/disabled), `ReferenceControllerTest` (fresh-флаг).
 
-Полезно для:
-- Демо UI — фильтрация по жанрам, странам
-- Потребители API — построение фильтров в своих интерфейсах
-- Кэширование (response cache 1h)
+### IDEA-3: Типизированные DTO для reference endpoints — **DONE** (2026-04-24)
 
-### IDEA-2: Кэширование reference данных
+**Статус:** Реализовано. Пять record-DTO в пакете `com.orinuno.client.dto.reference` + generic `KodikReferenceResponse<T>`. Маппятся через `KodikResponseMapper.mapAndDetectChanges(Map, TypeReference<T>, Class<?>)` с двухуровневой проверкой дрифта. Покрыто юнит- и live stability тестами.
 
-**Приоритет:** Средний
-**Сложность:** Низкая
+### IDEA-4: Полный аудит `material_data` → сохранение в БД — **DONE** (2026-04-24)
 
-Translations, genres, countries, years, qualities меняются крайне редко. Стоит кэшировать на 1-24 часа.
+**Статус:** Реализовано в коммите `179cc8d`. `material_data` сериализуется в JSON-колонку `kodik_content.material_data` через Liquibase migration `20260424-material-data.xml`; mapping — в `KodikContentMapper`. Доступно на export для downstream-repo.
 
-**Реализация:**
-- Spring `@Cacheable` с TTL
-- Или `ConcurrentHashMap` + `ScheduledExecutorService` для обновления
+### IDEA-5: Полная автопагинация `/list` — **DONE** (2026-04-24)
 
-### IDEA-3: Типизированные DTO для reference endpoints
-
-**Приоритет:** Низкий
-**Сложность:** Низкая
-
-Создать DTO для каждого reference endpoint:
-
-```java
-record TranslationDto(Integer id, String title, Integer count) {}
-record GenreDto(String title, Integer count) {}
-record CountryDto(String title, Integer count) {}
-record YearDto(Integer year, Integer count) {}
-record QualityDto(String title, Integer count) {}
-```
-
-Прогнать через `mapAndDetectChanges()` для drift detection.
-
-### IDEA-4: Полный аудит `material_data` → сохранение в БД
-
-**Приоритет:** Высокий
-**Сложность:** Средняя
-**Файлы:** `kodik_content` таблица, `EntityFactory.java`, `ContentMapper.java`
-
-Сейчас `material_data` хранится как `Map<String, Object>` в DTO, но не персистируется в MySQL. Поля рейтингов (`kinopoisk_rating`, `imdb_rating`, `shikimori_rating`) извлекаются на уровне `kodik_content` таблицы, но много ценных данных теряется:
-
-- `poster_url`, `anime_poster_url`, `drama_poster_url` — постеры
-- `anime_genres`, `drama_genres`, `all_genres` — жанры  
-- `actors`, `directors`, `producers` — персоналии
-- `anime_studios` — студии
-- `anime_status`, `drama_status`, `all_status` — статус выхода
-- `anime_description`, `description` — описание
-- `episodes_total`, `episodes_aired` — количество эпизодов
-
-**Решение:**
-- Добавить колонку `material_data JSON` в `kodik_content`
-- Или денормализовать ключевые поля: `poster_url`, `description`, `status`, `anime_studios`
-- Liquibase миграция
-
-### IDEA-5: Полная автопагинация `/list`
-
-**Приоритет:** Средний
-**Сложность:** Низкая
-
-Создать метод `listAll()` в `KodikApiClient` или `ParserService`, который автоматически проходит все страницы `next_page` и собирает полный список контента. Полезно для bulk-импорта каталога.
-
-**Реализация:**
-```java
-public Flux<KodikSearchResponse.Result> listAll(KodikListRequest request) {
-    return listRaw(request)
-        .expand(raw -> {
-            String nextPage = (String) raw.get("next_page");
-            if (nextPage == null) return Mono.empty();
-            return listRaw(KodikListRequest.builder().nextPageUrl(nextPage).build());
-        })
-        .flatMapIterable(raw -> (List<Map<String, Object>>) raw.get("results"));
-}
-```
+**Статус:** Реализовано. `KodikApiClient.listAll(KodikListRequest)` возвращает `Flux<Map<String, Object>>`, обходя `next_page` через `Flux.expand` и плоско эмитируя items. Поведение покрыто `KodikApiClientListAllTest` (три страницы, одна страница, пустой первый ответ, пустой next_page, ошибка на второй странице).
 
 ### IDEA-6: Webhook/Event уведомления
 
@@ -652,27 +581,27 @@ Kodik применяет многоуровневую защиту. Это зн�
 
 | # | Задача | Приоритет | Сложность | Зависимости |
 |---|---|---|---|---|
-| 1 | IDEA-4: material_data → БД | Высокий | Средняя | Liquibase migration |
+| 1 | IDEA-4: material_data → БД | ✅ Done (2026-04-24) | Средняя | Liquibase migration |
 | 2 | TD-1: Async Jobs | Высокий | Высокая | Новая таблица jobs |
 | 3 | IDEA-AP-3: Shikimori интеграция | Высокий | Средняя | ShikimoriClient |
 | 4 | IDEA-AP-4: Sibnet парсер | Высокий | Средняя | Research API/HTML, VideoHostParser абстракция |
-| 5 | IDEA-1: REST reference endpoints | Средний | Низкая | — |
-| 6 | IDEA-2: Кэширование reference | Средний | Низкая | IDEA-1 |
+| 5 | IDEA-1: REST reference endpoints | ✅ Done (2026-04-24) | Низкая | — |
+| 6 | IDEA-2: Кэширование reference | ✅ Done (2026-04-24) | Низкая | IDEA-1 |
 | 7 | IDEA-8: Prometheus метрики | Средний | Низкая | — |
 | 8 | TD-3: Schema drift Level 2 | Средний | Средняя | Liquibase migration |
 | 9 | IDEA-10: Rate limiter для потребителей | Средний | Средняя | — |
 | 10 | IDEA-AP-1: Aniboom парсер | Средний | Высокая | Абстракция VideoHostParser |
 | 11 | IDEA-AP-2: JutSu парсер | Средний | Средняя | Абстракция VideoHostParser |
-| 12 | IDEA-5: Автопагинация /list | Средний | Низкая | — |
+| 12 | IDEA-5: Автопагинация /list | ✅ Done (2026-04-24) | Низкая | — |
 | 13 | IDEA-7: Geo-block detection расширение | Средний | Низкая | — |
 | 14 | TD-5: Playwright тесты | Средний | Средняя | — |
 | 15 | IDEA-RUST-1: Enum-ы типов контента | Низкий | Низкая | — |
 | 16 | IDEA-RUST-2: Типизированные фильтры | Низкий | Низкая | — |
-| 17 | TD-2: ParseRequestDto валидация | Низкий | Низкая | — |
-| 18 | TD-4: DTO для reference endpoints | Низкий | Низкая | IDEA-1 |
+| 17 | TD-2: ParseRequestDto валидация | Низкий (wontfix) | Низкая | Kodik API сам принимает такой запрос — паритет поведения |
+| 18 | TD-4: DTO для reference endpoints | ✅ Done (2026-04-24) | Низкая | IDEA-1 |
 | 19 | IDEA-KW-1: Token auto-discovery | ✅ Done (2026-04-24) | Средняя | — |
 | 19b | IDEA-KH-1: Token harvester | Низкий | Средняя | — |
 | 20 | IDEA-6: Webhook уведомления | Низкий | Средняя | — |
 | 21 | IDEA-9: Docker оптимизация | Низкий | Низкая | — |
-| 22 | IDEA-3: Типизированные DTO reference | Низкий | Низкая | IDEA-1 |
+| 22 | IDEA-3: Типизированные DTO reference | ✅ Done (2026-04-24) | Низкая | IDEA-1 |
 | 23 | IDEA-11: Anime4K видео-апскейлинг (R&D) | Низкий | Высокая | ffmpeg + libplacebo + Vulkan GPU |
