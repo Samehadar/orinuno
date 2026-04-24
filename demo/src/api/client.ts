@@ -5,9 +5,15 @@ import type {
   DownloadState,
   EpisodeVariantDto,
   HealthResponse,
+  KodikCountry,
+  KodikGenre,
+  KodikQuality,
+  KodikTranslation,
+  KodikYear,
   PageResponse,
   ParseRequest,
   ProxyHealth,
+  ReferenceResponse,
   SchemaDriftHealth,
 } from './types'
 
@@ -112,5 +118,35 @@ export const api = {
     const res = await fetch(`${BASE}/api/v1/hls/${variantId}/manifest`, { headers: headers() })
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     return res.text()
+  },
+
+  getTranslations(fresh = false) {
+    return get<ReferenceResponse<KodikTranslation>>(
+      `/api/v1/reference/translations${fresh ? '?fresh=true' : ''}`,
+    )
+  },
+
+  getGenres(fresh = false) {
+    return get<ReferenceResponse<KodikGenre>>(
+      `/api/v1/reference/genres${fresh ? '?fresh=true' : ''}`,
+    )
+  },
+
+  getCountries(fresh = false) {
+    return get<ReferenceResponse<KodikCountry>>(
+      `/api/v1/reference/countries${fresh ? '?fresh=true' : ''}`,
+    )
+  },
+
+  getYears(fresh = false) {
+    return get<ReferenceResponse<KodikYear>>(
+      `/api/v1/reference/years${fresh ? '?fresh=true' : ''}`,
+    )
+  },
+
+  getQualities(fresh = false) {
+    return get<ReferenceResponse<KodikQuality>>(
+      `/api/v1/reference/qualities${fresh ? '?fresh=true' : ''}`,
+    )
   },
 }

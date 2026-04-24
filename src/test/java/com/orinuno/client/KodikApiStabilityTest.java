@@ -5,8 +5,14 @@ import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orinuno.client.dto.DtoFieldExtractor;
 import com.orinuno.client.dto.KodikSearchResponse;
+import com.orinuno.client.dto.reference.KodikCountryDto;
+import com.orinuno.client.dto.reference.KodikGenreDto;
+import com.orinuno.client.dto.reference.KodikQualityDto;
+import com.orinuno.client.dto.reference.KodikReferenceResponse;
+import com.orinuno.client.dto.reference.KodikTranslationDto;
+import com.orinuno.client.dto.reference.KodikYearDto;
+import com.orinuno.drift.DtoFieldExtractor;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -880,6 +886,89 @@ class KodikApiStabilityTest {
         }
 
         assertThat(qualities.size()).as("should have multiple quality types").isGreaterThan(1);
+    }
+
+    // ======================== Typed DTO round-trips ========================
+
+    @Test
+    @Order(90)
+    @DisplayName("/translations/v2 → KodikReferenceResponse<KodikTranslationDto> round-trip")
+    void translationsTypedRoundTrip() throws Exception {
+        Map<String, Object> raw = postApi("/translations/v2", "token=" + token);
+
+        KodikReferenceResponse<KodikTranslationDto> typed =
+                MAPPER.convertValue(
+                        raw, new TypeReference<KodikReferenceResponse<KodikTranslationDto>>() {});
+
+        assertThat(typed).isNotNull();
+        assertThat(typed.getResults()).as("translations typed results").isNotEmpty();
+        KodikTranslationDto first = typed.getResults().get(0);
+        assertSoftly(
+                soft -> {
+                    soft.assertThat(first.id()).as("id populated").isNotNull();
+                    soft.assertThat(first.title()).as("title populated").isNotBlank();
+                });
+    }
+
+    @Test
+    @Order(91)
+    @DisplayName(
+            "/genres → KodikReferenceResponse<KodikGenreDto> round-trip (id intentionally absent)")
+    void genresTypedRoundTrip() throws Exception {
+        Map<String, Object> raw = postApi("/genres", "token=" + token);
+
+        KodikReferenceResponse<KodikGenreDto> typed =
+                MAPPER.convertValue(
+                        raw, new TypeReference<KodikReferenceResponse<KodikGenreDto>>() {});
+
+        assertThat(typed).isNotNull();
+        assertThat(typed.getResults()).as("genres typed results").isNotEmpty();
+        assertThat(typed.getResults().get(0).title()).as("genre title").isNotBlank();
+    }
+
+    @Test
+    @Order(92)
+    @DisplayName("/countries → KodikReferenceResponse<KodikCountryDto> round-trip")
+    void countriesTypedRoundTrip() throws Exception {
+        Map<String, Object> raw = postApi("/countries", "token=" + token);
+
+        KodikReferenceResponse<KodikCountryDto> typed =
+                MAPPER.convertValue(
+                        raw, new TypeReference<KodikReferenceResponse<KodikCountryDto>>() {});
+
+        assertThat(typed).isNotNull();
+        assertThat(typed.getResults()).as("countries typed results").isNotEmpty();
+        assertThat(typed.getResults().get(0).title()).as("country title").isNotBlank();
+    }
+
+    @Test
+    @Order(93)
+    @DisplayName("/years → KodikReferenceResponse<KodikYearDto> round-trip (year field, not title)")
+    void yearsTypedRoundTrip() throws Exception {
+        Map<String, Object> raw = postApi("/years", "token=" + token);
+
+        KodikReferenceResponse<KodikYearDto> typed =
+                MAPPER.convertValue(
+                        raw, new TypeReference<KodikReferenceResponse<KodikYearDto>>() {});
+
+        assertThat(typed).isNotNull();
+        assertThat(typed.getResults()).as("years typed results").isNotEmpty();
+        assertThat(typed.getResults().get(0).year()).as("year populated").isNotNull();
+    }
+
+    @Test
+    @Order(94)
+    @DisplayName("/qualities/v2 → KodikReferenceResponse<KodikQualityDto> round-trip")
+    void qualitiesTypedRoundTrip() throws Exception {
+        Map<String, Object> raw = postApi("/qualities/v2", "token=" + token);
+
+        KodikReferenceResponse<KodikQualityDto> typed =
+                MAPPER.convertValue(
+                        raw, new TypeReference<KodikReferenceResponse<KodikQualityDto>>() {});
+
+        assertThat(typed).isNotNull();
+        assertThat(typed.getResults()).as("qualities typed results").isNotEmpty();
+        assertThat(typed.getResults().get(0).title()).as("quality title").isNotBlank();
     }
 
     // ======================== /search — edge cases ========================

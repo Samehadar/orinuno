@@ -1,4 +1,4 @@
-package com.orinuno.client.dto;
+package com.orinuno.drift;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;

@@ -5,6 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.orinuno.client.dto.reference.KodikCountryDto;
+import com.orinuno.client.dto.reference.KodikGenreDto;
+import com.orinuno.client.dto.reference.KodikQualityDto;
+import com.orinuno.client.dto.reference.KodikReferenceResponse;
+import com.orinuno.client.dto.reference.KodikTranslationDto;
+import com.orinuno.client.dto.reference.KodikYearDto;
+import com.orinuno.drift.DtoFieldExtractor;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -68,6 +75,48 @@ class DtoFieldExtractorTest {
                         "worldart_link",
                         "worldart_animation_id",
                         "worldart_cinema_id");
+    }
+
+    @Test
+    @DisplayName("KodikReferenceResponse envelope exposes time/total/results")
+    void kodikReferenceEnvelopeFields() {
+        Set<String> fields = DtoFieldExtractor.knownJsonFields(KodikReferenceResponse.class);
+        assertThat(fields).containsExactlyInAnyOrder("time", "total", "results");
+    }
+
+    @Test
+    @DisplayName("KodikTranslationDto record: id/title/count")
+    void translationRecordFields() {
+        Set<String> fields = DtoFieldExtractor.knownJsonFields(KodikTranslationDto.class);
+        assertThat(fields).containsExactlyInAnyOrder("id", "title", "count");
+    }
+
+    @Test
+    @DisplayName("KodikGenreDto record: title/count, intentionally no id")
+    void genreRecordFields() {
+        Set<String> fields = DtoFieldExtractor.knownJsonFields(KodikGenreDto.class);
+        assertThat(fields).containsExactlyInAnyOrder("title", "count");
+    }
+
+    @Test
+    @DisplayName("KodikCountryDto record: title/count, intentionally no id")
+    void countryRecordFields() {
+        Set<String> fields = DtoFieldExtractor.knownJsonFields(KodikCountryDto.class);
+        assertThat(fields).containsExactlyInAnyOrder("title", "count");
+    }
+
+    @Test
+    @DisplayName("KodikYearDto record: year/count (not title)")
+    void yearRecordFields() {
+        Set<String> fields = DtoFieldExtractor.knownJsonFields(KodikYearDto.class);
+        assertThat(fields).containsExactlyInAnyOrder("year", "count");
+    }
+
+    @Test
+    @DisplayName("KodikQualityDto record: title/count (v2 variant)")
+    void qualityRecordFields() {
+        Set<String> fields = DtoFieldExtractor.knownJsonFields(KodikQualityDto.class);
+        assertThat(fields).containsExactlyInAnyOrder("title", "count");
     }
 
     @SuppressWarnings("unused")
