@@ -1,10 +1,9 @@
 package com.orinuno.client;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import java.lang.reflect.Field;
+import com.orinuno.client.dto.DtoFieldExtractor;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Component;
 public class KodikResponseMapper {
 
     private final ObjectMapper objectMapper;
-    private final Map<Class<?>, Set<String>> knownFieldsCache = new ConcurrentHashMap<>();
 
     @Getter private final Map<String, DriftRecord> detectedDrifts = new ConcurrentHashMap<>();
     @Getter private final AtomicInteger totalChecks = new AtomicInteger(0);
@@ -40,7 +38,7 @@ public class KodikResponseMapper {
 
     public void detectSchemaChanges(Map<String, Object> raw, Class<?> targetType) {
         totalChecks.incrementAndGet();
-        Set<String> known = knownFieldsCache.computeIfAbsent(targetType, this::extractKnownFields);
+        Set<String> known = DtoFieldExtractor.knownJsonFields(targetType);
         Set<String> unknown = new LinkedHashSet<>();
         for (String key : raw.keySet()) {
             if (!known.contains(key)) {
@@ -61,8 +59,7 @@ public class KodikResponseMapper {
             if (first instanceof Map<?, ?> firstMap) {
                 for (Class<?> inner : targetType.getDeclaredClasses()) {
                     if (inner.getSimpleName().equals("Result")) {
-                        Set<String> knownInner =
-                                knownFieldsCache.computeIfAbsent(inner, this::extractKnownFields);
+                        Set<String> knownInner = DtoFieldExtractor.knownJsonFields(inner);
                         Set<String> unknownInner = new LinkedHashSet<>();
                         for (Object k : firstMap.keySet()) {
                             if (!knownInner.contains(k.toString())) {
@@ -95,32 +92,5 @@ public class KodikResponseMapper {
                     return new DriftRecord(
                             merged, existing.firstSeen(), now, existing.hitCount() + 1);
                 });
-    }
-
-    private Set<String> extractKnownFields(Class<?> clazz) {
-        Set<String> fields = new HashSet<>();
-        for (Field field : clazz.getDeclaredFields()) {
-            JsonProperty ann = field.getAnnotation(JsonProperty.class);
-            if (ann != null && !ann.value().isEmpty()) {
-                fields.add(ann.value());
-            } else {
-                // Convert camelCase to snake_case
-                fields.add(toSnakeCase(field.getName()));
-            }
-        }
-        return fields;
-    }
-
-    private static String toSnakeCase(String camelCase) {
-        StringBuilder sb = new StringBuilder();
-        for (char c : camelCase.toCharArray()) {
-            if (Character.isUpperCase(c)) {
-                if (!sb.isEmpty()) sb.append('_');
-                sb.append(Character.toLowerCase(c));
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
     }
 }

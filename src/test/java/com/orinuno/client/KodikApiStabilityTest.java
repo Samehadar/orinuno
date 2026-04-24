@@ -5,6 +5,8 @@ import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orinuno.client.dto.DtoFieldExtractor;
+import com.orinuno.client.dto.KodikSearchResponse;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,39 +33,15 @@ class KodikApiStabilityTest {
     private static String token;
 
     private static final Set<String> PAGINATED_REQUIRED_FIELDS = Set.of("time", "total", "results");
+
     private static final Set<String> PAGINATED_KNOWN_FIELDS =
-            Set.of("time", "total", "prev_page", "next_page", "results");
+            DtoFieldExtractor.knownJsonFields(KodikSearchResponse.class);
+
     private static final Set<String> RESULT_REQUIRED_FIELDS = Set.of("id", "link", "translation");
+
     private static final Set<String> RESULT_KNOWN_FIELDS =
-            Set.of(
-                    "id",
-                    "type",
-                    "link",
-                    "title",
-                    "title_orig",
-                    "other_title",
-                    "translation",
-                    "year",
-                    "last_season",
-                    "last_episode",
-                    "episodes_count",
-                    "kinopoisk_id",
-                    "imdb_id",
-                    "shikimori_id",
-                    "worldart_link",
-                    "quality",
-                    "camrip",
-                    "lgbt",
-                    "created_at",
-                    "updated_at",
-                    "screenshots",
-                    "seasons",
-                    "material_data",
-                    "blocked_countries",
-                    "blocked_seasons",
-                    "mdl_id",
-                    "worldart_animation_id",
-                    "worldart_cinema_id");
+            DtoFieldExtractor.knownJsonFields(KodikSearchResponse.Result.class);
+
     private static final Set<String> TRANSLATION_KNOWN_FIELDS =
             Set.of("id", "title", "type", "count", "count_for_not_anime");
     private static final Set<String> MATERIAL_DATA_KNOWN_FIELDS =
