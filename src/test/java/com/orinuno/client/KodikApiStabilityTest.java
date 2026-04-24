@@ -5,6 +5,7 @@ import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orinuno.client.dto.KodikMaterialDataDto;
 import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.client.dto.reference.KodikCountryDto;
 import com.orinuno.client.dto.reference.KodikGenreDto;
@@ -51,65 +52,7 @@ class KodikApiStabilityTest {
     private static final Set<String> TRANSLATION_KNOWN_FIELDS =
             Set.of("id", "title", "type", "count", "count_for_not_anime");
     private static final Set<String> MATERIAL_DATA_KNOWN_FIELDS =
-            Set.of(
-                    "title",
-                    "anime_title",
-                    "title_en",
-                    "other_titles",
-                    "other_titles_en",
-                    "other_titles_jp",
-                    "anime_license_name",
-                    "anime_licensed_by",
-                    "anime_kind",
-                    "all_status",
-                    "anime_status",
-                    "drama_status",
-                    "year",
-                    "description",
-                    "poster_url",
-                    "screenshots",
-                    "duration",
-                    "countries",
-                    "all_genres",
-                    "genres",
-                    "anime_genres",
-                    "drama_genres",
-                    "anime_studios",
-                    "rating",
-                    "kinopoisk_rating",
-                    "kinopoisk_votes",
-                    "imdb_rating",
-                    "imdb_votes",
-                    "shikimori_rating",
-                    "shikimori_votes",
-                    "mydramalist_rating",
-                    "mydramalist_votes",
-                    "premiere_world",
-                    "premiere_ru",
-                    "premiere_country",
-                    "aired_at",
-                    "released_at",
-                    "next_episode_at",
-                    "episodes_total",
-                    "episodes_aired",
-                    "actors",
-                    "directors",
-                    "producers",
-                    "writers",
-                    "composers",
-                    "editors",
-                    "designers",
-                    "operators",
-                    "rating_mpaa",
-                    "minimal_age",
-                    "anime_description",
-                    "poster_url_original",
-                    "mydramalist_tags",
-                    "blocked_countries",
-                    "blocked_seasons",
-                    "anime_poster_url",
-                    "drama_poster_url",
-                    "tagline");
+            DtoFieldExtractor.knownJsonFields(KodikMaterialDataDto.class);
     private static final Set<String> SIMPLE_RESPONSE_KNOWN_FIELDS =
             Set.of("time", "total", "results");
 
