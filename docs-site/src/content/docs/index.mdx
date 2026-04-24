@@ -1,0 +1,49 @@
+---
+title: Orinuno
+description: Standalone open-source service for parsing video content from the Kodik API. REST API for search, decoding, export, and HLS streaming.
+template: splash
+hero:
+  tagline: Standalone open-source service for parsing video content from the Kodik API. Search, decode, export, and stream — with schema-drift detection built in.
+  actions:
+    - text: Quick Start
+      link: /orinuno/getting-started/quick-start/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/Samehadar/orinuno
+      icon: external
+      variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+:::caution[Experimental and educational]
+Orinuno is **experimental**, **educational**, and **not affiliated with Kodik**. Read the
+[Disclaimer](/orinuno/legal/disclaimer/) and the [Responsible Use guidelines](/orinuno/legal/responsible-use/) before running it anywhere outside a sandbox.
+:::
+
+<CardGrid stagger>
+  <Card title="Kodik API client" icon="rocket">
+    Full coverage of the seven Kodik REST endpoints with 70+ search filters,
+    token-bucket rate limiting, and raw-response-first schema drift detection.
+  </Card>
+  <Card title="Video decoding" icon="puzzle">
+    Brute-force ROT cipher decoder that survives shift changes, dynamic
+    endpoint discovery from player JS, and retry with exponential backoff.
+  </Card>
+  <Card title="Download and stream" icon="seti:video">
+    Playwright-backed HLS capture, parallel segment download, ffmpeg remux to
+    MP4, and a streaming endpoint with Range support.
+  </Card>
+  <Card title="Production plumbing" icon="setting">
+    Liquibase-managed MySQL schema, scheduled TTL refresh, proxy pool with
+    round-robin rotation, Prometheus metrics, and optional API-key auth.
+  </Card>
+</CardGrid>
+
+## Where to next?
+
+- **New here?** Start with the [Quick Start](/orinuno/getting-started/quick-start/).
+- **Integrating Orinuno?** Jump to the [API overview](/orinuno/api/overview/) and the generated [API Reference](/orinuno/api/reference/).
+- **Curious about internals?** The [Architecture overview](/orinuno/architecture/overview/) has C4 context, component diagrams, and the full video decoding pipeline.
+- **Deploying it?** The [Operations section](/orinuno/operations/proxy-pool/) covers proxy pool, TTL refresh, and monitoring.

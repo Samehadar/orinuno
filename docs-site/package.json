@@ -1,0 +1,32 @@
+{
+  "name": "orinuno-docs",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Documentation site for Orinuno (Astro + Starlight)",
+  "scripts": {
+    "predev": "node scripts/sync-diagrams.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/sync-diagrams.mjs",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "sync-diagrams": "node scripts/sync-diagrams.mjs"
+  },
+  "dependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@astrojs/mdx": "^4.3.6",
+    "@astrojs/starlight": "^0.35.2",
+    "astro": "^5.14.1",
+    "astro-mermaid": "^1.0.6",
+    "mermaid": "^11.12.0",
+    "sharp": "^0.34.1",
+    "starlight-links-validator": "^0.17.0",
+    "starlight-openapi": "^0.21.1",
+    "typescript": "^5.9.2"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

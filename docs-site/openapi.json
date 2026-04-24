@@ -1,0 +1,56 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Orinuno API",
+    "description": "Placeholder OpenAPI snapshot. Replace with a real export from the running service:\n\n```sh\ncurl -sS http://localhost:8080/v3/api-docs > docs-site/openapi.json\n```",
+    "version": "0.1.0-placeholder",
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/Samehadar/orinuno/blob/master/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Placeholder",
+      "description": "This is a placeholder schema. See the note in the description."
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": ["Placeholder"],
+        "summary": "Health check (placeholder)",
+        "description": "Replace this file with the real `/v3/api-docs` snapshot from SpringDoc.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "UP" }
+        }
+      }
+    }
+  }
+}
