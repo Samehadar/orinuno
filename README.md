@@ -1,5 +1,11 @@
 # Orinuno
 
+[![CI](https://github.com/Samehadar/orinuno/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Samehadar/orinuno/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Samehadar/orinuno/actions/workflows/codeql.yml/badge.svg?branch=master)](https://github.com/Samehadar/orinuno/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Java 21](https://img.shields.io/badge/Java-21-orange.svg?logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot 3.4](https://img.shields.io/badge/Spring%20Boot-3.4-6DB33F.svg?logo=spring&logoColor=white)](https://spring.io/projects/spring-boot)
+
 Standalone open-source service for parsing video content from [Kodik](https://kodik.info). Provides REST API for searching, decoding video links, exporting structured content data, and streaming HLS manifests.
 
 > **Status:** experimental · educational purpose · not affiliated with Kodik.
@@ -356,6 +362,28 @@ src/main/java/com/orinuno/
 ├── mapper/                    # Entity↔DTO converters
 ├── repository/                # MyBatis mapper interfaces
 └── configuration/             # Spring configs
+```
+
+## Contributing
+
+Contributions are welcome — bug reports, feature ideas, documentation
+fixes, and pull requests alike.
+
+- Short ground rules: [CONTRIBUTING.md](./CONTRIBUTING.md)
+- Expected behaviour and responsible-use guidelines: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- Security issues (please do **not** file a public issue): [SECURITY.md](./SECURITY.md)
+
+Code style is enforced by `spotless-maven-plugin` (Google Java Format,
+AOSP profile) and runs on `mvn verify`. Fix violations locally with:
+
+```bash
+mvn spotless:apply
+```
+
+Optional static analysis (SpotBugs, opt-in, not wired into CI):
+
+```bash
+mvn spotbugs:check
 ```
 
 ## License
