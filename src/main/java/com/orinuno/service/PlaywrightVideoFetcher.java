@@ -13,6 +13,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -170,7 +171,11 @@ public class PlaywrightVideoFetcher {
             String kodikUrl, Path targetPath, VideoDownloadService.DownloadProgress progress)
             throws Exception {
         var pwProps = properties.getPlaywright();
-        Files.createDirectories(targetPath.getParent());
+        Path targetDir = targetPath.getParent();
+        if (targetDir == null) {
+            throw new IllegalArgumentException("targetPath must live inside a directory");
+        }
+        Files.createDirectories(targetDir);
 
         BrowserContext context =
                 browser.newContext(
@@ -437,7 +442,8 @@ public class PlaywrightVideoFetcher {
         try {
             page.click("body", new Page.ClickOptions().setPosition(640, 360).setTimeout(2000));
             log.debug("Clicked center of page");
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.debug("Center-of-page click failed (continuing): {}", e.getMessage());
         }
 
         page.waitForTimeout(1000);
@@ -730,7 +736,8 @@ public class PlaywrightVideoFetcher {
 
         try (var reader =
                 new java.io.BufferedReader(
-                        new java.io.InputStreamReader(process.getInputStream()))) {
+                        new java.io.InputStreamReader(
+                                process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 log.debug("ffmpeg: {}", line);
