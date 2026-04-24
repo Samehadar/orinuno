@@ -142,7 +142,12 @@ public class DriftDetector {
         }
     }
 
-    private int sampleSize(int actualSize) {
+    /**
+     * Number of items a caller should inspect given the configured {@link ItemSamplingMode} and
+     * limit. Exposed so callers that apply their own per-item drift checks (for example {@code
+     * KodikResponseMapper} sampling nested {@code material_data}) share the same sample depth.
+     */
+    public int sampleSize(int actualSize) {
         DriftSamplingProperties.ItemSampling cfg = properties.getItemSampling();
         return switch (cfg.getMode()) {
             case NONE -> 0;

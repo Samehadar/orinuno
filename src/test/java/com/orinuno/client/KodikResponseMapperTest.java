@@ -143,4 +143,82 @@ class KodikResponseMapperTest {
 
         assertThat(mapper.getDetectedDrifts().get("KodikGenreDto").hitCount()).isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("sampleMaterialData records drift under content-type-aware label")
+    void samplesMaterialDataDrift() {
+        Map<String, Object> raw =
+                Map.of(
+                        "time",
+                        "1ms",
+                        "total",
+                        1,
+                        "results",
+                        List.of(
+                                Map.of(
+                                        "id",
+                                        "a",
+                                        "type",
+                                        "anime-serial",
+                                        "material_data",
+                                        Map.of(
+                                                "title",
+                                                "Naruto",
+                                                "anime_title",
+                                                "Naruto",
+                                                "unexpected_md_field",
+                                                "v"))));
+
+        mapper.detectSchemaChanges(raw, com.orinuno.client.dto.KodikSearchResponse.class);
+
+        assertThat(mapper.getDetectedDrifts()).containsKey("MaterialData[anime-serial]");
+        assertThat(mapper.getDetectedDrifts().get("MaterialData[anime-serial]").unknownFields())
+                .contains("unexpected_md_field");
+    }
+
+    @Test
+    @DisplayName("material_data label falls back to 'unknown' when type is absent")
+    void samplesMaterialDataWithoutType() {
+        Map<String, Object> raw =
+                Map.of(
+                        "time",
+                        "1ms",
+                        "total",
+                        1,
+                        "results",
+                        List.of(
+                                Map.of(
+                                        "id",
+                                        "a",
+                                        "material_data",
+                                        Map.of("title", "X", "rogue_md", "v"))));
+
+        mapper.detectSchemaChanges(raw, com.orinuno.client.dto.KodikSearchResponse.class);
+
+        assertThat(mapper.getDetectedDrifts()).containsKey("MaterialData[unknown]");
+    }
+
+    @Test
+    @DisplayName("clean material_data keeps drift map empty")
+    void cleanMaterialDataNoDrift() {
+        Map<String, Object> raw =
+                Map.of(
+                        "time",
+                        "1ms",
+                        "total",
+                        1,
+                        "results",
+                        List.of(
+                                Map.of(
+                                        "id",
+                                        "a",
+                                        "type",
+                                        "anime",
+                                        "material_data",
+                                        Map.of("title", "X", "year", 2024))));
+
+        mapper.detectSchemaChanges(raw, com.orinuno.client.dto.KodikSearchResponse.class);
+
+        assertThat(mapper.getDetectedDrifts()).isEmpty();
+    }
 }
