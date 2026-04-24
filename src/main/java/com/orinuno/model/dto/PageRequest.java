@@ -11,15 +11,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PageRequest {
 
-    @Builder.Default
-    private int page = 0;
+    @Builder.Default private int page = 0;
 
-    @Builder.Default
-    private int size = 20;
+    @Builder.Default private int size = 20;
 
-    @Builder.Default
-    private String sortBy = "id";
+    @Builder.Default private String sortBy = "id";
 
-    @Builder.Default
-    private String order = "ASC";
+    @Builder.Default private String order = "ASC";
 }

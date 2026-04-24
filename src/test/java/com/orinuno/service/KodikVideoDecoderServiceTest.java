@@ -1,11 +1,9 @@
 package com.orinuno.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class KodikVideoDecoderServiceTest {
 
@@ -62,9 +60,11 @@ class KodikVideoDecoderServiceTest {
         // We need to find what ROT13(x) = "Ly9leGFtcGxlLmNvbS92aWRlby5tcDQ="
         // Only letters are shifted, so let's encode manually
         // For testing purposes, test the normalizer independently:
-        String decoded = KodikVideoDecoderService.decodeVideoUrl("Ly9leGFtcGxlLmNvbS92aWRlby5tcDQ=");
+        String decoded =
+                KodikVideoDecoderService.decodeVideoUrl("Ly9leGFtcGxlLmNvbS92aWRlby5tcDQ=");
         // The result should at least not start with //
-        // (actual decoded value depends on ROT13 then Base64 which may not produce valid URL from this test input)
+        // (actual decoded value depends on ROT13 then Base64 which may not produce valid URL from
+        // this test input)
     }
 
     @Test

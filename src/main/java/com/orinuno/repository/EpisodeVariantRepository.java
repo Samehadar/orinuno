@@ -1,11 +1,10 @@
 package com.orinuno.repository;
 
 import com.orinuno.model.KodikEpisodeVariant;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
-
 import java.util.List;
 import java.util.Optional;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface EpisodeVariantRepository {
@@ -26,7 +25,8 @@ public interface EpisodeVariantRepository {
 
     void updateLocalFilepath(@Param("id") Long id, @Param("localFilepath") String localFilepath);
 
-    List<KodikEpisodeVariant> findExpiredLinks(@Param("hoursThreshold") int hoursThreshold, @Param("limit") int limit);
+    List<KodikEpisodeVariant> findExpiredLinks(
+            @Param("hoursThreshold") int hoursThreshold, @Param("limit") int limit);
 
     List<KodikEpisodeVariant> findFailedDecode(@Param("limit") int limit);
 

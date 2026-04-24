@@ -4,6 +4,7 @@ import com.orinuno.client.dto.KodikListRequest;
 import com.orinuno.client.dto.KodikSearchRequest;
 import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.configuration.OrinunoProperties;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -11,8 +12,6 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -29,15 +28,17 @@ public class KodikApiClient {
     public Mono<Map<String, Object>> searchRaw(KodikSearchRequest request) {
         MultiValueMap<String, String> params = buildSearchParams(request);
         log.info("Kodik API /search with {} params", params.size());
-        return rateLimiter.wrapWithRateLimit(
-                postForMap("/search", params)
-        );
+        return rateLimiter.wrapWithRateLimit(postForMap("/search", params));
     }
 
     public Mono<KodikSearchResponse> search(KodikSearchRequest request) {
         return searchRaw(request)
                 .map(raw -> responseMapper.mapAndDetectChanges(raw, KodikSearchResponse.class))
-                .doOnSuccess(r -> log.info("Kodik /search returned {} results", r.getTotal() != null ? r.getTotal() : 0))
+                .doOnSuccess(
+                        r ->
+                                log.info(
+                                        "Kodik /search returned {} results",
+                                        r.getTotal() != null ? r.getTotal() : 0))
                 .doOnError(e -> log.error("Kodik /search failed: {}", e.getMessage()));
     }
 
@@ -82,18 +83,25 @@ public class KodikApiClient {
 
     // ======================== INTERNAL ========================
 
-    private Mono<Map<String, Object>> postForMap(String path, MultiValueMap<String, String> params) {
-        return kodikApiWebClient.post()
+    private Mono<Map<String, Object>> postForMap(
+            String path, MultiValueMap<String, String> params) {
+        return kodikApiWebClient
+                .post()
                 .uri(uriBuilder -> uriBuilder.path(path).queryParams(params).build())
                 .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
+                .bodyToMono(
+                        new org.springframework.core.ParameterizedTypeReference<
+                                Map<String, Object>>() {});
     }
 
     private Mono<Map<String, Object>> postForMapAbsoluteUrl(String absoluteUrl) {
-        return kodikApiWebClient.post()
+        return kodikApiWebClient
+                .post()
                 .uri(absoluteUrl)
                 .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {});
+                .bodyToMono(
+                        new org.springframework.core.ParameterizedTypeReference<
+                                Map<String, Object>>() {});
     }
 
     private MultiValueMap<String, String> tokenOnly() {
@@ -225,7 +233,8 @@ public class KodikApiClient {
         return p;
     }
 
-    private static void addIfPresent(MultiValueMap<String, String> params, String key, Object value) {
+    private static void addIfPresent(
+            MultiValueMap<String, String> params, String key, Object value) {
         if (value == null) return;
         String str = value.toString();
         if (!str.isBlank()) {

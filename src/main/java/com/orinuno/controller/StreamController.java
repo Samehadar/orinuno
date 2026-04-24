@@ -7,6 +7,10 @@ import com.orinuno.service.PlaywrightVideoFetcher;
 import com.orinuno.service.VideoDownloadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.io.File;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
@@ -22,11 +26,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-
-import java.io.File;
-import java.nio.file.Path;
-import java.util.Comparator;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -46,53 +45,72 @@ public class StreamController {
     private final WebClient kodikCdnWebClient;
 
     @GetMapping("/{variantId}")
-    @Operation(summary = "Stream video — serves local file if downloaded, otherwise proxies from CDN")
-    public Mono<Void> stream(@PathVariable Long variantId, ServerHttpRequest request,
-                              ServerHttpResponse response) {
+    @Operation(
+            summary = "Stream video — serves local file if downloaded, otherwise proxies from CDN")
+    public Mono<Void> stream(
+            @PathVariable Long variantId, ServerHttpRequest request, ServerHttpResponse response) {
         return Mono.fromCallable(() -> episodeVariantRepository.findById(variantId))
-                .flatMap(opt -> {
-                    if (opt.isEmpty()) {
-                        response.setStatusCode(HttpStatus.NOT_FOUND);
-                        return response.setComplete();
-                    }
-                    KodikEpisodeVariant variant = opt.get();
+                .flatMap(
+                        opt -> {
+                            if (opt.isEmpty()) {
+                                response.setStatusCode(HttpStatus.NOT_FOUND);
+                                return response.setComplete();
+                            }
+                            KodikEpisodeVariant variant = opt.get();
 
-                    if (variant.getLocalFilepath() != null) {
-                        File localFile = Path.of(variant.getLocalFilepath()).toFile();
-                        if (localFile.exists()) {
-                            log.info("Streaming local file for variant id={}", variant.getId());
-                            return streamLocalFile(localFile, request, response);
-                        }
-                    }
+                            if (variant.getLocalFilepath() != null) {
+                                File localFile = Path.of(variant.getLocalFilepath()).toFile();
+                                if (localFile.exists()) {
+                                    log.info(
+                                            "Streaming local file for variant id={}",
+                                            variant.getId());
+                                    return streamLocalFile(localFile, request, response);
+                                }
+                            }
 
-                    if (variant.getKodikLink() == null) {
-                        response.setStatusCode(HttpStatus.BAD_REQUEST);
-                        return response.setComplete();
-                    }
+                            if (variant.getKodikLink() == null) {
+                                response.setStatusCode(HttpStatus.BAD_REQUEST);
+                                return response.setComplete();
+                            }
 
-                    if (playwrightFetcher.isAvailable()) {
-                        log.info("No local file for variant {}, downloading via Playwright first", variantId);
-                        return downloadService.downloadVariant(variantId)
-                                .flatMap(state -> {
-                                    if (state.status() == VideoDownloadService.DownloadStatus.COMPLETED
-                                            && state.filepath() != null) {
-                                        File downloaded = new File(state.filepath());
-                                        if (downloaded.exists() && downloaded.length() > 0) {
-                                            return streamLocalFile(downloaded, request, response);
-                                        }
-                                    }
-                                    return decodeFreshUrl(variant)
-                                            .flatMap(url -> proxyCdn(url, request, response));
-                                });
-                    }
+                            if (playwrightFetcher.isAvailable()) {
+                                log.info(
+                                        "No local file for variant {}, downloading via Playwright"
+                                                + " first",
+                                        variantId);
+                                return downloadService
+                                        .downloadVariant(variantId)
+                                        .flatMap(
+                                                state -> {
+                                                    if (state.status()
+                                                                    == VideoDownloadService
+                                                                            .DownloadStatus
+                                                                            .COMPLETED
+                                                            && state.filepath() != null) {
+                                                        File downloaded =
+                                                                new File(state.filepath());
+                                                        if (downloaded.exists()
+                                                                && downloaded.length() > 0) {
+                                                            return streamLocalFile(
+                                                                    downloaded, request, response);
+                                                        }
+                                                    }
+                                                    return decodeFreshUrl(variant)
+                                                            .flatMap(
+                                                                    url ->
+                                                                            proxyCdn(
+                                                                                    url, request,
+                                                                                    response));
+                                                });
+                            }
 
-                    return decodeFreshUrl(variant)
-                            .flatMap(url -> proxyCdn(url, request, response));
-                });
+                            return decodeFreshUrl(variant)
+                                    .flatMap(url -> proxyCdn(url, request, response));
+                        });
     }
 
-    private Mono<Void> streamLocalFile(File file, ServerHttpRequest request,
-                                        ServerHttpResponse response) {
+    private Mono<Void> streamLocalFile(
+            File file, ServerHttpRequest request, ServerHttpResponse response) {
         long fileLength = file.length();
         String rangeHeader = request.getHeaders().getFirst(HttpHeaders.RANGE);
 
@@ -110,21 +128,25 @@ public class StreamController {
                 end = Long.parseLong(ranges[1]);
             }
             response.setStatusCode(HttpStatus.PARTIAL_CONTENT);
-            response.getHeaders().set(HttpHeaders.CONTENT_RANGE,
-                    String.format("bytes %d-%d/%d", start, end, fileLength));
+            response.getHeaders()
+                    .set(
+                            HttpHeaders.CONTENT_RANGE,
+                            String.format("bytes %d-%d/%d", start, end, fileLength));
         }
 
         response.getHeaders().setContentLength(end - start + 1);
 
         return response.writeWith(
-                DataBufferUtils.read(new FileSystemResource(file),
-                        start, response.bufferFactory(), BUFFER_SIZE));
+                DataBufferUtils.read(
+                        new FileSystemResource(file),
+                        start,
+                        response.bufferFactory(),
+                        BUFFER_SIZE));
     }
 
     private Mono<String> decodeFreshUrl(KodikEpisodeVariant variant) {
         log.info("Decoding on-the-fly for variant id={}", variant.getId());
-        return decoderService.decode(variant.getKodikLink())
-                .map(this::pickBestQuality);
+        return decoderService.decode(variant.getKodikLink()).map(this::pickBestQuality);
     }
 
     private String pickBestQuality(Map<String, String> videoLinks) {
@@ -142,14 +164,14 @@ public class StreamController {
         }
     }
 
-    private Mono<Void> proxyCdn(String videoUrl, ServerHttpRequest request,
-                                 ServerHttpResponse response) {
+    private Mono<Void> proxyCdn(
+            String videoUrl, ServerHttpRequest request, ServerHttpResponse response) {
         String rangeHeader = request.getHeaders().getFirst(HttpHeaders.RANGE);
         return proxyCdnWithRedirects(videoUrl, rangeHeader, response, 5);
     }
 
-    private Mono<Void> proxyCdnWithRedirects(String url, String rangeHeader,
-                                              ServerHttpResponse response, int maxRedirects) {
+    private Mono<Void> proxyCdnWithRedirects(
+            String url, String rangeHeader, ServerHttpResponse response, int maxRedirects) {
         if (maxRedirects <= 0) {
             response.setStatusCode(HttpStatus.BAD_GATEWAY);
             return response.setComplete();
@@ -160,45 +182,60 @@ public class StreamController {
             spec = spec.header(HttpHeaders.RANGE, rangeHeader);
         }
 
-        return spec.exchangeToMono(cdnResponse -> {
-            int status = cdnResponse.statusCode().value();
+        return spec.exchangeToMono(
+                cdnResponse -> {
+                    int status = cdnResponse.statusCode().value();
 
-            if (status >= 300 && status < 400) {
-                String location = cdnResponse.headers().asHttpHeaders().getFirst("Location");
-                cdnResponse.releaseBody().subscribe();
-                if (location == null) {
-                    response.setStatusCode(HttpStatus.BAD_GATEWAY);
-                    return response.setComplete();
-                }
-                if (location.startsWith("/")) {
-                    try {
-                        java.net.URI base = java.net.URI.create(url);
-                        location = base.getScheme() + "://" + base.getHost() + location;
-                    } catch (Exception ignored) {}
-                }
-                log.debug("CDN redirect {} -> {}", status, location.substring(0, Math.min(60, location.length())));
-                return proxyCdnWithRedirects(location, rangeHeader, response, maxRedirects - 1);
-            }
+                    if (status >= 300 && status < 400) {
+                        String location =
+                                cdnResponse.headers().asHttpHeaders().getFirst("Location");
+                        cdnResponse.releaseBody().subscribe();
+                        if (location == null) {
+                            response.setStatusCode(HttpStatus.BAD_GATEWAY);
+                            return response.setComplete();
+                        }
+                        if (location.startsWith("/")) {
+                            try {
+                                java.net.URI base = java.net.URI.create(url);
+                                location = base.getScheme() + "://" + base.getHost() + location;
+                            } catch (Exception ignored) {
+                            }
+                        }
+                        log.debug(
+                                "CDN redirect {} -> {}",
+                                status,
+                                location.substring(0, Math.min(60, location.length())));
+                        return proxyCdnWithRedirects(
+                                location, rangeHeader, response, maxRedirects - 1);
+                    }
 
-            response.setStatusCode(cdnResponse.statusCode());
+                    response.setStatusCode(cdnResponse.statusCode());
 
-            MediaType contentType = cdnResponse.headers().contentType()
-                    .orElse(MediaType.APPLICATION_OCTET_STREAM);
-            response.getHeaders().setContentType(contentType);
+                    MediaType contentType =
+                            cdnResponse
+                                    .headers()
+                                    .contentType()
+                                    .orElse(MediaType.APPLICATION_OCTET_STREAM);
+                    response.getHeaders().setContentType(contentType);
 
-            cdnResponse.headers().contentLength()
-                    .ifPresent(len -> response.getHeaders().setContentLength(len));
+                    cdnResponse
+                            .headers()
+                            .contentLength()
+                            .ifPresent(len -> response.getHeaders().setContentLength(len));
 
-            String contentRange = cdnResponse.headers().asHttpHeaders()
-                    .getFirst(HttpHeaders.CONTENT_RANGE);
-            if (contentRange != null) {
-                response.getHeaders().set(HttpHeaders.CONTENT_RANGE, contentRange);
-            }
+                    String contentRange =
+                            cdnResponse
+                                    .headers()
+                                    .asHttpHeaders()
+                                    .getFirst(HttpHeaders.CONTENT_RANGE);
+                    if (contentRange != null) {
+                        response.getHeaders().set(HttpHeaders.CONTENT_RANGE, contentRange);
+                    }
 
-            response.getHeaders().set(HttpHeaders.ACCEPT_RANGES, "bytes");
+                    response.getHeaders().set(HttpHeaders.ACCEPT_RANGES, "bytes");
 
-            return response.writeWith(cdnResponse.body(
-                    (inputMessage, context) -> inputMessage.getBody()));
-        });
+                    return response.writeWith(
+                            cdnResponse.body((inputMessage, context) -> inputMessage.getBody()));
+                });
     }
 }

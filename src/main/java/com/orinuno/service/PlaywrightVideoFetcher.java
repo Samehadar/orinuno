@@ -5,11 +5,6 @@ import com.microsoft.playwright.options.WaitUntilState;
 import com.orinuno.configuration.OrinunoProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.CookieManager;
@@ -25,11 +20,15 @@ import java.time.Duration;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
- * Fetches video content via headless Chromium browser (Playwright).
- * Navigates to Kodik player page, intercepts network requests to video files,
- * and captures the response body — bypassing CDN anti-bot protections.
+ * Fetches video content via headless Chromium browser (Playwright). Navigates to Kodik player page,
+ * intercepts network requests to video files, and captures the response body — bypassing CDN
+ * anti-bot protections.
  */
 @Slf4j
 @Service
@@ -40,9 +39,15 @@ public class PlaywrightVideoFetcher {
     private Playwright playwright;
     private Browser browser;
     private final AtomicReference<State> state = new AtomicReference<>(State.NOT_INITIALIZED);
-    private final java.util.concurrent.Semaphore browserSemaphore = new java.util.concurrent.Semaphore(1);
+    private final java.util.concurrent.Semaphore browserSemaphore =
+            new java.util.concurrent.Semaphore(1);
 
-    enum State { NOT_INITIALIZED, READY, FAILED, CLOSED }
+    enum State {
+        NOT_INITIALIZED,
+        READY,
+        FAILED,
+        CLOSED
+    }
 
     public PlaywrightVideoFetcher(OrinunoProperties properties) {
         this.properties = properties;
@@ -57,15 +62,21 @@ public class PlaywrightVideoFetcher {
         }
         try {
             playwright = Playwright.create();
-            browser = playwright.chromium().launch(new BrowserType.LaunchOptions()
-                    .setHeadless(properties.getPlaywright().isHeadless())
-                    .setArgs(java.util.List.of(
-                            "--disable-blink-features=AutomationControlled",
-                            "--no-sandbox",
-                            "--disable-dev-shm-usage"
-                    )));
+            browser =
+                    playwright
+                            .chromium()
+                            .launch(
+                                    new BrowserType.LaunchOptions()
+                                            .setHeadless(properties.getPlaywright().isHeadless())
+                                            .setArgs(
+                                                    java.util.List.of(
+                                                            "--disable-blink-features=AutomationControlled",
+                                                            "--no-sandbox",
+                                                            "--disable-dev-shm-usage")));
             state.set(State.READY);
-            log.info("Playwright browser initialized (headless={})", properties.getPlaywright().isHeadless());
+            log.info(
+                    "Playwright browser initialized (headless={})",
+                    properties.getPlaywright().isHeadless());
         } catch (Exception e) {
             log.error("Failed to initialize Playwright: {}", e.getMessage(), e);
             state.set(State.FAILED);
@@ -76,10 +87,16 @@ public class PlaywrightVideoFetcher {
     void destroy() {
         state.set(State.CLOSED);
         if (browser != null) {
-            try { browser.close(); } catch (Exception ignored) {}
+            try {
+                browser.close();
+            } catch (Exception ignored) {
+            }
         }
         if (playwright != null) {
-            try { playwright.close(); } catch (Exception ignored) {}
+            try {
+                playwright.close();
+            } catch (Exception ignored) {
+            }
         }
         log.info("Playwright resources released");
     }
@@ -89,16 +106,16 @@ public class PlaywrightVideoFetcher {
     }
 
     /**
-     * Downloads video from Kodik player page using headless browser.
-     * Intercepts .mp4 / .ts network responses and saves to target file.
+     * Downloads video from Kodik player page using headless browser. Intercepts .mp4 / .ts network
+     * responses and saves to target file.
      *
      * @param kodikLink player link (e.g. //kodikplayer.com/seria/...)
      * @param targetPath where to save the video file
      * @param progress optional progress tracker updated during HLS segment download
      * @return Mono with absolute path of saved file, or error if failed
      */
-    public Mono<String> downloadVideo(String kodikLink, Path targetPath,
-                                       VideoDownloadService.DownloadProgress progress) {
+    public Mono<String> downloadVideo(
+            String kodikLink, Path targetPath, VideoDownloadService.DownloadProgress progress) {
         if (!isAvailable()) {
             return Mono.error(new IllegalStateException("Playwright browser is not available"));
         }
@@ -114,8 +131,8 @@ public class PlaywrightVideoFetcher {
     }
 
     /**
-     * Fetches the direct video URL (after CDN redirects) from the Kodik player page.
-     * Useful for streaming proxy — we get the final URL with valid cookies/headers.
+     * Fetches the direct video URL (after CDN redirects) from the Kodik player page. Useful for
+     * streaming proxy — we get the final URL with valid cookies/headers.
      *
      * @param kodikLink player link
      * @return Mono with the intercepted video URL
@@ -134,12 +151,13 @@ public class PlaywrightVideoFetcher {
     public record InterceptedVideo(String url, String contentType, long contentLength) {}
 
     /**
-     * Strategy: navigate to the Kodik player, click play, wait for the browser to make
-     * the video request, then use page.evaluate(fetch()) to download the video FROM
-     * the browser context with all cookies/headers intact.
+     * Strategy: navigate to the Kodik player, click play, wait for the browser to make the video
+     * request, then use page.evaluate(fetch()) to download the video FROM the browser context with
+     * all cookies/headers intact.
      */
-    private String fetchVideoBlocking(String kodikUrl, Path targetPath,
-                                       VideoDownloadService.DownloadProgress progress) throws Exception {
+    private String fetchVideoBlocking(
+            String kodikUrl, Path targetPath, VideoDownloadService.DownloadProgress progress)
+            throws Exception {
         browserSemaphore.acquire();
         try {
             return doFetchVideoBlocking(kodikUrl, targetPath, progress);
@@ -148,14 +166,20 @@ public class PlaywrightVideoFetcher {
         }
     }
 
-    private String doFetchVideoBlocking(String kodikUrl, Path targetPath,
-                                         VideoDownloadService.DownloadProgress progress) throws Exception {
+    private String doFetchVideoBlocking(
+            String kodikUrl, Path targetPath, VideoDownloadService.DownloadProgress progress)
+            throws Exception {
         var pwProps = properties.getPlaywright();
         Files.createDirectories(targetPath.getParent());
 
-        BrowserContext context = browser.newContext(new Browser.NewContextOptions()
-                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
-                .setViewportSize(1280, 720));
+        BrowserContext context =
+                browser.newContext(
+                        new Browser.NewContextOptions()
+                                .setUserAgent(
+                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                                                + " AppleWebKit/537.36 (KHTML, like Gecko)"
+                                                + " Chrome/135.0.0.0 Safari/537.36")
+                                .setViewportSize(1280, 720));
 
         try {
             Page page = context.newPage();
@@ -163,18 +187,24 @@ public class PlaywrightVideoFetcher {
 
             LinkedBlockingQueue<String> candidateUrls = new LinkedBlockingQueue<>();
 
-            page.onResponse(response -> {
-                String url = response.url();
-                if (url.contains("solodcdn.com/s/m/") || (url.contains("solodcdn.com/s/") && url.contains(".mp4"))) {
-                    log.debug("CDN candidate URL queued: {}", url.substring(0, Math.min(100, url.length())));
-                    candidateUrls.offer(url);
-                }
-            });
+            page.onResponse(
+                    response -> {
+                        String url = response.url();
+                        if (url.contains("solodcdn.com/s/m/")
+                                || (url.contains("solodcdn.com/s/") && url.contains(".mp4"))) {
+                            log.debug(
+                                    "CDN candidate URL queued: {}",
+                                    url.substring(0, Math.min(100, url.length())));
+                            candidateUrls.offer(url);
+                        }
+                    });
 
             log.info("Navigating to Kodik player: {}", kodikUrl);
-            page.navigate(kodikUrl, new Page.NavigateOptions()
-                    .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
-                    .setTimeout(pwProps.getNavigationTimeoutMs()));
+            page.navigate(
+                    kodikUrl,
+                    new Page.NavigateOptions()
+                            .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                            .setTimeout(pwProps.getNavigationTimeoutMs()));
 
             triggerPlayback(page);
 
@@ -186,7 +216,9 @@ public class PlaywrightVideoFetcher {
 
                 String candidateUrl;
                 while ((candidateUrl = candidateUrls.poll()) != null) {
-                    log.info("Trying candidate URL: {}...", candidateUrl.substring(0, Math.min(80, candidateUrl.length())));
+                    log.info(
+                            "Trying candidate URL: {}...",
+                            candidateUrl.substring(0, Math.min(80, candidateUrl.length())));
 
                     byte[] responseBytes = null;
                     String finalUrl = null;
@@ -195,10 +227,17 @@ public class PlaywrightVideoFetcher {
                         APIResponse apiResponse = null;
                         try {
                             apiResponse = apiRequest.get(candidateUrl);
-                            log.info("API response: status={}, url={}", apiResponse.status(),
-                                    apiResponse.url().substring(0, Math.min(80, apiResponse.url().length())));
+                            log.info(
+                                    "API response: status={}, url={}",
+                                    apiResponse.status(),
+                                    apiResponse
+                                            .url()
+                                            .substring(
+                                                    0, Math.min(80, apiResponse.url().length())));
                             if (!apiResponse.ok()) {
-                                log.warn("Candidate URL returned HTTP {}, skipping", apiResponse.status());
+                                log.warn(
+                                        "Candidate URL returned HTTP {}, skipping",
+                                        apiResponse.status());
                                 apiResponse.dispose();
                                 responseBytes = null;
                                 break;
@@ -210,14 +249,23 @@ public class PlaywrightVideoFetcher {
                             break;
                         } catch (Exception e) {
                             if (apiResponse != null) {
-                                try { apiResponse.dispose(); } catch (Exception ignored) {}
+                                try {
+                                    apiResponse.dispose();
+                                } catch (Exception ignored) {
+                                }
                             }
                             if (attempt == 3) {
-                                log.warn("Candidate GET failed after {} attempts: {}", attempt, e.getMessage());
+                                log.warn(
+                                        "Candidate GET failed after {} attempts: {}",
+                                        attempt,
+                                        e.getMessage());
                                 responseBytes = null;
                                 break;
                             }
-                            log.warn("Candidate GET attempt {} failed ({}), retrying...", attempt, e.getMessage());
+                            log.warn(
+                                    "Candidate GET attempt {} failed ({}), retrying...",
+                                    attempt,
+                                    e.getMessage());
                             Thread.sleep(300L * attempt);
                         }
                     }
@@ -229,8 +277,11 @@ public class PlaywrightVideoFetcher {
                     }
 
                     if (isHlsManifest(responseBytes)) {
-                        log.info("CDN returned HLS manifest ({} bytes), downloading segments...", responseBytes.length);
-                        return downloadHlsSegments(context, finalUrl, responseBytes, targetPath, progress);
+                        log.info(
+                                "CDN returned HLS manifest ({} bytes), downloading segments...",
+                                responseBytes.length);
+                        return downloadHlsSegments(
+                                context, finalUrl, responseBytes, targetPath, progress);
                     }
 
                     long size = responseBytes.length;
@@ -239,18 +290,28 @@ public class PlaywrightVideoFetcher {
                         continue;
                     }
 
-                    try (OutputStream os = Files.newOutputStream(targetPath,
-                            StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                    try (OutputStream os =
+                            Files.newOutputStream(
+                                    targetPath,
+                                    StandardOpenOption.CREATE,
+                                    StandardOpenOption.WRITE,
+                                    StandardOpenOption.TRUNCATE_EXISTING)) {
                         os.write(responseBytes);
                     }
 
-                    log.info("Saved video via Playwright: {} bytes ({} MB) to {}",
-                            size, size / (1024 * 1024), targetPath);
+                    log.info(
+                            "Saved video via Playwright: {} bytes ({} MB) to {}",
+                            size,
+                            size / (1024 * 1024),
+                            targetPath);
                     return targetPath.toAbsolutePath().toString();
                 }
             }
 
-            throw new RuntimeException("Timeout waiting for video URL from player (" + pwProps.getVideoWaitMs() + "ms)");
+            throw new RuntimeException(
+                    "Timeout waiting for video URL from player ("
+                            + pwProps.getVideoWaitMs()
+                            + "ms)");
         } finally {
             context.close();
         }
@@ -268,9 +329,14 @@ public class PlaywrightVideoFetcher {
     private InterceptedVideo doInterceptBlocking(String kodikUrl) throws Exception {
         var pwProps = properties.getPlaywright();
 
-        BrowserContext context = browser.newContext(new Browser.NewContextOptions()
-                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36")
-                .setViewportSize(1280, 720));
+        BrowserContext context =
+                browser.newContext(
+                        new Browser.NewContextOptions()
+                                .setUserAgent(
+                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                                                + " AppleWebKit/537.36 (KHTML, like Gecko)"
+                                                + " Chrome/135.0.0.0 Safari/537.36")
+                                .setViewportSize(1280, 720));
 
         try {
             Page page = context.newPage();
@@ -278,17 +344,21 @@ public class PlaywrightVideoFetcher {
 
             LinkedBlockingQueue<String> candidateUrls = new LinkedBlockingQueue<>();
 
-            page.onResponse(response -> {
-                String url = response.url();
-                if (url.contains("solodcdn.com/s/m/") || (url.contains("solodcdn.com/s/") && url.contains(".mp4"))) {
-                    candidateUrls.offer(url);
-                }
-            });
+            page.onResponse(
+                    response -> {
+                        String url = response.url();
+                        if (url.contains("solodcdn.com/s/m/")
+                                || (url.contains("solodcdn.com/s/") && url.contains(".mp4"))) {
+                            candidateUrls.offer(url);
+                        }
+                    });
 
             log.info("Navigating to Kodik player for URL interception: {}", kodikUrl);
-            page.navigate(kodikUrl, new Page.NavigateOptions()
-                    .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
-                    .setTimeout(pwProps.getNavigationTimeoutMs()));
+            page.navigate(
+                    kodikUrl,
+                    new Page.NavigateOptions()
+                            .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                            .setTimeout(pwProps.getNavigationTimeoutMs()));
 
             triggerPlayback(page);
 
@@ -303,7 +373,8 @@ public class PlaywrightVideoFetcher {
                     APIResponse headResp = apiRequest.head(candidateUrl);
                     String contentType = headResp.headers().get("content-type");
                     String contentLengthStr = headResp.headers().get("content-length");
-                    long contentLength = contentLengthStr != null ? parseLongSafe(contentLengthStr) : -1;
+                    long contentLength =
+                            contentLengthStr != null ? parseLongSafe(contentLengthStr) : -1;
                     headResp.dispose();
 
                     if (contentType != null && contentType.startsWith("image/")) {
@@ -311,13 +382,19 @@ public class PlaywrightVideoFetcher {
                         continue;
                     }
 
-                    log.info("Intercepted video URL: {} (type={}, len={})",
-                            candidateUrl.substring(0, Math.min(100, candidateUrl.length())), contentType, contentLength);
+                    log.info(
+                            "Intercepted video URL: {} (type={}, len={})",
+                            candidateUrl.substring(0, Math.min(100, candidateUrl.length())),
+                            contentType,
+                            contentLength);
                     return new InterceptedVideo(candidateUrl, contentType, contentLength);
                 }
             }
 
-            throw new RuntimeException("Timeout waiting for video request from player (" + pwProps.getVideoWaitMs() + "ms)");
+            throw new RuntimeException(
+                    "Timeout waiting for video request from player ("
+                            + pwProps.getVideoWaitMs()
+                            + "ms)");
         } finally {
             context.close();
         }
@@ -326,10 +403,12 @@ public class PlaywrightVideoFetcher {
     private void triggerPlayback(Page page) {
         page.waitForTimeout(2000);
 
-        // The Kodik player page itself IS the player (not embedded in an iframe from our perspective).
+        // The Kodik player page itself IS the player (not embedded in an iframe from our
+        // perspective).
         // It uses a custom JS player with a play button overlay.
         try {
-            page.evaluate("""
+            page.evaluate(
+                    """
                     (() => {
                         // Try clicking any play button
                         const selectors = [
@@ -356,17 +435,17 @@ public class PlaywrightVideoFetcher {
 
         // Click in the center of the page (common for video players)
         try {
-            page.click("body", new Page.ClickOptions()
-                    .setPosition(640, 360)
-                    .setTimeout(2000));
+            page.click("body", new Page.ClickOptions().setPosition(640, 360).setTimeout(2000));
             log.debug("Clicked center of page");
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         page.waitForTimeout(1000);
 
         // Second attempt after a short delay
         try {
-            page.evaluate("""
+            page.evaluate(
+                    """
                     (() => {
                         const video = document.querySelector('video');
                         if (video && video.paused) {
@@ -375,29 +454,42 @@ public class PlaywrightVideoFetcher {
                         }
                     })()
                     """);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     private static boolean isHlsManifest(byte[] data) {
         if (data == null || data.length < 7) return false;
-        String header = new String(data, 0, Math.min(data.length, 50), java.nio.charset.StandardCharsets.UTF_8);
+        String header =
+                new String(
+                        data,
+                        0,
+                        Math.min(data.length, 50),
+                        java.nio.charset.StandardCharsets.UTF_8);
         return header.startsWith("#EXTM3U");
     }
 
-    private static byte[] downloadHlsSegmentBytes(HttpClient httpClient, HttpRequest request,
-                                                  int oneBasedIdx, int totalSegments) {
+    private static byte[] downloadHlsSegmentBytes(
+            HttpClient httpClient, HttpRequest request, int oneBasedIdx, int totalSegments) {
         final int maxAttempts = 4;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                HttpResponse<byte[]> response =
+                        httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 if (response.statusCode() >= 200 && response.statusCode() < 300) {
                     byte[] body = response.body();
                     return body != null ? body : new byte[0];
                 }
-                log.warn("Segment {}/{} HTTP {}", oneBasedIdx, totalSegments, response.statusCode());
+                log.warn(
+                        "Segment {}/{} HTTP {}", oneBasedIdx, totalSegments, response.statusCode());
                 return new byte[0];
             } catch (IOException e) {
-                log.warn("Segment {}/{} I/O attempt {}: {}", oneBasedIdx, totalSegments, attempt, e.getMessage());
+                log.warn(
+                        "Segment {}/{} I/O attempt {}: {}",
+                        oneBasedIdx,
+                        totalSegments,
+                        attempt,
+                        e.getMessage());
                 if (attempt == maxAttempts) {
                     return new byte[0];
                 }
@@ -417,14 +509,18 @@ public class PlaywrightVideoFetcher {
 
     /**
      * Downloads .ts segments from HLS manifest in parallel using Java HttpClient.
-     * <p>
-     * Playwright's APIRequestContext is NOT thread-safe (shares a single WebSocket),
-     * so we extract cookies from the BrowserContext and use java.net.http.HttpClient
-     * which handles concurrent requests natively.
+     *
+     * <p>Playwright's APIRequestContext is NOT thread-safe (shares a single WebSocket), so we
+     * extract cookies from the BrowserContext and use java.net.http.HttpClient which handles
+     * concurrent requests natively.
      */
-    private String downloadHlsSegments(BrowserContext context, String manifestUrl,
-                                        byte[] manifestBytes, Path targetPath,
-                                        VideoDownloadService.DownloadProgress progress) throws Exception {
+    private String downloadHlsSegments(
+            BrowserContext context,
+            String manifestUrl,
+            byte[] manifestBytes,
+            Path targetPath,
+            VideoDownloadService.DownloadProgress progress)
+            throws Exception {
         String manifest = new String(manifestBytes, java.nio.charset.StandardCharsets.UTF_8);
         String baseUrl = manifestUrl.substring(0, manifestUrl.lastIndexOf('/') + 1);
 
@@ -442,8 +538,10 @@ public class PlaywrightVideoFetcher {
         }
 
         int concurrency = properties.getPlaywright().getHlsConcurrency();
-        log.info("HLS manifest contains {} segments, downloading with concurrency={}...",
-                segmentUrls.size(), concurrency);
+        log.info(
+                "HLS manifest contains {} segments, downloading with concurrency={}...",
+                segmentUrls.size(),
+                concurrency);
 
         if (progress != null) {
             progress.setTotalSegments(segmentUrls.size());
@@ -463,20 +561,23 @@ public class PlaywrightVideoFetcher {
             httpCookie.setHttpOnly(cookie.httpOnly);
             try {
                 String scheme = cookie.secure ? "https" : "http";
-                cookieManager.getCookieStore().add(
-                        URI.create(scheme + "://" + cookie.domain.replaceFirst("^\\.", "")),
-                        httpCookie);
+                cookieManager
+                        .getCookieStore()
+                        .add(
+                                URI.create(scheme + "://" + cookie.domain.replaceFirst("^\\.", "")),
+                                httpCookie);
             } catch (Exception e) {
                 log.debug("Skipped cookie {}: {}", cookie.name, e.getMessage());
             }
         }
         log.debug("Extracted {} cookies from browser context", context.cookies().size());
 
-        HttpClient httpClient = HttpClient.newBuilder()
-                .cookieHandler(cookieManager)
-                .connectTimeout(Duration.ofSeconds(15))
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
+        HttpClient httpClient =
+                HttpClient.newBuilder()
+                        .cookieHandler(cookieManager)
+                        .connectTimeout(Duration.ofSeconds(15))
+                        .followRedirects(HttpClient.Redirect.NORMAL)
+                        .build();
 
         int totalSegments = segmentUrls.size();
         byte[][] segmentData = new byte[totalSegments][];
@@ -493,47 +594,75 @@ public class PlaywrightVideoFetcher {
                 final int idx = i;
                 final String segUrl = segmentUrls.get(i);
 
-                futures[i] = CompletableFuture.runAsync(() -> {
-                    try {
-                        semaphore.acquire();
-                        try {
-                            HttpRequest request = HttpRequest.newBuilder()
-                                    .uri(URI.create(segUrl))
-                                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                                    .header("Referer", manifestUrl)
-                                    .timeout(Duration.ofSeconds(45))
-                                    .GET()
-                                    .build();
+                futures[i] =
+                        CompletableFuture.runAsync(
+                                () -> {
+                                    try {
+                                        semaphore.acquire();
+                                        try {
+                                            HttpRequest request =
+                                                    HttpRequest.newBuilder()
+                                                            .uri(URI.create(segUrl))
+                                                            .header(
+                                                                    "User-Agent",
+                                                                    "Mozilla/5.0 (Windows NT 10.0;"
+                                                                            + " Win64; x64)"
+                                                                            + " AppleWebKit/537.36")
+                                                            .header("Referer", manifestUrl)
+                                                            .timeout(Duration.ofSeconds(45))
+                                                            .GET()
+                                                            .build();
 
-                            byte[] body = downloadHlsSegmentBytes(httpClient, request, idx + 1, totalSegments);
-                            if (body.length > 0) {
-                                segmentData[idx] = body;
-                                if (progress != null) {
-                                    progress.incrementDownloaded();
-                                    progress.addBytes(body.length);
-                                }
-                                log.debug("Segment {}/{} OK: {} bytes", idx + 1, totalSegments, body.length);
-                            } else {
-                                log.warn("Segment {}/{} FAILED: empty body", idx + 1, totalSegments);
-                                segmentData[idx] = new byte[0];
-                                failedCount.incrementAndGet();
-                            }
-                        } finally {
-                            semaphore.release();
-                        }
+                                            byte[] body =
+                                                    downloadHlsSegmentBytes(
+                                                            httpClient,
+                                                            request,
+                                                            idx + 1,
+                                                            totalSegments);
+                                            if (body.length > 0) {
+                                                segmentData[idx] = body;
+                                                if (progress != null) {
+                                                    progress.incrementDownloaded();
+                                                    progress.addBytes(body.length);
+                                                }
+                                                log.debug(
+                                                        "Segment {}/{} OK: {} bytes",
+                                                        idx + 1,
+                                                        totalSegments,
+                                                        body.length);
+                                            } else {
+                                                log.warn(
+                                                        "Segment {}/{} FAILED: empty body",
+                                                        idx + 1,
+                                                        totalSegments);
+                                                segmentData[idx] = new byte[0];
+                                                failedCount.incrementAndGet();
+                                            }
+                                        } finally {
+                                            semaphore.release();
+                                        }
 
-                        int done = completedCount.incrementAndGet();
-                        if (done % 50 == 0 || done == totalSegments) {
-                            log.info("HLS progress: {}/{} segments downloaded ({} failed)",
-                                    done, totalSegments, failedCount.get());
-                        }
-                    } catch (Exception e) {
-                        log.warn("Segment {}/{} ERROR: {}", idx + 1, totalSegments, e.getMessage());
-                        segmentData[idx] = new byte[0];
-                        failedCount.incrementAndGet();
-                        completedCount.incrementAndGet();
-                    }
-                }, executor);
+                                        int done = completedCount.incrementAndGet();
+                                        if (done % 50 == 0 || done == totalSegments) {
+                                            log.info(
+                                                    "HLS progress: {}/{} segments downloaded ({}"
+                                                            + " failed)",
+                                                    done,
+                                                    totalSegments,
+                                                    failedCount.get());
+                                        }
+                                    } catch (Exception e) {
+                                        log.warn(
+                                                "Segment {}/{} ERROR: {}",
+                                                idx + 1,
+                                                totalSegments,
+                                                e.getMessage());
+                                        segmentData[idx] = new byte[0];
+                                        failedCount.incrementAndGet();
+                                        completedCount.incrementAndGet();
+                                    }
+                                },
+                                executor);
             }
 
             CompletableFuture.allOf(futures).get(10, TimeUnit.MINUTES);
@@ -542,8 +671,12 @@ public class PlaywrightVideoFetcher {
         }
 
         long totalBytes = 0;
-        try (OutputStream os = Files.newOutputStream(targetPath,
-                StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+        try (OutputStream os =
+                Files.newOutputStream(
+                        targetPath,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.TRUNCATE_EXISTING)) {
             for (int i = 0; i < totalSegments; i++) {
                 if (segmentData[i] != null && segmentData[i].length > 0) {
                     os.write(segmentData[i]);
@@ -553,8 +686,13 @@ public class PlaywrightVideoFetcher {
             }
         }
 
-        log.info("HLS download complete: {} segments ({} failed), {} bytes ({} MB) to {}",
-                totalSegments, failedCount.get(), totalBytes, totalBytes / (1024 * 1024), targetPath);
+        log.info(
+                "HLS download complete: {} segments ({} failed), {} bytes ({} MB) to {}",
+                totalSegments,
+                failedCount.get(),
+                totalBytes,
+                totalBytes / (1024 * 1024),
+                targetPath);
 
         if (totalBytes == 0) {
             Files.deleteIfExists(targetPath);
@@ -566,26 +704,33 @@ public class PlaywrightVideoFetcher {
     }
 
     /**
-     * Remux .ts to .mp4 using ffmpeg (stream copy, no re-encoding).
-     * Browsers can't play raw MPEG-TS in a &lt;video&gt; element, but MP4 works everywhere.
+     * Remux .ts to .mp4 using ffmpeg (stream copy, no re-encoding). Browsers can't play raw MPEG-TS
+     * in a &lt;video&gt; element, but MP4 works everywhere.
      */
     private Path remuxToMp4(Path tsPath) throws Exception {
         String tsStr = tsPath.toString();
-        Path mp4Path = Path.of(tsStr.endsWith(".ts") ? tsStr.replace(".ts", ".mp4") : tsStr + ".mp4");
+        Path mp4Path =
+                Path.of(tsStr.endsWith(".ts") ? tsStr.replace(".ts", ".mp4") : tsStr + ".mp4");
 
-        ProcessBuilder pb = new ProcessBuilder(
-                "ffmpeg", "-y",
-                "-i", tsPath.toAbsolutePath().toString(),
-                "-c", "copy",
-                "-movflags", "+faststart",
-                mp4Path.toAbsolutePath().toString()
-        );
+        ProcessBuilder pb =
+                new ProcessBuilder(
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        tsPath.toAbsolutePath().toString(),
+                        "-c",
+                        "copy",
+                        "-movflags",
+                        "+faststart",
+                        mp4Path.toAbsolutePath().toString());
         pb.redirectErrorStream(true);
 
         log.info("Remuxing TS -> MP4: {}", mp4Path.getFileName());
         Process process = pb.start();
 
-        try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
+        try (var reader =
+                new java.io.BufferedReader(
+                        new java.io.InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 log.debug("ffmpeg: {}", line);
@@ -601,7 +746,10 @@ public class PlaywrightVideoFetcher {
 
         if (process.exitValue() == 0 && Files.exists(mp4Path) && Files.size(mp4Path) > 0) {
             Files.deleteIfExists(tsPath);
-            log.info("Remux complete: {} ({} MB)", mp4Path.getFileName(), Files.size(mp4Path) / (1024 * 1024));
+            log.info(
+                    "Remux complete: {} ({} MB)",
+                    mp4Path.getFileName(),
+                    Files.size(mp4Path) / (1024 * 1024));
             return mp4Path;
         }
 
@@ -610,10 +758,15 @@ public class PlaywrightVideoFetcher {
     }
 
     private static boolean isVideoResponse(String url, String contentType, long contentLength) {
-        boolean isVideoType = contentType != null &&
-                (contentType.startsWith("video/") || contentType.equals("application/octet-stream"));
-        boolean isVideoUrl = url.contains(".mp4") || url.contains(".ts") ||
-                url.contains("solodcdn") || url.contains("/s/m/");
+        boolean isVideoType =
+                contentType != null
+                        && (contentType.startsWith("video/")
+                                || contentType.equals("application/octet-stream"));
+        boolean isVideoUrl =
+                url.contains(".mp4")
+                        || url.contains(".ts")
+                        || url.contains("solodcdn")
+                        || url.contains("/s/m/");
 
         if (isVideoType && contentLength > 1000) {
             return true;

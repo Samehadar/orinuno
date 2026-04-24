@@ -5,13 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikEpisodeVariant;
-import lombok.experimental.UtilityClass;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @UtilityClass
@@ -48,18 +47,26 @@ public class EntityFactory {
                 .build();
     }
 
-    public List<KodikEpisodeVariant> createVariants(Long contentId, KodikSearchResponse.Result result) {
+    public List<KodikEpisodeVariant> createVariants(
+            Long contentId, KodikSearchResponse.Result result) {
         List<KodikEpisodeVariant> variants = new ArrayList<>();
 
         if (result.getSeasons() != null) {
-            for (Map.Entry<String, KodikSearchResponse.Season> seasonEntry : result.getSeasons().entrySet()) {
+            for (Map.Entry<String, KodikSearchResponse.Season> seasonEntry :
+                    result.getSeasons().entrySet()) {
                 int seasonNum = parseIntSafe(seasonEntry.getKey(), 0);
                 KodikSearchResponse.Season season = seasonEntry.getValue();
 
                 if (season.getEpisodes() != null) {
                     for (Map.Entry<String, String> episodeEntry : season.getEpisodes().entrySet()) {
                         int episodeNum = parseIntSafe(episodeEntry.getKey(), 0);
-                        variants.add(buildVariant(contentId, seasonNum, episodeNum, episodeEntry.getValue(), result));
+                        variants.add(
+                                buildVariant(
+                                        contentId,
+                                        seasonNum,
+                                        episodeNum,
+                                        episodeEntry.getValue(),
+                                        result));
                     }
                 }
             }
@@ -71,8 +78,12 @@ public class EntityFactory {
         return variants;
     }
 
-    private KodikEpisodeVariant buildVariant(Long contentId, int season, int episode,
-                                              String kodikLink, KodikSearchResponse.Result result) {
+    private KodikEpisodeVariant buildVariant(
+            Long contentId,
+            int season,
+            int episode,
+            String kodikLink,
+            KodikSearchResponse.Result result) {
         KodikSearchResponse.Translation translation = result.getTranslation();
         return KodikEpisodeVariant.builder()
                 .contentId(contentId)
@@ -101,7 +112,11 @@ public class EntityFactory {
         Object val = map.get(key);
         if (val instanceof Number num) return num.doubleValue();
         if (val instanceof String str) {
-            try { return Double.parseDouble(str); } catch (NumberFormatException e) { return null; }
+            try {
+                return Double.parseDouble(str);
+            } catch (NumberFormatException e) {
+                return null;
+            }
         }
         return null;
     }
@@ -110,7 +125,9 @@ public class EntityFactory {
         if (map == null) return null;
         Object val = map.get(key);
         if (val instanceof Collection<?> col) {
-            return col.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(","));
+            return col.stream()
+                    .map(Object::toString)
+                    .collect(java.util.stream.Collectors.joining(","));
         }
         if (val instanceof String str) return str;
         return null;

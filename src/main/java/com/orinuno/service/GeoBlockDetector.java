@@ -1,11 +1,10 @@
 package com.orinuno.service;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
@@ -17,7 +16,9 @@ public class GeoBlockDetector {
         if (cdnUrl == null) return false;
         boolean blocked = GEO_BLOCKED_CDN_PATTERN.matcher(cdnUrl).find();
         if (blocked) {
-            log.warn("CDN geo-block detected in URL: {}", cdnUrl.substring(0, Math.min(cdnUrl.length(), 80)));
+            log.warn(
+                    "CDN geo-block detected in URL: {}",
+                    cdnUrl.substring(0, Math.min(cdnUrl.length(), 80)));
         }
         return blocked;
     }

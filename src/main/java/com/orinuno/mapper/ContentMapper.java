@@ -8,11 +8,10 @@ import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.model.dto.ContentDto;
 import com.orinuno.model.dto.ContentExportDto;
 import com.orinuno.model.dto.EpisodeVariantDto;
-import lombok.experimental.UtilityClass;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.*;
 import java.util.stream.Collectors;
+import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @UtilityClass
@@ -68,34 +67,54 @@ public class ContentMapper {
     }
 
     public ContentExportDto toExportDto(KodikContent content, List<KodikEpisodeVariant> variants) {
-        Map<Integer, Map<Integer, List<KodikEpisodeVariant>>> grouped = variants.stream()
-                .collect(Collectors.groupingBy(
-                        KodikEpisodeVariant::getSeasonNumber,
-                        Collectors.groupingBy(KodikEpisodeVariant::getEpisodeNumber)
-                ));
+        Map<Integer, Map<Integer, List<KodikEpisodeVariant>>> grouped =
+                variants.stream()
+                        .collect(
+                                Collectors.groupingBy(
+                                        KodikEpisodeVariant::getSeasonNumber,
+                                        Collectors.groupingBy(
+                                                KodikEpisodeVariant::getEpisodeNumber)));
 
-        List<ContentExportDto.SeasonExportDto> seasons = grouped.entrySet().stream()
-                .sorted(Comparator.comparingInt(Map.Entry::getKey))
-                .map(seasonEntry -> {
-                    List<ContentExportDto.EpisodeExportDto> episodes = seasonEntry.getValue().entrySet().stream()
-                            .sorted(Comparator.comparingInt(Map.Entry::getKey))
-                            .map(episodeEntry -> new ContentExportDto.EpisodeExportDto(
-                                    episodeEntry.getKey(),
-                                    episodeEntry.getValue().stream()
-                                            .map(v -> new ContentExportDto.VariantExportDto(
-                                                    v.getId(),
-                                                    v.getTranslationId(),
-                                                    v.getTranslationTitle(),
-                                                    v.getTranslationType(),
-                                                    v.getQuality(),
-                                                    v.getMp4Link()
-                                            ))
-                                            .toList()
-                            ))
-                            .toList();
-                    return new ContentExportDto.SeasonExportDto(seasonEntry.getKey(), episodes);
-                })
-                .toList();
+        List<ContentExportDto.SeasonExportDto> seasons =
+                grouped.entrySet().stream()
+                        .sorted(Comparator.comparingInt(Map.Entry::getKey))
+                        .map(
+                                seasonEntry -> {
+                                    List<ContentExportDto.EpisodeExportDto> episodes =
+                                            seasonEntry.getValue().entrySet().stream()
+                                                    .sorted(
+                                                            Comparator.comparingInt(
+                                                                    Map.Entry::getKey))
+                                                    .map(
+                                                            episodeEntry ->
+                                                                    new ContentExportDto
+                                                                            .EpisodeExportDto(
+                                                                            episodeEntry.getKey(),
+                                                                            episodeEntry
+                                                                                    .getValue()
+                                                                                    .stream()
+                                                                                    .map(
+                                                                                            v ->
+                                                                                                    new ContentExportDto
+                                                                                                            .VariantExportDto(
+                                                                                                            v
+                                                                                                                    .getId(),
+                                                                                                            v
+                                                                                                                    .getTranslationId(),
+                                                                                                            v
+                                                                                                                    .getTranslationTitle(),
+                                                                                                            v
+                                                                                                                    .getTranslationType(),
+                                                                                                            v
+                                                                                                                    .getQuality(),
+                                                                                                            v
+                                                                                                                    .getMp4Link()))
+                                                                                    .toList()))
+                                                    .toList();
+                                    return new ContentExportDto.SeasonExportDto(
+                                            seasonEntry.getKey(), episodes);
+                                })
+                        .toList();
 
         return new ContentExportDto(
                 content.getId(),
@@ -110,8 +129,7 @@ public class ContentMapper {
                 parseScreenshots(content.getScreenshots()),
                 content.getCamrip(),
                 content.getLgbt(),
-                seasons
-        );
+                seasons);
     }
 
     private Map<String, Object> parseMaterialData(String json) {
