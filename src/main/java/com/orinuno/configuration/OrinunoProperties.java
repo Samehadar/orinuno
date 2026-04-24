@@ -21,6 +21,12 @@ public class OrinunoProperties {
         private String apiUrl = "https://kodik-api.com";
         private String token = "";
         private long requestDelayMs = 500;
+        private String tokenFile = "./data/kodik_tokens.json";
+        private long validationIntervalMinutes = 360;
+        private boolean autoDiscoveryEnabled = true;
+        private boolean bootstrapFromEnv = true;
+        private int tokenFailoverMaxAttempts = 3;
+        private boolean validateOnStartup = true;
     }
 
     @Data

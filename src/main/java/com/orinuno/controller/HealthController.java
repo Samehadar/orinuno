@@ -4,8 +4,12 @@ import com.orinuno.client.KodikResponseMapper;
 import com.orinuno.model.KodikProxy;
 import com.orinuno.service.DecoderHealthTracker;
 import com.orinuno.service.ProxyProviderService;
+import com.orinuno.token.KodikTokenEntry;
+import com.orinuno.token.KodikTokenRegistry;
+import com.orinuno.token.KodikTokenTier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +29,7 @@ public class HealthController {
     private final DecoderHealthTracker decoderHealthTracker;
     private final ProxyProviderService proxyProviderService;
     private final KodikResponseMapper kodikResponseMapper;
+    private final KodikTokenRegistry kodikTokenRegistry;
 
     @GetMapping
     @Operation(summary = "General health check")
@@ -75,6 +80,40 @@ public class HealthController {
                                 })
                         .collect(Collectors.toList()));
 
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/tokens")
+    @Operation(summary = "Kodik token registry status (masked)")
+    public ResponseEntity<Map<String, Object>> tokensHealth() {
+        Map<KodikTokenTier, List<KodikTokenEntry>> snapshot = kodikTokenRegistry.snapshot();
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, List<Map<String, Object>>> details = new LinkedHashMap<>();
+        int live = 0;
+        for (KodikTokenTier tier : KodikTokenTier.values()) {
+            List<KodikTokenEntry> bucket = snapshot.getOrDefault(tier, List.of());
+            counts.put(tier.getJsonKey(), bucket.size());
+            if (tier != KodikTokenTier.DEAD) {
+                live += bucket.size();
+            }
+            List<Map<String, Object>> tierDetails = new ArrayList<>();
+            for (KodikTokenEntry entry : bucket) {
+                Map<String, Object> e = new LinkedHashMap<>();
+                e.put("value", KodikTokenRegistry.mask(entry.getValue()));
+                e.put(
+                        "lastChecked",
+                        entry.getLastChecked() == null ? null : entry.getLastChecked().toString());
+                e.put("note", entry.getNote());
+                e.put("functionsAvailability", entry.getFunctionsAvailability());
+                tierDetails.add(e);
+            }
+            details.put(tier.getJsonKey(), tierDetails);
+        }
+        result.put("status", live > 0 ? "OK" : "EMPTY");
+        result.put("liveCount", live);
+        result.put("counts", counts);
+        result.put("tiers", details);
         return ResponseEntity.ok(result);
     }
 

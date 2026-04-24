@@ -34,8 +34,11 @@ build/
 ### VS Code ###
 .vscode/
 
-### Downloaded videos ###
-data/
+### Downloaded videos / runtime data ###
+data/*
+!data/README.md
+!data/TOKENS.md
+!data/kodik_tokens.example.json
 
 ### Environment ###
 .env

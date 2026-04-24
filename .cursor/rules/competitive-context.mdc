@@ -44,9 +44,12 @@ These projects solve similar problems and serve as reference for feature ideas, 
 ## Known Gaps vs Competitors
 
 - No multi-source support (Aniboom, JutSu, Shikimori, Sibnet) — see BACKLOG IDEA-AP-1..4
-- No token auto-discovery — see BACKLOG IDEA-KW-1
 - No enum types for content kinds/filters — see BACKLOG IDEA-RUST-1..2
 - No async job queue for long-running operations — see BACKLOG TD-1
+
+## Closed Gaps
+
+- **Kodik token management** (2026-04-24) — `KodikTokenRegistry` + tier model + error-driven demotion + auto-discovery fallback mirror AnimeParsers' `kdk_tokns/TOKENS.md` behaviour. See `data/TOKENS.md`.
 
 ## Kodik API Notes
 

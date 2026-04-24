@@ -10,6 +10,7 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.*;
@@ -42,7 +43,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class VideoDownloadLiveIntegrationTest {
 
     private static final String TEST_SHIKIMORI_ID =
-            "47"; // Akira (1988) — single movie, fast search
+            "18139"; // Tonari no Seki-kun — short TV (7-min episodes × 21), keeps HLS download
+    // under
+    // the 10-minute internal fetcher deadline.
     private static final Path DOWNLOAD_DIR = Path.of("build", "test-downloads");
 
     @Container
@@ -59,9 +62,21 @@ class VideoDownloadLiveIntegrationTest {
         registry.add("spring.datasource.password", mysql::getPassword);
         registry.add("orinuno.kodik.token", () -> System.getenv("KODIK_TOKEN"));
         registry.add("orinuno.kodik.request-delay-ms", () -> "200");
+        registry.add(
+                "orinuno.kodik.token-file",
+                () -> {
+                    try {
+                        Path tokenDir = Files.createTempDirectory("kodik-tokens-it-");
+                        return tokenDir.resolve("kodik_tokens.json").toAbsolutePath().toString();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+        registry.add("orinuno.kodik.validate-on-startup", () -> "false");
+        registry.add("orinuno.kodik.auto-discovery-enabled", () -> "false");
         registry.add("orinuno.playwright.enabled", () -> "true");
         registry.add("orinuno.playwright.headless", () -> "true");
-        registry.add("orinuno.playwright.hls-concurrency", () -> "16");
+        registry.add("orinuno.playwright.hls-concurrency", () -> "32");
         registry.add(
                 "orinuno.storage.base-path",
                 () -> {
@@ -190,7 +205,7 @@ class VideoDownloadLiveIntegrationTest {
     @Test
     @Order(4)
     @DisplayName("Step 4: Download video via Playwright (full HLS pipeline, 16 threads)")
-    void downloadVideo() {
+    void downloadVideo() throws InterruptedException {
         Assumptions.assumeTrue(savedVariantId != null, "No variantId from pick step");
 
         long start = System.nanoTime();
@@ -200,23 +215,54 @@ class VideoDownloadLiveIntegrationTest {
                 .uri("/api/v1/download/{variantId}", savedVariantId)
                 .exchange()
                 .expectStatus()
-                .isOk()
+                .isAccepted()
                 .expectBody()
                 .jsonPath("$.status")
                 .value(
                         status -> {
                             assertThat(status.toString())
-                                    .as("Download should complete (got status=%s)", status)
-                                    .isEqualTo("COMPLETED");
-                        })
-                .jsonPath("$.filepath")
-                .value(
-                        filepath -> {
-                            assertThat(filepath).as("filepath should not be blank").isNotNull();
-                            downloadedFilePath = filepath.toString();
+                                    .as(
+                                            "Download should be IN_PROGRESS or COMPLETED (got %s)",
+                                            status)
+                                    .isIn("IN_PROGRESS", "COMPLETED");
                         });
 
+        long pollDeadline = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(12);
+        Map<?, ?> lastState = Map.of("status", "IN_PROGRESS");
+
+        while (System.currentTimeMillis() < pollDeadline) {
+            lastState =
+                    webTestClient
+                            .get()
+                            .uri("/api/v1/download/{variantId}/status", savedVariantId)
+                            .exchange()
+                            .expectStatus()
+                            .isOk()
+                            .expectBody(Map.class)
+                            .returnResult()
+                            .getResponseBody();
+            assertThat(lastState).isNotNull();
+            Object status = lastState.get("status");
+            if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
+                break;
+            }
+            TimeUnit.SECONDS.sleep(5);
+        }
+
         downloadDurationNanos = System.nanoTime() - start;
+
+        Object status = lastState.get("status");
+        Object filepathObj = lastState.get("filepath");
+        Object errorObj = lastState.get("error");
+
+        assertThat(status)
+                .as(
+                        "Download should complete within 4 minutes (state=%s, error=%s)",
+                        lastState, errorObj)
+                .isEqualTo("COMPLETED");
+        assertThat(filepathObj).as("filepath should be present after COMPLETED").isNotNull();
+        downloadedFilePath = filepathObj.toString();
+        assertThat(downloadedFilePath).isNotBlank();
 
         System.out.printf(
                 "[BENCHMARK] Download completed in %.2fs, filepath=%s%n",

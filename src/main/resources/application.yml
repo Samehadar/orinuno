@@ -47,6 +47,12 @@ orinuno:
     api-url: ${KODIK_API_URL:https://kodik-api.com}
     token: ${KODIK_TOKEN:}
     request-delay-ms: ${KODIK_REQUEST_DELAY_MS:500}
+    token-file: ${KODIK_TOKEN_FILE:./data/kodik_tokens.json}
+    validation-interval-minutes: ${KODIK_TOKEN_VALIDATION_INTERVAL_MINUTES:360}
+    auto-discovery-enabled: ${KODIK_TOKEN_AUTO_DISCOVERY_ENABLED:true}
+    bootstrap-from-env: ${KODIK_TOKEN_BOOTSTRAP_FROM_ENV:true}
+    token-failover-max-attempts: ${KODIK_TOKEN_FAILOVER_MAX_ATTEMPTS:3}
+    validate-on-startup: ${KODIK_TOKEN_VALIDATE_ON_STARTUP:true}
   parse:
     rate-limit-per-minute: ${PARSE_RATE_LIMIT_PER_MINUTE:30}
   decoder:
