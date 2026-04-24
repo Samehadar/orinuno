@@ -1,7 +1,17 @@
 package com.orinuno.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.orinuno.model.dto.EpisodeVariantDto;
 import com.orinuno.model.dto.ParseRequestDto;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,25 +26,13 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 /**
- * End-to-end integration test for the full video download pipeline:
- * Search -> Decode -> Download (Playwright + HLS) -> Verify -> ffprobe.
+ * End-to-end integration test for the full video download pipeline: Search -> Decode -> Download
+ * (Playwright + HLS) -> Verify -> ffprobe.
  *
- * Downloaded files are stored in build/test-downloads/ so you can watch progress.
+ * <p>Downloaded files are stored in build/test-downloads/ so you can watch progress.
  *
- * Run manually:
- *   KODIK_TOKEN=xxx mvn test -pl . -Dtest=VideoDownloadLiveIntegrationTest
+ * <p>Run manually: KODIK_TOKEN=xxx mvn test -pl . -Dtest=VideoDownloadLiveIntegrationTest
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -43,14 +41,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class VideoDownloadLiveIntegrationTest {
 
-    private static final String TEST_SHIKIMORI_ID = "47"; // Akira (1988) — single movie, fast search
+    private static final String TEST_SHIKIMORI_ID =
+            "47"; // Akira (1988) — single movie, fast search
     private static final Path DOWNLOAD_DIR = Path.of("build", "test-downloads");
 
     @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")
-            .withDatabaseName("orinuno_test")
-            .withUsername("test")
-            .withPassword("test");
+    static MySQLContainer<?> mysql =
+            new MySQLContainer<>("mysql:8.0")
+                    .withDatabaseName("orinuno_test")
+                    .withUsername("test")
+                    .withPassword("test");
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
@@ -62,18 +62,19 @@ class VideoDownloadLiveIntegrationTest {
         registry.add("orinuno.playwright.enabled", () -> "true");
         registry.add("orinuno.playwright.headless", () -> "true");
         registry.add("orinuno.playwright.hls-concurrency", () -> "16");
-        registry.add("orinuno.storage.base-path", () -> {
-            try {
-                Files.createDirectories(DOWNLOAD_DIR);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            return DOWNLOAD_DIR.toAbsolutePath().toString();
-        });
+        registry.add(
+                "orinuno.storage.base-path",
+                () -> {
+                    try {
+                        Files.createDirectories(DOWNLOAD_DIR);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    return DOWNLOAD_DIR.toAbsolutePath().toString();
+                });
     }
 
-    @Autowired
-    private WebTestClient webTestClient;
+    @Autowired private WebTestClient webTestClient;
 
     private static Long savedContentId;
     private static Long savedVariantId;
@@ -88,30 +89,39 @@ class VideoDownloadLiveIntegrationTest {
     @Order(1)
     @DisplayName("Step 1: Search anime by shikimori_id and save contentId")
     void searchAnime() {
-        ParseRequestDto request = ParseRequestDto.builder()
-                .shikimoriId(TEST_SHIKIMORI_ID)
-                .build();
+        ParseRequestDto request = ParseRequestDto.builder().shikimoriId(TEST_SHIKIMORI_ID).build();
 
         long start = System.nanoTime();
 
-        webTestClient.post().uri("/api/v1/parse/search")
+        webTestClient
+                .post()
+                .uri("/api/v1/parse/search")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus()
+                .isOk()
                 .expectBody()
-                .jsonPath("$").isArray()
-                .jsonPath("$.length()").value(length -> {
-                    assertThat((int) length).as("Search should return at least one result").isGreaterThan(0);
-                })
-                .jsonPath("$[0].id").value(id -> {
-                    savedContentId = Long.valueOf(id.toString());
-                    assertThat(savedContentId).isPositive();
-                });
+                .jsonPath("$")
+                .isArray()
+                .jsonPath("$.length()")
+                .value(
+                        length -> {
+                            assertThat((int) length)
+                                    .as("Search should return at least one result")
+                                    .isGreaterThan(0);
+                        })
+                .jsonPath("$[0].id")
+                .value(
+                        id -> {
+                            savedContentId = Long.valueOf(id.toString());
+                            assertThat(savedContentId).isPositive();
+                        });
 
         searchDurationNanos = System.nanoTime() - start;
 
-        System.out.printf("[BENCHMARK] Search completed in %.2fs, contentId=%d%n",
+        System.out.printf(
+                "[BENCHMARK] Search completed in %.2fs, contentId=%d%n",
                 nanosToSeconds(searchDurationNanos), savedContentId);
     }
 
@@ -123,13 +133,17 @@ class VideoDownloadLiveIntegrationTest {
 
         long start = System.nanoTime();
 
-        webTestClient.post().uri("/api/v1/parse/decode/{contentId}", savedContentId)
+        webTestClient
+                .post()
+                .uri("/api/v1/parse/decode/{contentId}", savedContentId)
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus()
+                .isOk();
 
         decodeDurationNanos = System.nanoTime() - start;
 
-        System.out.printf("[BENCHMARK] Decode completed in %.2fs for contentId=%d%n",
+        System.out.printf(
+                "[BENCHMARK] Decode completed in %.2fs for contentId=%d%n",
                 nanosToSeconds(decodeDurationNanos), savedContentId);
     }
 
@@ -139,30 +153,36 @@ class VideoDownloadLiveIntegrationTest {
     void pickVariantForDownload() {
         Assumptions.assumeTrue(savedContentId != null, "No contentId from search step");
 
-        List<EpisodeVariantDto> variants = webTestClient.get()
-                .uri("/api/v1/content/{id}/variants", savedContentId)
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(new ParameterizedTypeReference<List<EpisodeVariantDto>>() {})
-                .returnResult()
-                .getResponseBody();
+        List<EpisodeVariantDto> variants =
+                webTestClient
+                        .get()
+                        .uri("/api/v1/content/{id}/variants", savedContentId)
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(new ParameterizedTypeReference<List<EpisodeVariantDto>>() {})
+                        .returnResult()
+                        .getResponseBody();
 
         assertThat(variants).as("Variants list should not be empty").isNotEmpty();
 
-        EpisodeVariantDto chosen = variants.stream()
-                .filter(v -> v.getKodikLink() != null && !v.getKodikLink().isBlank())
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("No variant with kodikLink found"));
+        EpisodeVariantDto chosen =
+                variants.stream()
+                        .filter(v -> v.getKodikLink() != null && !v.getKodikLink().isBlank())
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("No variant with kodikLink found"));
 
         savedVariantId = chosen.getId();
         savedVariantKodikLink = chosen.getKodikLink();
 
-        System.out.printf("[BENCHMARK] Picked variant id=%d, season=%s, episode=%s, translation='%s'%n",
+        System.out.printf(
+                "[BENCHMARK] Picked variant id=%d, season=%s, episode=%s, translation='%s'%n",
                 savedVariantId,
                 chosen.getSeasonNumber(),
                 chosen.getEpisodeNumber(),
                 chosen.getTranslationTitle());
-        System.out.printf("[BENCHMARK] kodikLink=%s%n",
+        System.out.printf(
+                "[BENCHMARK] kodikLink=%s%n",
                 savedVariantKodikLink.substring(0, Math.min(100, savedVariantKodikLink.length())));
         System.out.printf("[BENCHMARK] Download dir: %s%n", DOWNLOAD_DIR.toAbsolutePath());
     }
@@ -175,23 +195,31 @@ class VideoDownloadLiveIntegrationTest {
 
         long start = System.nanoTime();
 
-        webTestClient.post().uri("/api/v1/download/{variantId}", savedVariantId)
+        webTestClient
+                .post()
+                .uri("/api/v1/download/{variantId}", savedVariantId)
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus()
+                .isOk()
                 .expectBody()
-                .jsonPath("$.status").value(status -> {
-                    assertThat(status.toString())
-                            .as("Download should complete (got status=%s)", status)
-                            .isEqualTo("COMPLETED");
-                })
-                .jsonPath("$.filepath").value(filepath -> {
-                    assertThat(filepath).as("filepath should not be blank").isNotNull();
-                    downloadedFilePath = filepath.toString();
-                });
+                .jsonPath("$.status")
+                .value(
+                        status -> {
+                            assertThat(status.toString())
+                                    .as("Download should complete (got status=%s)", status)
+                                    .isEqualTo("COMPLETED");
+                        })
+                .jsonPath("$.filepath")
+                .value(
+                        filepath -> {
+                            assertThat(filepath).as("filepath should not be blank").isNotNull();
+                            downloadedFilePath = filepath.toString();
+                        });
 
         downloadDurationNanos = System.nanoTime() - start;
 
-        System.out.printf("[BENCHMARK] Download completed in %.2fs, filepath=%s%n",
+        System.out.printf(
+                "[BENCHMARK] Download completed in %.2fs, filepath=%s%n",
                 nanosToSeconds(downloadDurationNanos), downloadedFilePath);
     }
 
@@ -227,7 +255,8 @@ class VideoDownloadLiveIntegrationTest {
             fileType = "Unknown (first byte: 0x" + String.format("%02X", header[0]) + ")";
         }
 
-        System.out.printf("[BENCHMARK] File verified: size=%.2f MB, type=%s%n",
+        System.out.printf(
+                "[BENCHMARK] File verified: size=%.2f MB, type=%s%n",
                 fileSize / (1024.0 * 1024.0), fileType);
     }
 
@@ -238,19 +267,22 @@ class VideoDownloadLiveIntegrationTest {
         Assumptions.assumeTrue(downloadedFilePath != null, "No file downloaded");
         Assumptions.assumeTrue(isFfprobeAvailable(), "ffprobe not installed, skipping");
 
-        ProcessBuilder pb = new ProcessBuilder(
-                "ffprobe",
-                "-v", "error",
-                "-show_format",
-                "-show_streams",
-                "-print_format", "json",
-                downloadedFilePath
-        );
+        ProcessBuilder pb =
+                new ProcessBuilder(
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-show_format",
+                        "-show_streams",
+                        "-print_format",
+                        "json",
+                        downloadedFilePath);
         pb.redirectErrorStream(true);
 
         Process process = pb.start();
         String output;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+        try (BufferedReader reader =
+                new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             output = reader.lines().collect(Collectors.joining("\n"));
         }
         boolean finished = process.waitFor(30, TimeUnit.SECONDS);
@@ -285,7 +317,8 @@ class VideoDownloadLiveIntegrationTest {
             try {
                 long br = Long.parseLong(bitrate.replace("\"", "").trim());
                 System.out.printf("[FFPROBE] Bitrate: %.2f Mbps%n", br / 1_000_000.0);
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
         }
     }
 
@@ -310,16 +343,26 @@ class VideoDownloadLiveIntegrationTest {
         System.out.println("╔══════════════════════════════════════════════════════════╗");
         System.out.println("║           VIDEO DOWNLOAD BENCHMARK RESULTS              ║");
         System.out.println("╠══════════════════════════════════════════════════════════╣");
-        System.out.printf( "║  Search:     %7.2fs                                    ║%n", nanosToSeconds(searchDurationNanos));
-        System.out.printf( "║  Decode:     %7.2fs                                    ║%n", nanosToSeconds(decodeDurationNanos));
-        System.out.printf( "║  Download:   %7.2fs  (%.2f MB, %.2f MB/s)%n", downloadSec, fileSize / (1024.0 * 1024.0), speedMBps);
-        System.out.printf( "║  Total:      %7.2fs                                    ║%n", nanosToSeconds(totalNanos));
+        System.out.printf(
+                "║  Search:     %7.2fs                                    ║%n",
+                nanosToSeconds(searchDurationNanos));
+        System.out.printf(
+                "║  Decode:     %7.2fs                                    ║%n",
+                nanosToSeconds(decodeDurationNanos));
+        System.out.printf(
+                "║  Download:   %7.2fs  (%.2f MB, %.2f MB/s)%n",
+                downloadSec, fileSize / (1024.0 * 1024.0), speedMBps);
+        System.out.printf(
+                "║  Total:      %7.2fs                                    ║%n",
+                nanosToSeconds(totalNanos));
         System.out.println("╠══════════════════════════════════════════════════════════╣");
-        System.out.printf( "║  Concurrency: %-42d ║%n", 16);
-        System.out.printf( "║  Variant ID:  %-42d ║%n", savedVariantId != null ? savedVariantId : 0);
-        System.out.printf( "║  Content ID:  %-42d ║%n", savedContentId != null ? savedContentId : 0);
-        System.out.printf( "║  File size:   %-38.2f MB ║%n", fileSize / (1024.0 * 1024.0));
-        System.out.printf( "║  File path:   %-42s ║%n", downloadedFilePath != null ? downloadedFilePath : "N/A");
+        System.out.printf("║  Concurrency: %-42d ║%n", 16);
+        System.out.printf("║  Variant ID:  %-42d ║%n", savedVariantId != null ? savedVariantId : 0);
+        System.out.printf("║  Content ID:  %-42d ║%n", savedContentId != null ? savedContentId : 0);
+        System.out.printf("║  File size:   %-38.2f MB ║%n", fileSize / (1024.0 * 1024.0));
+        System.out.printf(
+                "║  File path:   %-42s ║%n",
+                downloadedFilePath != null ? downloadedFilePath : "N/A");
         System.out.println("╚══════════════════════════════════════════════════════════╝");
         System.out.println();
     }
@@ -330,9 +373,7 @@ class VideoDownloadLiveIntegrationTest {
 
     private static boolean isFfprobeAvailable() {
         try {
-            Process p = new ProcessBuilder("ffprobe", "-version")
-                    .redirectErrorStream(true)
-                    .start();
+            Process p = new ProcessBuilder("ffprobe", "-version").redirectErrorStream(true).start();
             boolean finished = p.waitFor(5, TimeUnit.SECONDS);
             return finished && p.exitValue() == 0;
         } catch (Exception e) {
@@ -345,12 +386,16 @@ class VideoDownloadLiveIntegrationTest {
         int idx = json.indexOf(search);
         if (idx < 0) return "N/A";
         int valueStart = idx + search.length();
-        while (valueStart < json.length() && (json.charAt(valueStart) == ' ' || json.charAt(valueStart) == '"')) {
+        while (valueStart < json.length()
+                && (json.charAt(valueStart) == ' ' || json.charAt(valueStart) == '"')) {
             valueStart++;
         }
         int valueEnd = valueStart;
-        while (valueEnd < json.length() && json.charAt(valueEnd) != '"' && json.charAt(valueEnd) != ','
-                && json.charAt(valueEnd) != '}' && json.charAt(valueEnd) != '\n') {
+        while (valueEnd < json.length()
+                && json.charAt(valueEnd) != '"'
+                && json.charAt(valueEnd) != ','
+                && json.charAt(valueEnd) != '}'
+                && json.charAt(valueEnd) != '\n') {
             valueEnd++;
         }
         return json.substring(valueStart, valueEnd).trim();

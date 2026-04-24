@@ -1,13 +1,12 @@
 package com.orinuno.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.orinuno.configuration.OrinunoProperties;
+import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class PlaywrightVideoFetcherTest {
 
@@ -37,9 +36,11 @@ class PlaywrightVideoFetcherTest {
         Path target = tempDir.resolve("test.mp4");
         var result = fetcher.downloadVideo("//kodikplayer.com/seria/123", target);
 
-        result.doOnError(e -> assertThat(e)
-                        .isInstanceOf(IllegalStateException.class)
-                        .hasMessageContaining("not available"))
+        result.doOnError(
+                        e ->
+                                assertThat(e)
+                                        .isInstanceOf(IllegalStateException.class)
+                                        .hasMessageContaining("not available"))
                 .subscribe();
 
         fetcher.destroy();
@@ -56,9 +57,11 @@ class PlaywrightVideoFetcherTest {
 
         var result = fetcher.interceptVideoUrl("//kodikplayer.com/seria/123");
 
-        result.doOnError(e -> assertThat(e)
-                        .isInstanceOf(IllegalStateException.class)
-                        .hasMessageContaining("not available"))
+        result.doOnError(
+                        e ->
+                                assertThat(e)
+                                        .isInstanceOf(IllegalStateException.class)
+                                        .hasMessageContaining("not available"))
                 .subscribe();
 
         fetcher.destroy();

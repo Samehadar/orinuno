@@ -3,13 +3,12 @@ package com.orinuno.service;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikProxy;
 import com.orinuno.repository.ProxyRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service

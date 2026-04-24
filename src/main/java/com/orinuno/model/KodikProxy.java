@@ -1,11 +1,10 @@
 package com.orinuno.model;
 
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -26,10 +25,13 @@ public class KodikProxy {
     private LocalDateTime updatedAt;
 
     public enum ProxyType {
-        HTTP, SOCKS5
+        HTTP,
+        SOCKS5
     }
 
     public enum ProxyStatus {
-        ACTIVE, DISABLED, FAILED
+        ACTIVE,
+        DISABLED,
+        FAILED
     }
 }

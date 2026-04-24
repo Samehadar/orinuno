@@ -1,8 +1,13 @@
 package com.orinuno.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
+
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikProxy;
 import com.orinuno.repository.ProxyRepository;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,17 +15,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
-
 @ExtendWith(MockitoExtension.class)
 class ProxyProviderServiceTest {
 
-    @Mock
-    private ProxyRepository proxyRepository;
+    @Mock private ProxyRepository proxyRepository;
 
     private ProxyProviderService proxyProviderService;
 

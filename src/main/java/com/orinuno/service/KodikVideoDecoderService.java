@@ -3,6 +3,15 @@ package com.orinuno.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.configuration.OrinunoProperties;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -13,16 +22,6 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -32,16 +31,17 @@ public class KodikVideoDecoderService {
     private static final Pattern TYPE_PATTERN = Pattern.compile("vInfo\\.type = '([^']+)'");
     private static final Pattern HASH_PATTERN = Pattern.compile("vInfo\\.hash = '([^']+)'");
     private static final Pattern ID_PATTERN = Pattern.compile("vInfo\\.id = '([^']+)'");
-    private static final Pattern PLAYER_JS_PATTERN = Pattern.compile("src=\"/(assets/js/app\\.player_[^\"]+\\.js)\"");
-    private static final Pattern POST_URL_PATTERN = Pattern.compile("type:\"POST\",url:atob\\(\"([^\"]+)\"\\)");
-    private static final Pattern VIDEO_SRC_PATTERN = Pattern.compile("\"([0-9]+)p?\":\\[\\{\"src\":\"([^\"]+)");
+    private static final Pattern PLAYER_JS_PATTERN =
+            Pattern.compile("src=\"/(assets/js/app\\.player_[^\"]+\\.js)\"");
+    private static final Pattern POST_URL_PATTERN =
+            Pattern.compile("type:\"POST\",url:atob\\(\"([^\"]+)\"\\)");
+    private static final Pattern VIDEO_SRC_PATTERN =
+            Pattern.compile("\"([0-9]+)p?\":\\[\\{\"src\":\"([^\"]+)");
 
     private static final AtomicInteger cachedShift = new AtomicInteger(18);
     private static final java.util.concurrent.atomic.AtomicReference<String> cachedVideoInfoPath =
             new java.util.concurrent.atomic.AtomicReference<>(null);
-    private static final String[] KNOWN_VIDEO_INFO_PATHS = {
-            "/ftor", "/kor", "/gvi", "/seria"
-    };
+    private static final String[] KNOWN_VIDEO_INFO_PATHS = {"/ftor", "/kor", "/gvi", "/seria"};
 
     private final WebClient kodikPlayerWebClient;
     private final ProxyWebClientService proxyWebClientService;
@@ -51,8 +51,8 @@ public class KodikVideoDecoderService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * Decodes a Kodik player link into direct MP4/HLS URLs.
-     * Returns a map of quality -> decoded URL.
+     * Decodes a Kodik player link into direct MP4/HLS URLs. Returns a map of quality -> decoded
+     * URL.
      */
     public Mono<Map<String, String>> decode(String kodikLink) {
         String fullUrl = normalizeUrl(kodikLink);
@@ -60,27 +60,31 @@ public class KodikVideoDecoderService {
 
         return loadIframePage(fullUrl)
                 .flatMap(iframeHtml -> processIframe(fullUrl, iframeHtml))
-                .doOnSuccess(result -> {
-                    healthTracker.recordSuccess();
-                    log.info("✅ Decode complete: {} qualities found", result.size());
-                })
-                .doOnError(error -> {
-                    healthTracker.recordFailure("unknown", error.getMessage());
-                    log.error("❌ Decode failed for {}: {}", kodikLink, error.getMessage());
-                })
+                .doOnSuccess(
+                        result -> {
+                            healthTracker.recordSuccess();
+                            log.info("✅ Decode complete: {} qualities found", result.size());
+                        })
+                .doOnError(
+                        error -> {
+                            healthTracker.recordFailure("unknown", error.getMessage());
+                            log.error("❌ Decode failed for {}: {}", kodikLink, error.getMessage());
+                        })
                 .timeout(Duration.ofSeconds(properties.getDecoder().getTimeoutSeconds()));
     }
 
     private Mono<String> loadIframePage(String url) {
         log.debug("[Step 2/8] Loading iframe page: {}", url);
-        return proxyWebClientService.executeWithProxyFallback(
-                kodikPlayerWebClient,
-                client -> client.get()
-                        .uri(url)
-                        .header("User-Agent", randomUserAgent())
-                        .retrieve()
-                        .bodyToMono(String.class)
-        ).doOnError(e -> healthTracker.recordFailure("step2_load_iframe", e.getMessage()));
+        return proxyWebClientService
+                .executeWithProxyFallback(
+                        kodikPlayerWebClient,
+                        client ->
+                                client.get()
+                                        .uri(url)
+                                        .header("User-Agent", randomUserAgent())
+                                        .retrieve()
+                                        .bodyToMono(String.class))
+                .doOnError(e -> healthTracker.recordFailure("step2_load_iframe", e.getMessage()));
     }
 
     private Mono<Map<String, String>> processIframe(String baseUrl, String iframeHtml) {
@@ -108,21 +112,29 @@ public class KodikVideoDecoderService {
         log.debug("📜 [Step 4/8] Loading player JS: {}", playerJsUrl);
 
         return loadPlayerJs(playerJsUrl)
-                .flatMap(playerJs -> {
-                    log.debug("[Step 5/8] Extracting POST URL from player JS");
-                    String videoInfoPath = resolveVideoInfoPath(playerJs);
-                    String postUrl = String.format("https://%s%s", domain, videoInfoPath);
-                    log.debug("[Step 6/8] Sending POST to: {}", postUrl);
+                .flatMap(
+                        playerJs -> {
+                            log.debug("[Step 5/8] Extracting POST URL from player JS");
+                            String videoInfoPath = resolveVideoInfoPath(playerJs);
+                            String postUrl = String.format("https://%s%s", domain, videoInfoPath);
+                            log.debug("[Step 6/8] Sending POST to: {}", postUrl);
 
-                    return sendVideoRequest(postUrl, urlParamsJson, type, hash, id)
-                            .flatMap(result -> {
-                                if (result.isEmpty()) {
-                                    return tryFallbackPaths(domain, urlParamsJson, type, hash, id, videoInfoPath);
-                                }
-                                cachedVideoInfoPath.set(videoInfoPath);
-                                return Mono.just(result);
-                            });
-                });
+                            return sendVideoRequest(postUrl, urlParamsJson, type, hash, id)
+                                    .flatMap(
+                                            result -> {
+                                                if (result.isEmpty()) {
+                                                    return tryFallbackPaths(
+                                                            domain,
+                                                            urlParamsJson,
+                                                            type,
+                                                            hash,
+                                                            id,
+                                                            videoInfoPath);
+                                                }
+                                                cachedVideoInfoPath.set(videoInfoPath);
+                                                return Mono.just(result);
+                                            });
+                        });
     }
 
     private String resolveVideoInfoPath(String playerJs) {
@@ -149,57 +161,76 @@ public class KodikVideoDecoderService {
         return KNOWN_VIDEO_INFO_PATHS[0];
     }
 
-    private Mono<Map<String, String>> tryFallbackPaths(String domain, String urlParamsJson,
-                                                        String type, String hash, String id,
-                                                        String alreadyTried) {
+    private Mono<Map<String, String>> tryFallbackPaths(
+            String domain,
+            String urlParamsJson,
+            String type,
+            String hash,
+            String id,
+            String alreadyTried) {
         Mono<Map<String, String>> chain = Mono.just(Map.<String, String>of());
 
         for (String path : KNOWN_VIDEO_INFO_PATHS) {
             if (path.equals(alreadyTried)) continue;
             final String postUrl = String.format("https://%s%s", domain, path);
-            chain = chain.flatMap(prev -> {
-                if (!prev.isEmpty()) return Mono.just(prev);
-                log.info("Trying fallback video-info path: {}", path);
-                return sendVideoRequest(postUrl, urlParamsJson, type, hash, id)
-                        .map(result -> {
-                            if (!result.isEmpty()) {
-                                cachedVideoInfoPath.set(path);
-                                log.info("Fallback path succeeded: {}", path);
-                            }
-                            return result;
-                        })
-                        .onErrorResume(e -> {
-                            log.debug("Fallback path {} failed: {}", path, e.getMessage());
-                            return Mono.just(Map.of());
-                        });
-            });
+            chain =
+                    chain.flatMap(
+                            prev -> {
+                                if (!prev.isEmpty()) return Mono.just(prev);
+                                log.info("Trying fallback video-info path: {}", path);
+                                return sendVideoRequest(postUrl, urlParamsJson, type, hash, id)
+                                        .map(
+                                                result -> {
+                                                    if (!result.isEmpty()) {
+                                                        cachedVideoInfoPath.set(path);
+                                                        log.info(
+                                                                "Fallback path succeeded: {}",
+                                                                path);
+                                                    }
+                                                    return result;
+                                                })
+                                        .onErrorResume(
+                                                e -> {
+                                                    log.debug(
+                                                            "Fallback path {} failed: {}",
+                                                            path,
+                                                            e.getMessage());
+                                                    return Mono.just(Map.of());
+                                                });
+                            });
         }
 
         return chain;
     }
 
     private Mono<String> loadPlayerJs(String url) {
-        return proxyWebClientService.executeWithProxyFallback(
-                kodikPlayerWebClient,
-                client -> client.get()
-                        .uri(url)
-                        .header("User-Agent", randomUserAgent())
-                        .retrieve()
-                        .bodyToMono(String.class)
-        ).doOnError(e -> healthTracker.recordFailure("step4_load_player_js", e.getMessage()));
+        return proxyWebClientService
+                .executeWithProxyFallback(
+                        kodikPlayerWebClient,
+                        client ->
+                                client.get()
+                                        .uri(url)
+                                        .header("User-Agent", randomUserAgent())
+                                        .retrieve()
+                                        .bodyToMono(String.class))
+                .doOnError(
+                        e -> healthTracker.recordFailure("step4_load_player_js", e.getMessage()));
     }
 
-    private Mono<Map<String, String>> sendVideoRequest(String postUrl, String urlParamsJson,
-                                                        String type, String hash, String id) {
+    private Mono<Map<String, String>> sendVideoRequest(
+            String postUrl, String urlParamsJson, String type, String hash, String id) {
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
 
         if (urlParamsJson != null) {
             try {
                 JsonNode params = objectMapper.readTree(urlParamsJson);
-                params.fields().forEachRemaining(field ->
-                        formData.add(field.getKey(), field.getValue().asText()));
+                params.fields()
+                        .forEachRemaining(
+                                field -> formData.add(field.getKey(), field.getValue().asText()));
             } catch (Exception e) {
-                log.warn("⚠️ Failed to parse urlParams JSON, continuing without: {}", e.getMessage());
+                log.warn(
+                        "⚠️ Failed to parse urlParams JSON, continuing without: {}",
+                        e.getMessage());
             }
         }
 
@@ -210,17 +241,19 @@ public class KodikVideoDecoderService {
         formData.add("id", id);
         formData.add("info", "{}");
 
-        return proxyWebClientService.executeWithProxyFallback(
-                kodikPlayerWebClient,
-                client -> client.post()
-                        .uri(postUrl)
-                        .header("User-Agent", randomUserAgent())
-                        .header("X-Requested-With", "XMLHttpRequest")
-                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                        .body(BodyInserters.fromFormData(formData))
-                        .retrieve()
-                        .bodyToMono(String.class)
-        ).map(this::parseVideoResponse)
+        return proxyWebClientService
+                .executeWithProxyFallback(
+                        kodikPlayerWebClient,
+                        client ->
+                                client.post()
+                                        .uri(postUrl)
+                                        .header("User-Agent", randomUserAgent())
+                                        .header("X-Requested-With", "XMLHttpRequest")
+                                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                                        .body(BodyInserters.fromFormData(formData))
+                                        .retrieve()
+                                        .bodyToMono(String.class))
+                .map(this::parseVideoResponse)
                 .doOnError(e -> healthTracker.recordFailure("step6_post_request", e.getMessage()));
     }
 
@@ -246,7 +279,9 @@ public class KodikVideoDecoderService {
             videoLinks.put("_geo_blocked", "true");
         }
 
-        log.debug("[Step 8/8] Decoded {} video links{}", videoLinks.size(),
+        log.debug(
+                "[Step 8/8] Decoded {} video links{}",
+                videoLinks.size(),
                 geoBlocked ? " (GEO-BLOCKED)" : "");
         return videoLinks;
     }
@@ -279,7 +314,10 @@ public class KodikVideoDecoderService {
         try {
             String rotated = rotWithShift(encoded, shift);
             String decoded = decodeUrlSafeBase64(rotated);
-            if (decoded.contains("//") && (decoded.contains(".mp4") || decoded.contains(".m3u8") || decoded.contains("/video/"))) {
+            if (decoded.contains("//")
+                    && (decoded.contains(".mp4")
+                            || decoded.contains(".m3u8")
+                            || decoded.contains("/video/"))) {
                 return normalizeDecodedUrl(decoded);
             }
         } catch (Exception ignored) {
@@ -348,11 +386,14 @@ public class KodikVideoDecoderService {
 
     private static String randomUserAgent() {
         String[] agents = {
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+                    + " Chrome/135.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
+                    + " Chrome/135.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)"
+                    + " Chrome/135.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0"
         };
         return agents[(int) (Math.random() * agents.length)];
     }

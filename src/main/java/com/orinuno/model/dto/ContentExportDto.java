@@ -15,17 +15,10 @@ public record ContentExportDto(
         List<String> screenshots,
         Boolean camrip,
         Boolean lgbt,
-        List<SeasonExportDto> seasons
-) {
-    public record SeasonExportDto(
-            Integer seasonNumber,
-            List<EpisodeExportDto> episodes
-    ) {}
+        List<SeasonExportDto> seasons) {
+    public record SeasonExportDto(Integer seasonNumber, List<EpisodeExportDto> episodes) {}
 
-    public record EpisodeExportDto(
-            Integer episodeNumber,
-            List<VariantExportDto> variants
-    ) {}
+    public record EpisodeExportDto(Integer episodeNumber, List<VariantExportDto> variants) {}
 
     public record VariantExportDto(
             Long id,
@@ -33,6 +26,5 @@ public record ContentExportDto(
             String translationTitle,
             String translationType,
             String quality,
-            String mp4Link
-    ) {}
+            String mp4Link) {}
 }

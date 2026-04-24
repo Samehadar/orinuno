@@ -17,9 +17,10 @@ public class OpenApiConfiguration {
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
-                .info(new Info()
-                        .title("Orinuno API")
-                        .description("API for parsing video content from Kodik")
-                        .version("1.0.0"));
+                .info(
+                        new Info()
+                                .title("Orinuno API")
+                                .description("API for parsing video content from Kodik")
+                                .version("1.0.0"));
     }
 }

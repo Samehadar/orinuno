@@ -1,11 +1,11 @@
 package com.orinuno.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.client.dto.KodikSearchResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class KodikSearchResponseDeserializationTest {
 
@@ -14,7 +14,8 @@ class KodikSearchResponseDeserializationTest {
     @Test
     @DisplayName("Should deserialize full Kodik API response")
     void shouldDeserializeFullResponse() throws Exception {
-        String json = """
+        String json =
+                """
                 {
                     "time": "2ms",
                     "total": 1,
@@ -76,7 +77,8 @@ class KodikSearchResponseDeserializationTest {
     @Test
     @DisplayName("Should deserialize response with seasons and episodes")
     void shouldDeserializeWithSeasons() throws Exception {
-        String json = """
+        String json =
+                """
                 {
                     "time": "3ms",
                     "total": 1,
@@ -128,7 +130,8 @@ class KodikSearchResponseDeserializationTest {
     @Test
     @DisplayName("Should deserialize blocked_seasons, blocked_countries and material_data")
     void shouldDeserializeBlockingAndMaterialData() throws Exception {
-        String json = """
+        String json =
+                """
                 {
                     "time": "2ms",
                     "total": 1,
@@ -174,7 +177,8 @@ class KodikSearchResponseDeserializationTest {
     @Test
     @DisplayName("Should handle null blocked_seasons and blocked_countries")
     void shouldHandleNullBlockingFields() throws Exception {
-        String json = """
+        String json =
+                """
                 {
                     "time": "1ms",
                     "total": 1,
@@ -205,38 +209,39 @@ class KodikSearchResponseDeserializationTest {
     @Test
     @DisplayName("Should deserialize material_data with anime-specific fields (anime_poster_url)")
     void shouldDeserializeMaterialDataWithAnimeFields() throws Exception {
-        String json = """
-                {
-                    "time": "2ms",
-                    "total": 1,
-                    "results": [
-                        {
-                            "id": "serial-888",
-                            "type": "anime-serial",
-                            "link": "//kodik.info/serial/888/hash",
-                            "title": "Test Anime",
-                            "translation": {"id": 1, "title": "AniLibria", "type": "voice"},
-                            "year": 2024,
-                            "material_data": {
-                                "title": "Test Anime",
-                                "anime_title": "テストアニメ",
-                                "anime_poster_url": "https://shikimori.one/system/animes/x96/20.jpg",
-                                "poster_url": "https://st.kp.yandex.net/images/film_iphone/123.jpg",
-                                "anime_kind": "tv",
-                                "anime_status": "released",
-                                "anime_genres": ["Экшен", "Приключения"],
-                                "anime_studios": ["Pierrot"],
-                                "anime_description": "Anime description here",
-                                "shikimori_rating": 8.5,
-                                "shikimori_votes": 12345,
-                                "episodes_total": 220,
-                                "episodes_aired": 220,
-                                "tagline": "Believe it!"
-                            }
-                        }
-                    ]
-                }
-                """;
+        String json =
+                """
+{
+    "time": "2ms",
+    "total": 1,
+    "results": [
+        {
+            "id": "serial-888",
+            "type": "anime-serial",
+            "link": "//kodik.info/serial/888/hash",
+            "title": "Test Anime",
+            "translation": {"id": 1, "title": "AniLibria", "type": "voice"},
+            "year": 2024,
+            "material_data": {
+                "title": "Test Anime",
+                "anime_title": "テストアニメ",
+                "anime_poster_url": "https://shikimori.one/system/animes/x96/20.jpg",
+                "poster_url": "https://st.kp.yandex.net/images/film_iphone/123.jpg",
+                "anime_kind": "tv",
+                "anime_status": "released",
+                "anime_genres": ["Экшен", "Приключения"],
+                "anime_studios": ["Pierrot"],
+                "anime_description": "Anime description here",
+                "shikimori_rating": 8.5,
+                "shikimori_votes": 12345,
+                "episodes_total": 220,
+                "episodes_aired": 220,
+                "tagline": "Believe it!"
+            }
+        }
+    ]
+}
+""";
 
         KodikSearchResponse response = objectMapper.readValue(json, KodikSearchResponse.class);
         KodikSearchResponse.Result result = response.getResults().get(0);
@@ -248,14 +253,16 @@ class KodikSearchResponseDeserializationTest {
         assertThat(result.getMaterialData().get("anime_kind")).isEqualTo("tv");
         assertThat(result.getMaterialData().get("anime_status")).isEqualTo("released");
         assertThat(result.getMaterialData().get("anime_genres")).isInstanceOf(java.util.List.class);
-        assertThat(result.getMaterialData().get("anime_studios")).isInstanceOf(java.util.List.class);
+        assertThat(result.getMaterialData().get("anime_studios"))
+                .isInstanceOf(java.util.List.class);
         assertThat(result.getMaterialData().get("tagline")).isEqualTo("Believe it!");
     }
 
     @Test
     @DisplayName("Should deserialize material_data with drama-specific fields")
     void shouldDeserializeMaterialDataWithDramaFields() throws Exception {
-        String json = """
+        String json =
+                """
                 {
                     "time": "2ms",
                     "total": 1,
@@ -296,11 +303,14 @@ class KodikSearchResponseDeserializationTest {
                 .isEqualTo("https://mydramalist.com/posters/squid.jpg");
         assertThat(result.getMaterialData().get("drama_genres")).isInstanceOf(java.util.List.class);
         @SuppressWarnings("unchecked")
-        java.util.List<String> dramaGenres = (java.util.List<String>) result.getMaterialData().get("drama_genres");
+        java.util.List<String> dramaGenres =
+                (java.util.List<String>) result.getMaterialData().get("drama_genres");
         assertThat(dramaGenres).containsExactly("Триллер", "Драма", "Выживание");
-        assertThat(result.getMaterialData().get("mydramalist_tags")).isInstanceOf(java.util.List.class);
+        assertThat(result.getMaterialData().get("mydramalist_tags"))
+                .isInstanceOf(java.util.List.class);
         @SuppressWarnings("unchecked")
-        java.util.List<String> mdlTags = (java.util.List<String>) result.getMaterialData().get("mydramalist_tags");
+        java.util.List<String> mdlTags =
+                (java.util.List<String>) result.getMaterialData().get("mydramalist_tags");
         assertThat(mdlTags).contains("Dark", "Survival");
         assertThat(result.getMaterialData().get("mydramalist_rating")).isEqualTo(8.6);
     }
@@ -308,7 +318,8 @@ class KodikSearchResponseDeserializationTest {
     @Test
     @DisplayName("Should handle unknown fields gracefully")
     void shouldIgnoreUnknownFields() throws Exception {
-        String json = """
+        String json =
+                """
                 {
                     "time": "1ms",
                     "total": 0,
