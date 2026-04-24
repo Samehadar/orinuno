@@ -27,6 +27,7 @@
         <testcontainers.version>1.21.4</testcontainers.version>
         <spotless-maven-plugin.version>2.44.0</spotless-maven-plugin.version>
         <google-java-format.version>1.22.0</google-java-format.version>
+        <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -183,6 +184,19 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>${spotbugs-maven-plugin.version}</version>
+                <configuration>
+                    <effort>Max</effort>
+                    <threshold>Medium</threshold>
+                    <includeTests>false</includeTests>
+                    <failOnError>false</failOnError>
+                    <xmlOutput>true</xmlOutput>
+                    <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.liquibase</groupId>

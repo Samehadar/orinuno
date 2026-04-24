@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs exclusion filter.
+
+  EI_EXPOSE_REP / EI_EXPOSE_REP2 flag every Lombok-generated accessor
+  that returns or stores a collection, plus every @RequiredArgsConstructor
+  argument in a Spring bean (because dependency injection is, by design,
+  shared mutable state). In a Spring Boot application these detectors
+  generate almost exclusively noise; defensive-copying every injected
+  repository or every DTO field would bloat the codebase without any real
+  security benefit. Exclude them globally.
+
+  To see what is currently suppressed:
+    mvn spotbugs:check -Dspotbugs.excludeFilterFile=
+-->
+<FindBugsFilter>
+    <Match>
+        <Or>
+            <Bug pattern="EI_EXPOSE_REP"/>
+            <Bug pattern="EI_EXPOSE_REP2"/>
+        </Or>
+    </Match>
+</FindBugsFilter>
