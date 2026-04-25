@@ -81,7 +81,7 @@
                 "tags": [
                     "Parse"
                 ],
-                "summary": "Decode mp4 links for specific content",
+                "summary": "Decode mp4 links for every variant of the given content",
                 "operationId": "decode",
                 "parameters": [
                     {
@@ -106,6 +106,56 @@
                 "responses": {
                     "200": {
                         "description": "OK"
+                    }
+                }
+            }
+        },
+        "/api/v1/parse/decode/variant/{variantId}": {
+            "post": {
+                "tags": [
+                    "Parse"
+                ],
+                "summary": "Decode mp4 link for a single variant (used by the demo UI per-row Decode button)",
+                "operationId": "decodeVariant",
+                "parameters": [
+                    {
+                        "name": "variantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "force",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "variantId": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "decoded": {
+                                            "type": "boolean"
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -780,6 +830,11 @@
                     "totalBytes": {
                         "type": "integer",
                         "format": "int64"
+                    },
+                    "expectedTotalBytes": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Content-Length of the final 2xx response on the WebClient path; null for HLS downloads where progress is tracked via totalSegments/downloadedSegments."
                     }
                 }
             },

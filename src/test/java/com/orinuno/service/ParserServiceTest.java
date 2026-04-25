@@ -10,7 +10,9 @@ import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -99,5 +101,55 @@ class ParserServiceTest {
                 .verifyComplete();
 
         verify(contentService, never()).findOrCreateContent(any());
+    }
+
+    @Test
+    @DisplayName("selectBestQuality returns highest numeric quality URL")
+    void selectBestQualityReturnsMaxNumericQuality() {
+        Map<String, String> videoLinks = new HashMap<>();
+        videoLinks.put("360", "https://cdn.example/360.mp4");
+        videoLinks.put("720", "https://cdn.example/720.mp4");
+        videoLinks.put("480", "https://cdn.example/480.mp4");
+
+        assertThat(ParserService.selectBestQuality(videoLinks))
+                .isEqualTo("https://cdn.example/720.mp4");
+    }
+
+    @Test
+    @DisplayName("selectBestQuality skips _* sentinel keys (regression: mp4_link='true')")
+    void selectBestQualitySkipsSentinelKeys() {
+        Map<String, String> videoLinks = new HashMap<>();
+        videoLinks.put("_geo_blocked", "true");
+        videoLinks.put("720", "https://cdn.example/720.mp4");
+
+        assertThat(ParserService.selectBestQuality(videoLinks))
+                .isEqualTo("https://cdn.example/720.mp4");
+    }
+
+    @Test
+    @DisplayName("selectBestQuality returns null when only sentinel present")
+    void selectBestQualityReturnsNullWhenOnlySentinel() {
+        Map<String, String> videoLinks = new HashMap<>();
+        videoLinks.put("_geo_blocked", "true");
+
+        assertThat(ParserService.selectBestQuality(videoLinks)).isNull();
+    }
+
+    @Test
+    @DisplayName("selectBestQuality returns null on empty/null map")
+    void selectBestQualityHandlesEmptyAndNull() {
+        assertThat(ParserService.selectBestQuality(null)).isNull();
+        assertThat(ParserService.selectBestQuality(new HashMap<>())).isNull();
+    }
+
+    @Test
+    @DisplayName("selectBestQuality skips non-http values defensively")
+    void selectBestQualitySkipsNonHttpValues() {
+        Map<String, String> videoLinks = new HashMap<>();
+        videoLinks.put("720", "true");
+        videoLinks.put("480", "https://cdn.example/480.mp4");
+
+        assertThat(ParserService.selectBestQuality(videoLinks))
+                .isEqualTo("https://cdn.example/480.mp4");
     }
 }

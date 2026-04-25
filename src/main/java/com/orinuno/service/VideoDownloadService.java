@@ -42,20 +42,32 @@ public class VideoDownloadService {
             String error,
             Integer totalSegments,
             Integer downloadedSegments,
-            Long totalBytes) {
+            Long totalBytes,
+            Long expectedTotalBytes) {
         public DownloadState(DownloadStatus status, String filepath, String error) {
-            this(status, filepath, error, null, null, null);
+            this(status, filepath, error, null, null, null, null);
+        }
+
+        public DownloadState(
+                DownloadStatus status,
+                String filepath,
+                String error,
+                Integer totalSegments,
+                Integer downloadedSegments,
+                Long totalBytes) {
+            this(status, filepath, error, totalSegments, downloadedSegments, totalBytes, null);
         }
     }
 
     /**
-     * Shared mutable progress tracker updated by PlaywrightVideoFetcher during HLS download.
-     * Thread-safe via atomic fields.
+     * Shared mutable progress tracker updated by PlaywrightVideoFetcher (HLS) or WebClient fallback
+     * (direct mp4). Thread-safe via atomic fields.
      */
     public static class DownloadProgress {
         private final AtomicInteger totalSegments = new AtomicInteger(0);
         private final AtomicInteger downloadedSegments = new AtomicInteger(0);
         private final AtomicLong totalBytes = new AtomicLong(0);
+        private final AtomicLong expectedTotalBytes = new AtomicLong(0);
 
         public void setTotalSegments(int total) {
             totalSegments.set(total);
@@ -67,6 +79,10 @@ public class VideoDownloadService {
 
         public void addBytes(long bytes) {
             totalBytes.addAndGet(bytes);
+        }
+
+        public void setExpectedTotalBytes(long bytes) {
+            if (bytes > 0) expectedTotalBytes.set(bytes);
         }
 
         public int getTotalSegments() {
@@ -81,6 +97,10 @@ public class VideoDownloadService {
             return totalBytes.get();
         }
 
+        public long getExpectedTotalBytes() {
+            return expectedTotalBytes.get();
+        }
+
         public DownloadState toState(DownloadStatus status) {
             return new DownloadState(
                     status,
@@ -88,7 +108,8 @@ public class VideoDownloadService {
                     null,
                     totalSegments.get() > 0 ? totalSegments.get() : null,
                     downloadedSegments.get() > 0 ? downloadedSegments.get() : null,
-                    totalBytes.get() > 0 ? totalBytes.get() : null);
+                    totalBytes.get() > 0 ? totalBytes.get() : null,
+                    expectedTotalBytes.get() > 0 ? expectedTotalBytes.get() : null);
         }
     }
 
@@ -322,6 +343,24 @@ public class VideoDownloadService {
             KodikEpisodeVariant variant, DownloadProgress progress) {
         Path targetPath = buildFilePath(variant);
 
+        String cachedMp4 = variant.getMp4Link();
+        if (cachedMp4 != null && cachedMp4.startsWith("http")) {
+            log.info(
+                    "Using cached mp4_link for variant {} -> direct CDN download (skipping"
+                            + " Playwright)",
+                    variant.getId());
+            return downloadFromCdn(cachedMp4, variant, progress)
+                    .onErrorResume(
+                            e -> {
+                                log.warn(
+                                        "Cached mp4_link download failed for variant {} (link"
+                                                + " expired?): {} — falling back to re-decode",
+                                        variant.getId(),
+                                        e.getMessage());
+                                return downloadViaWebClient(variant, targetPath, progress);
+                            });
+        }
+
         if (playwrightFetcher.isAvailable()) {
             log.info("Downloading variant {} via Playwright (headless browser)", variant.getId());
             return playwrightFetcher
@@ -333,15 +372,16 @@ public class VideoDownloadService {
                                                 + " WebClient: {}",
                                         variant.getId(),
                                         e.getMessage());
-                                return downloadViaWebClient(variant, targetPath);
+                                return downloadViaWebClient(variant, targetPath, progress);
                             });
         }
 
         log.info("Playwright not available, downloading variant {} via WebClient", variant.getId());
-        return downloadViaWebClient(variant, targetPath);
+        return downloadViaWebClient(variant, targetPath, progress);
     }
 
-    private Mono<String> downloadViaWebClient(KodikEpisodeVariant variant, Path targetPath) {
+    private Mono<String> downloadViaWebClient(
+            KodikEpisodeVariant variant, Path targetPath, DownloadProgress progress) {
         return decoderService
                 .decode(variant.getKodikLink())
                 .doOnNext(
@@ -358,11 +398,13 @@ public class VideoDownloadService {
                                         "Downloading from CDN for variant {}: {}...",
                                         variant.getId(),
                                         url.substring(0, Math.min(80, url.length()))))
-                .flatMap(cdnUrl -> downloadFromCdn(cdnUrl, variant));
+                .flatMap(cdnUrl -> downloadFromCdn(cdnUrl, variant, progress));
     }
 
     private String pickBestQualityUrl(Map<String, String> videoLinks) {
         return videoLinks.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith("_"))
+                .filter(e -> e.getValue() != null && e.getValue().startsWith("http"))
                 .max(Comparator.comparingInt(e -> parseQuality(e.getKey())))
                 .map(Map.Entry::getValue)
                 .orElseThrow(() -> new RuntimeException("No video URLs decoded"));
@@ -376,10 +418,12 @@ public class VideoDownloadService {
         }
     }
 
-    private Mono<String> downloadFromCdn(String cdnUrl, KodikEpisodeVariant variant) {
+    private Mono<String> downloadFromCdn(
+            String cdnUrl, KodikEpisodeVariant variant, DownloadProgress progress) {
         Path targetPath = buildFilePath(variant);
-        return fetchWithRedirects(cdnUrl, 5)
+        return fetchWithRedirects(cdnUrl, 5, progress)
                 .publishOn(Schedulers.boundedElastic())
+                .doOnNext(buf -> progress.addBytes(buf.readableByteCount()))
                 .collectList()
                 .flatMap(
                         buffers ->
@@ -423,7 +467,8 @@ public class VideoDownloadService {
                                         }));
     }
 
-    private Flux<DataBuffer> fetchWithRedirects(String url, int maxRedirects) {
+    private Flux<DataBuffer> fetchWithRedirects(
+            String url, int maxRedirects, DownloadProgress progress) {
         if (maxRedirects <= 0) {
             return Flux.error(new RuntimeException("Too many redirects"));
         }
@@ -434,11 +479,12 @@ public class VideoDownloadService {
                 .exchangeToFlux(
                         response -> {
                             int status = response.statusCode().value();
+                            long contentLength = response.headers().contentLength().orElse(-1);
                             log.info(
                                     "CDN {} -> status={}, content-length={}",
                                     url.substring(0, Math.min(60, url.length())),
                                     status,
-                                    response.headers().contentLength().orElse(-1));
+                                    contentLength);
 
                             if (status >= 300 && status < 400) {
                                 String location =
@@ -462,12 +508,16 @@ public class VideoDownloadService {
                                 log.info(
                                         "Following redirect -> {}...",
                                         location.substring(0, Math.min(80, location.length())));
-                                return fetchWithRedirects(location, maxRedirects - 1);
+                                return fetchWithRedirects(location, maxRedirects - 1, progress);
                             }
 
                             if (!response.statusCode().is2xxSuccessful()) {
                                 response.releaseBody().subscribe();
                                 return Flux.error(new RuntimeException("CDN returned " + status));
+                            }
+
+                            if (contentLength > 0 && progress != null) {
+                                progress.setExpectedTotalBytes(contentLength);
                             }
 
                             return response.bodyToFlux(DataBuffer.class);

@@ -499,11 +499,19 @@ HC --> Consumer : 200 OK\napplication/vnd.apple.mpegurl
 
 > Source: [docs/6_video_download_playwright.puml](docs/6_video_download_playwright.puml)
 
-**Контекст проблемы:** CDN `solodcdn.com` блокирует прямые HTTP-запросы к видеофайлам, возвращая HTTP 200 с `Content-Length: 0`. Это касается любых запросов вне контекста настоящего браузера — WebClient, curl, OkHttp и т.д. Попытки подставлять заголовки `Referer`, `User-Agent`, cookies не помогают.
+**Контекст проблемы:** CDN `solodcdn.com` исторически блокировал прямые HTTP-запросы к видеофайлам, возвращая HTTP 200 с `Content-Length: 0` для любых клиентов вне браузерного контекста. Сегодня поведение мягче — CDN принимает клиентов с корректным `User-Agent`, `Referer` и полной цепочкой редиректов. Поэтому `VideoDownloadService.downloadWithStrategy` пробует три стратегии по порядку приоритета:
 
-**Почему Playwright:** единственный надёжный способ получить видеоконтент — создать реальный браузерный контекст (Chromium), который CDN считает легитимным пользователем. Playwright выбран вместо Puppeteer, потому что у Playwright есть официальный Java SDK (`com.microsoft.playwright`), в то время как Puppeteer — только Node.js.
+1. **Fast-path (cached `mp4_link`):** если variant уже раскодирован и `mp4_link` начинается с `http`, идём сразу на CDN через `downloadFromCdn(...)` — без запуска Playwright. Типичное время до первого байта ≈ 2 сек. При 403/404 (истёкшая ссылка) автоматически откатываемся в Path 3.
+2. **Playwright + HLS** (описано ниже): используется, когда `mp4_link` ещё не раскодирован. Скачивает сегменты параллельно — ≈9× быстрее, чем единичный MP4-стрим.
+3. **WebClient direct MP4** (fallback): реактивный HTTP-клиент с `User-Agent`, `Referer` и ручным обходом редиректов через `fetchWithRedirects(...)`. `Content-Length` финального 2xx-ответа попадает в `DownloadProgress.expectedTotalBytes`, и каждый записанный `DataBuffer` инкрементирует `totalBytes`.
 
-**Алгоритм из 5 фаз:**
+**Почему Playwright всё ещё нужен:** для контента, у которого `mp4_link` ещё не раскодирован, Playwright — единственный путь получить HLS-манифест с валидными cookies из `BrowserContext`. Java SDK (`com.microsoft.playwright`) официальный, в отличие от Puppeteer (только Node.js).
+
+**Stealth shim:** `PlaywrightVideoFetcher.newStealthContext()` создаёт `BrowserContext` с реалистичным Chrome/135 UA, viewport 1280×720, локалью `en-US`, таймзоной `Europe/London` и init-скриптом, который патчит `navigator.webdriver`, `navigator.languages`, `navigator.plugins`, `window.chrome` и `Notification.permission`. Это обходит примитивные anti-bot проверки, но **не решает** IP-based geo-blocking — для этого нужна прокси-ротация (см. `BACKLOG.md → IDEA-DOWNLOAD-PROXY`).
+
+**Geo-block sentinel:** когда Kodik блокирует плеер по IP, `parseVideoResponse` возвращает пустую мапу качеств (без sentinel-значений). Дополнительно `selectBestQuality`, `pickBestQualityUrl` и `StreamController.pickBestQuality` защитно отбрасывают ключи, начинающиеся с `_`, и значения, не начинающиеся с `http` — это гарантирует, что ни один sentinel не просочится в `mp4_link`. Liquibase-миграция `20260425010000_cleanup_invalid_mp4_link.sql` обнуляет пре-существующие битые записи вида `mp4_link='true'`.
+
+**Алгоритм из 5 фаз (Playwright-путь):**
 
 1. **Navigate** — headless Chromium загружает страницу Kodik-плеера (`/seria/{id}/{hash}/720p`). Страница включает JS плеера, метрику, рекламные скрипты.
 
@@ -515,11 +523,11 @@ HC --> Consumer : 200 OK\napplication/vnd.apple.mpegurl
 
 5. **Handle HLS (parallel) + Remux** — CDN часто отдаёт не MP4, а HLS-манифест (`.m3u8`). Алгоритм определяет это по заголовку `#EXTM3U`, парсит список `.ts`-сегментов (~200-1300 штук). Далее из `BrowserContext` извлекаются cookies (`context.cookies()`), и сегменты скачиваются **параллельно** через `java.net.http.HttpClient` (по умолчанию 8 потоков, настраивается `hlsConcurrency`). Playwright `APIRequestContext` не используется для сегментов, т.к. он не потокобезопасен (одиночный WebSocket). Сегменты хранятся в `byte[][]` и записываются на диск строго по порядку, затем файл **автоматически ремуксится** из `.ts` в `.mp4` через `ffmpeg -c copy -movflags +faststart` (без перекодирования — операция мгновенная). Это необходимо, т.к. браузерный `<video>` не умеет воспроизводить MPEG-TS, а MP4 поддерживается везде.
 
-**Прогресс-трекинг:** `VideoDownloadService` поддерживает in-memory `DownloadProgress` (атомарные счётчики `totalSegments`, `downloadedSegments`, `totalBytes`). POST `/api/v1/download/{id}` возвращает `IN_PROGRESS` немедленно, а GET `/api/v1/download/{id}/status` позволяет поллить прогресс в реальном времени.
+**Прогресс-трекинг:** `VideoDownloadService` поддерживает in-memory `DownloadProgress` с атомарными счётчиками `totalSegments` / `downloadedSegments` (Playwright HLS-путь), `totalBytes` (оба пути) и `expectedTotalBytes` (WebClient-путь, из `Content-Length`). POST `/api/v1/download/{id}` возвращает `IN_PROGRESS` немедленно, GET `/api/v1/download/{id}/status` поллит прогресс. Demo UI выбирает один из трёх режимов отображения: **segments** (HLS), **bytes** (WebClient), **indeterminate** (с подсказкой-phase hint и таймером elapsed).
 
 **Стриминг:** `StreamController` (GET `/api/v1/stream/{id}`) отдаёт локальный файл с поддержкой Range-запросов, или инициирует download-on-demand через Playwright.
 
-**Fallback:** если Playwright недоступен или упал — используется прежний путь через `KodikVideoDecoderService` + `WebClient`. На практике этот fallback почти всегда даёт 0 байт из-за блокировки CDN.
+**Fallback:** если Playwright недоступен или упал — используется Path 3 через `KodikVideoDecoderService` + `WebClient` + `fetchWithRedirects`. При валидном `User-Agent` и следовании цепочке редиректов CDN отдаёт реальные байты; прогресс по-прежнему виден через `expectedTotalBytes` / `totalBytes`.
 
 **Критические зависимости:**
 - `com.microsoft.playwright:playwright:1.58.0` (Java SDK)

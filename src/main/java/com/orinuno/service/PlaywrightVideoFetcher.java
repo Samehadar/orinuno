@@ -107,6 +107,42 @@ public class PlaywrightVideoFetcher {
     }
 
     /**
+     * Creates a fresh BrowserContext with realistic UA/viewport and a minimal stealth init script
+     * that hides the most common headless-detection signals (navigator.webdriver, empty plugins,
+     * missing window.chrome, unusual languages list). Geo-blocking based on IP is NOT addressed
+     * here — use proxy rotation for that.
+     */
+    private BrowserContext newStealthContext() {
+        BrowserContext context =
+                browser.newContext(
+                        new Browser.NewContextOptions()
+                                .setUserAgent(
+                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                                                + " AppleWebKit/537.36 (KHTML, like Gecko)"
+                                                + " Chrome/135.0.0.0 Safari/537.36")
+                                .setViewportSize(1280, 720)
+                                .setLocale("en-US")
+                                .setTimezoneId("Europe/London"));
+        context.addInitScript(STEALTH_INIT_SCRIPT);
+        return context;
+    }
+
+    private static final String STEALTH_INIT_SCRIPT =
+            "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+                    + "Object.defineProperty(navigator, 'languages', { get: () => ['en-US','en']"
+                    + " });"
+                    + "Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });"
+                    + "window.chrome = window.chrome || { runtime: {} };"
+                    + "const origQuery = window.navigator.permissions &&"
+                    + " window.navigator.permissions.query;"
+                    + "if (origQuery) {"
+                    + "  window.navigator.permissions.query = (p) =>"
+                    + "    p && p.name === 'notifications'"
+                    + "      ? Promise.resolve({ state: Notification.permission })"
+                    + "      : origQuery(p);"
+                    + "}";
+
+    /**
      * Downloads video from Kodik player page using headless browser. Intercepts .mp4 / .ts network
      * responses and saves to target file.
      *
@@ -177,14 +213,7 @@ public class PlaywrightVideoFetcher {
         }
         Files.createDirectories(targetDir);
 
-        BrowserContext context =
-                browser.newContext(
-                        new Browser.NewContextOptions()
-                                .setUserAgent(
-                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                                                + " AppleWebKit/537.36 (KHTML, like Gecko)"
-                                                + " Chrome/135.0.0.0 Safari/537.36")
-                                .setViewportSize(1280, 720));
+        BrowserContext context = newStealthContext();
 
         try {
             Page page = context.newPage();
@@ -334,14 +363,7 @@ public class PlaywrightVideoFetcher {
     private InterceptedVideo doInterceptBlocking(String kodikUrl) throws Exception {
         var pwProps = properties.getPlaywright();
 
-        BrowserContext context =
-                browser.newContext(
-                        new Browser.NewContextOptions()
-                                .setUserAgent(
-                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                                                + " AppleWebKit/537.36 (KHTML, like Gecko)"
-                                                + " Chrome/135.0.0.0 Safari/537.36")
-                                .setViewportSize(1280, 720));
+        BrowserContext context = newStealthContext();
 
         try {
             Page page = context.newPage();

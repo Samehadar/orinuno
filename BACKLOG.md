@@ -334,6 +334,43 @@ Sibnet — крупнейший сибирский видеохостинг с *
 
 **Статус:** Реализовано. `KodikApiClient.listAll(KodikListRequest)` возвращает `Flux<Map<String, Object>>`, обходя `next_page` через `Flux.expand` и плоско эмитируя items. Поведение покрыто `KodikApiClientListAllTest` (три страницы, одна страница, пустой первый ответ, пустой next_page, ошибка на второй странице).
 
+### IDEA-DOWNLOAD-FASTPATH: Fast-path в `VideoDownloadService` — **DONE** (2026-04-25)
+
+**Статус:** Реализовано. `VideoDownloadService.downloadWithStrategy` проверяет `variant.mp4Link` и, если он уже раскодирован и начинается с `http`, идёт сразу на CDN через `downloadFromCdn(...)` — без запуска Playwright. При 403/404 от CDN (истёкшая ссылка) происходит прозрачный fallback на `downloadViaWebClient`. Типичное время до первого байта сократилось с ~37 секунд (при таймауте Playwright) до ~2 секунд.
+
+### IDEA-DOWNLOAD-PROGRESS: Byte-level progress для WebClient fallback — **DONE** (2026-04-25)
+
+**Статус:** Реализовано. `DownloadState` обогащён полем `expectedTotalBytes`, `DownloadProgress` отслеживает `expectedTotalBytes` (из заголовка `Content-Length` финального 2xx-ответа) и инкрементирует `totalBytes` на каждый `DataBuffer` при записи. Demo UI (`ContentDetailView.vue`) показывает три режима прогресса (`segments`, `bytes`, `indeterminate`) плюс `phaseHint` (`Browser handshake`, `Direct MP4 (CDN)`, `Playwright timed out — falling back to direct MP4`) и `elapsed` таймер во всех режимах.
+
+### IDEA-DOWNLOAD-STEALTH: Playwright stealth shim — **DONE** (2026-04-25)
+
+**Статус:** Реализовано в `PlaywrightVideoFetcher.newStealthContext()`: `BrowserContext` создаётся с реалистичным Chrome/135 UA, viewport 1280×720, locale `en-US`, timezone `Europe/London` и init-скриптом, который патчит `navigator.webdriver`, `navigator.languages`, `navigator.plugins`, `window.chrome` и `Notification.permission`. Покрывает базовые проверки anti-bot скриптов и стабилизирует поведение headless-Chromium.
+
+Важно: stealth-shim **не решает** IP-based geo-blocking (проверено на KZ VPN — клики в плеере проходят, но XHR на видео не уходит). См. `IDEA-DOWNLOAD-PROXY` ниже.
+
+### IDEA-DOWNLOAD-DECODEVARIANT: Single-variant decode endpoint — **DONE** (2026-04-25)
+
+**Статус:** Реализовано. Добавлены `ParserService.decodeForVariant(Long variantId)` и `POST /api/v1/parse/decode/variant/{variantId}` (ответ: `{"variantId": Long, "decoded": Boolean}`). Demo UI переключён на новый эндпоинт для кнопки "Decode" рядом с одним variant — раньше он вызывал content-wide декод, который на крупных аниме-сериалах висит минутами.
+
+### IDEA-DOWNLOAD-MP4LINK-SENTINEL: Фикс `mp4Link='true'` от geo-block — **DONE** (2026-04-25)
+
+**Статус:** Реализовано. `KodikVideoDecoderService.parseVideoResponse` раньше клал синтетический ключ `_geo_blocked: "true"` в мапу качеств для geo-блокированного контента; `ParserService.selectBestQuality` радостно выбирал строку `"true"` как "лучшее качество", и в экспорте у backend-master появлялся `mp4Link: "true"`. Теперь декодер для geo-block возвращает пустую мапу (без sentinel'ов), а `selectBestQuality`, `VideoDownloadService.pickBestQualityUrl` и `StreamController.pickBestQuality` защитно пропускают ключи начинающиеся с `_` и значения, которые не начинаются с `http`. Liquibase-миграция `20260425010000_cleanup_invalid_mp4_link.sql` обнуляет пре-существующие битые записи на первом старте.
+
+### IDEA-DOWNLOAD-PROXY: Playwright через прокси-пул
+
+**Приоритет:** Средний
+**Сложность:** Средняя
+**Файлы:** `PlaywrightVideoFetcher.java`, `ProxyProviderService.java`, `kodik_proxy` таблица.
+
+Kodik блокирует плеер по IP в части регионов (подтверждено для Казахстана). Stealth shim (`IDEA-DOWNLOAD-STEALTH`) с этим не справляется — достаточно заменить egress-адрес. В проекте уже есть `kodik_proxy` таблица и `ProxyProviderService`, которыми пользуется декодер. Нужно передать выбранный прокси в `browser.newContext(new Browser.NewContextOptions().setProxy(new Proxy("http://host:port")))`, чтобы все запросы внутри `BrowserContext` (iframes, /ftor, CDN) шли через тот же выход.
+
+**Предусловия:**
+- Добавить колонку `region` (ISO-код) в `kodik_proxy` и тэгировать существующие записи, иначе ротация случайно перекидывает на такие же заблокированные прокси.
+- Дать `ProxyProviderService.pickForRegion(String exclude)` API — чтобы `PlaywrightVideoFetcher` мог попросить "что-то не из RU/KZ".
+- Инвалидация прокси: если `BrowserContext` свежесозданный через прокси всё равно таймаутит, помечать прокси как `dead` с причиной `PLAYWRIGHT_TIMEOUT`.
+
+**Что не делаем:** резидентные прокси, ротацию per-request. Достаточно per-context (один прокси на один download).
+
 ### IDEA-6: Webhook/Event уведомления
 
 **Приоритет:** Низкий

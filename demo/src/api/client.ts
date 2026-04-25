@@ -70,6 +70,12 @@ export const api = {
     return post<void>(`/api/v1/parse/decode/${contentId}?force=${force}`)
   },
 
+  decodeVariant(variantId: number, force = false) {
+    return post<{ variantId: number; decoded: boolean }>(
+      `/api/v1/parse/decode/variant/${variantId}?force=${force}`,
+    )
+  },
+
   getExport(contentId: number) {
     return get<ContentExportDto>(`/api/v1/export/${contentId}`)
   },

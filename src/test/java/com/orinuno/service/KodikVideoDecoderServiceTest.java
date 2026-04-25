@@ -1,7 +1,11 @@
 package com.orinuno.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -90,5 +94,69 @@ class KodikVideoDecoderServiceTest {
 
         String result = KodikVideoDecoderService.decodeVideoUrl(kodikEncoded.toString());
         assertThat(result).isEqualTo("https://test.com/v.mp4");
+    }
+
+    @Test
+    @DisplayName("parseVideoResponse returns decoded URLs when not geo-blocked")
+    void parseVideoResponseReturnsUrlsWhenNotGeoBlocked() {
+        GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
+        when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(false);
+        KodikVideoDecoderService svc =
+                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+
+        String json =
+                "{\"links\":{\"720\":[{\"src\":\"https://cdn.example/720.mp4:hls:manifest.m3u8\"}]}}";
+
+        Map<String, String> result = svc.parseVideoResponse(json);
+
+        assertThat(result).containsEntry("720", "https://cdn.example/720.mp4");
+        assertThat(result).doesNotContainKey("_geo_blocked");
+    }
+
+    @Test
+    @DisplayName(
+            "parseVideoResponse returns empty map when all URLs are geo-blocked"
+                    + " (regression: mp4_link='true' bug)")
+    void parseVideoResponseReturnsEmptyWhenAllGeoBlocked() {
+        GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
+        when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(true);
+        KodikVideoDecoderService svc =
+                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+
+        String json =
+                "{\"links\":{\"720\":[{\"src\":\"https://p78.kodik.info/s/m/abc/tok:exp/720.mp4:hls:manifest.m3u8\"}]}}";
+
+        Map<String, String> result = svc.parseVideoResponse(json);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("parseVideoResponse never emits sentinel keys (no _geo_blocked entry)")
+    void parseVideoResponseNeverEmitsSentinel() {
+        GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
+        when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(true);
+        KodikVideoDecoderService svc =
+                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+
+        String json =
+                "{\"links\":{\"720\":[{\"src\":\"https://geo.example/manifest.m3u8\"}],"
+                        + "\"480\":[{\"src\":\"https://geo.example/480.mp4:hls:manifest.m3u8\"}]}}";
+
+        Map<String, String> result = svc.parseVideoResponse(json);
+
+        assertThat(result.keySet()).noneMatch(k -> k.startsWith("_"));
+    }
+
+    @Test
+    @DisplayName("parseVideoResponse handles empty/no-match JSON")
+    void parseVideoResponseHandlesEmptyInput() {
+        GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
+        KodikVideoDecoderService svc =
+                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+
+        Map<String, String> result = svc.parseVideoResponse("{}");
+
+        assertThat(result).isEmpty();
     }
 }

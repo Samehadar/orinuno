@@ -46,6 +46,21 @@ public class ParseController {
         return action.thenReturn(ResponseEntity.ok().<Void>build());
     }
 
+    @PostMapping("/decode/variant/{variantId}")
+    @Operation(summary = "Decode mp4 link for a single variant")
+    public Mono<ResponseEntity<java.util.Map<String, Object>>> decodeVariant(
+            @PathVariable Long variantId, @RequestParam(defaultValue = "false") boolean force) {
+        log.info("🔓 Decode request for variant_id={}, force={}", variantId, force);
+        return parserService
+                .decodeForVariant(variantId, force)
+                .map(
+                        performed ->
+                                ResponseEntity.ok(
+                                        java.util.Map.of(
+                                                "variantId", variantId,
+                                                "decoded", performed)));
+    }
+
     // Strip CR/LF so user-provided fields cannot forge extra log lines.
     private static String sanitizeForLog(Object value) {
         if (value == null) {

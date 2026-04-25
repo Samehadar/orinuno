@@ -44,7 +44,7 @@ Controller → Service → Repository (MyBatis XML) → MySQL
 ### Key Flows
 
 1. **Search & Parse**: `ParseController.search()` → `ParserService.search()` → calls Kodik API → saves `KodikContent` + `KodikEpisodeVariant` to DB
-2. **Decode**: `ParseController.decode()` → `ParserService.decodeForContent()` → `KodikVideoDecoderService.decode()` → updates `mp4_link` in DB
+2. **Decode**: `ParseController.decode()` → `ParserService.decodeForContent()` (whole content) or `ParserService.decodeForVariant()` (single variant, behind `POST /api/v1/parse/decode/variant/{variantId}`) → `KodikVideoDecoderService.decode()` → updates `mp4_link` in DB
 3. **Export**: `ExportController.getReadyForExport()` → `ExportDataService` → returns `ContentExportDto` (seasons → episodes → variants)
 4. **TTL Refresh**: `@Scheduled ParserService.refreshExpiredLinks()` → re-decodes links older than TTL
 5. **Retry Failed**: `@Scheduled ParserService.retryFailedDecodes()` → retries previously failed decodes

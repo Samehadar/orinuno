@@ -257,7 +257,7 @@ public class KodikVideoDecoderService {
                 .doOnError(e -> healthTracker.recordFailure("step6_post_request", e.getMessage()));
     }
 
-    private Map<String, String> parseVideoResponse(String responseJson) {
+    Map<String, String> parseVideoResponse(String responseJson) {
         log.debug("[Step 7/8] Parsing video response");
         Map<String, String> videoLinks = new HashMap<>();
         boolean geoBlocked = false;
@@ -276,13 +276,14 @@ public class KodikVideoDecoderService {
         }
 
         if (geoBlocked) {
-            videoLinks.put("_geo_blocked", "true");
+            log.warn(
+                    "[Step 8/8] All {} decoded URLs are geo-blocked (kodik edge proxy detected),"
+                            + " returning empty result",
+                    videoLinks.size());
+            return new HashMap<>();
         }
 
-        log.debug(
-                "[Step 8/8] Decoded {} video links{}",
-                videoLinks.size(),
-                geoBlocked ? " (GEO-BLOCKED)" : "");
+        log.debug("[Step 8/8] Decoded {} video links", videoLinks.size());
         return videoLinks;
     }
 
