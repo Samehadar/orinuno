@@ -371,6 +371,213 @@ Kodik блокирует плеер по IP в части регионов (по
 
 **Что не делаем:** резидентные прокси, ротацию per-request. Достаточно per-context (один прокси на один download).
 
+### E2E-PHASE0-FINDINGS: Реальные проблемы интеграции с kodik-parser
+
+**Контекст:** 2026-04-25, поднимали kodik-parser из `downstream-repo/docker/docker-compose.yml` локально. Поллинг `/api/v1/export/ready` завёлся (`Fetched 3 items from sourcekodik`), DTO`KodikContentExportDto` мапятся в `ExportSerialRequest` корректно, mp4-ссылки из `materialData` доходят до `Episode.filepath`/`EpisodeVariant.filepath`. Но дальше пайплайн ломается на нескольких узких местах. Это **issues downstream-repo**, но они блокируют Phase 0 интеграции, поэтому фиксируем здесь, а параллельно создаём задачи в `downstream-repo/kodik-parser`.
+
+#### E2E-1: kodik-parser не читает свой `application.yml` для storage/meter-api
+
+**Где:** `kodik-parser/src/main/resources/application.yml` против `storage-spring-boot-starter` и `meter-api-spring-boot-starter`.
+
+**Что нашли:**
+- `application.yml` декларирует `storage.minio.{endpoint,access-key,secret-key,bucket}`, но `MinioStorageProperty` имеет `@ConfigurationProperties(prefix = "minio")` и требует обязательные `minio.url`, `minio.default-region`, `minio.default-bucket-name`, `minio.default-base-folder`, `minio.access-key`, `minio.access-secret`. Старт без них валится с `must not be blank`.
+- `application.yml` использует `meter-api.url`, а `MeterApiProperty` ждёт `meter.base-url`. Тоже падает.
+
+**Что значит:** конфигурация в `application.yml` **не используется**, kodik-parser фактически собирает настройки только из env с правильными именами (`MINIO_URL`, `METER_BASE_URL`, …). В prod-окружении это, видимо, маскируется централизованным ConfigMap, но при первом локальном подъёме сервис не стартует.
+
+**Что делаем:**
+- Создать issue в downstream-repo: переписать `kodik-parser/application.yml` на актуальные ключи стартеров (`minio.*`, `meter.base-url`).
+- В `docs-site` orinuno добавить раздел "Локальный e2e с kodik-parser" с явным списком env (см. ниже в комментарии).
+
+#### E2E-2: kodik-parser не выполняет миграции при старте
+
+**Где:** `kodik-parser/pom.xml`, `kodik-parser/src/main/resources/application.yml`.
+
+**Что нашли:** `pom.xml` содержит `liquibase-maven-plugin`, но **нет** runtime-зависимости `liquibase-core`. Spring Boot autoconfig для liquibase не активируется → `application.yml`-секция `spring.liquibase.change-log` бесполезна. На старте kodik-parser валится при первом INSERT/SELECT с `Table 'parser_kodik.kodik_export_state' doesn't exist`.
+
+**Решение (для downstream-repo):** добавить `org.liquibase:liquibase-core` в `kodik-parser/pom.xml`. Тогда стартер автоматически отработает changelog при старте (как уже сделано в orinuno).
+
+**Workaround:** перед запуском парсера руками гонять `./mvnw -pl kodik-parser liquibase:update`.
+
+#### E2E-3: kodik-parser теряет state неудачных попыток экспорта
+
+**Где:** `kodik-parser/.../KodikExportScheduler.java::processExportItem`.
+
+**Что нашли:** при ошибке `meterApiService.exportContent(...).block()` (например, meter-api недоступен) парсер делает `exportStateRepository.updateStatus(kodikId, FAILED)` — `UPDATE kodik_export_state … WHERE kodik_content_id = ?`. Но если запись ещё не создана (а она создаётся только при успешном `upsert(...)` в happy-path), `UPDATE` ничего не меняет. В итоге:
+- В таблице **нет ни одной записи** про content_id, который попадал в polling.
+- Каждый цикл (раз в `KODIK_POLL_INTERVAL_MS`) пытается заново всё то же самое.
+- Невозможно увидеть из БД, кого пытались экспортировать и сколько раз.
+
+**Решение (для downstream-repo):**
+- В `processExportItem` сначала `upsert(state with PENDING)` → потом `downloadPoster` → `meterApi.exportContent` → `upsert(state with EXPORTED)`. В catch — `upsert(state with FAILED, error_message)`.
+- Завести retry-counter и `next_retry_at` для backoff (после 3 неудач — отложить на час).
+
+#### E2E-4: poster берётся из `screenshots[0]`, что семантически неверно
+
+**Где:** `kodik-parser/.../KodikExportScheduler.java::downloadPosterIfAvailable`.
+
+**Что нашли:** `dto.screenshots()` в orinuno-DTO — это **превью кадров серии** (`https://i.kodikres.com/screenshots/seria/.../1.jpg`), а не **постер фильма** (kinopoisk URL). Использовать первый кадр первой серии как poster содержимого — плохо для UX.
+
+Кроме того, на тестовом прогоне ни одного лога "Stored poster" / "Failed to download poster" не было — то есть downloader даже не отрабатывал, хотя в DTO от orinuno `screenshots` непустой. Возможная причина: `getReadyForExport` вызывается без `with_material_data=true` в kodik-parser (нужно проверить `SourceKodikClient`), и orinuno возвращает урезанный DTO. Это уже **issue orinuno** — наш `/export/ready` должен явно возвращать список постеров (kinopoisk thumbnails) отдельным полем.
+
+**Решение (orinuno-side):**
+- В `ContentExportDto` добавить поле `posterUrl` (берём из `materialData.poster_url`), а `screenshots` оставить как кадры серии.
+- В `docs-site/openapi.json` отразить поле.
+
+**Решение (downstream-repo-side):** менять `downloadPosterIfAvailable` так, чтобы качал `dto.posterUrl()` (новое поле) вместо `screenshots[0]`.
+
+#### E2E-5: kodik-parser отдаёт временные mp4 ссылки в meter-api
+
+**Где:** `kodik-parser/.../KodikMeterMapper.java`.
+
+**Что нашли:** в `ExportSerialRequest` поля `Episode.filepath` и `EpisodeVariant.filepath` заполняются прямой mp4-ссылкой из orinuno, например:
+
+```
+https://cloud.solodcdn.com/useruploads/.../182560b4eb150ea6418ecd7790375f91:2026042514/720.mp4
+```
+
+В URL зашит timestamp expires (`:2026042514` ≈ через 24-48 часов). Если meter-api сохранит это значение в БД как-есть и отдаст пользователям через сутки — все ссылки протухнут. Для долговременного хранения нужно либо:
+1. kodik-parser скачивает mp4 сам и кладёт в minio (как с poster), а в meter-api отдаёт уже минио-путь;
+2. или meter-api сам проксирует mp4 (single-flight cache);
+3. или контракт меняется так, что meter-api всегда дёргает orinuno re-decode перед раздачей.
+
+**Действие:** обсудить с владельцем meter-api, до тех пор `Episode.filepath` оставить пустым (mp4 не материализован в meter), а отдавать только `episodeVariants[].filepath` и помечать их как `expires_at`. По сути нужен новый контракт между сервисами.
+
+#### Итог Phase 0
+
+- ✅ Цикл orinuno → kodik-parser работает (поллинг, маппинг, фильтрация по `lastPollTimestamp`).
+- ❌ kodik-parser в нынешнем виде не запускается из коробки (E2E-1, E2E-2).
+- ❌ State management хрупкий (E2E-3).
+- ❌ Контракт по постерам и mp4-ссылкам нуждается в доработке (E2E-4, E2E-5).
+- ⏭️ Полноценный e2e с meter-api не делали — поднимать всю обвязку (Postgres, Kafka, ES) ради проверки одного UNAUTHORIZED-вызова дороже, чем ценность.
+
+### E2E-PHASE0-LIVE-RUN-FINDINGS: Реальный прогон (2026-04-26)
+
+**Контекст:** прошли полный цикл `orinuno → kodik-parser → meter-stub → MinIO`
+с реальной инфраструктурой downstream-repo compose (`storage`, `percona`),
+Liquibase-миграциями применёнными вручную, и HTTP-стабом meter на `:8082`,
+который умеет переключаться между `ok` и `fail` режимами. Все 7 ready-items
+прошли путь `PENDING → EXPORTED` в успешном сценарии, и `PENDING → FAILED →
+back-off → retry → EXPORTED` в негативном. Ниже — что **нашлось живого**, что
+unit-тесты не поймали.
+
+#### LIVE-1 [PUNTED → downstream-repo team]: meter-api контракт `success` обязателен (`MeterApiService` NPE на `null`)
+
+**Статус:** _передано команде downstream-repo_. Записано в
+`downstream-repo/kodik-parser/BACKLOG.md` для коллег. Сами **не делаем**:
+`MeterApiService` — shared library, и любая правка в нём затрагивает все
+парсеры (`parser-alloha`, `parser-seasonvars`, …), а не только kodik-parser.
+Эта правка должна идти через owner shared starter.
+
+**Где:** `downstream-repo/meter-api-spring-boot-starter/.../MeterApiService.java:34`.
+
+**Что нашли:** `exportContent` делает `if (!response.success()) {...}` без
+null-check. Если meter возвращает `{}` (например, ошибка сериализации,
+старая версия meter, тестовый стаб) — летит `NullPointerException: Cannot
+invoke "java.lang.Boolean.booleanValue()" because the return value of
+"ContentExportResponse.success()" is null`. Эта ошибка маскирует реальную
+причину сбоя в `error_message` kodik-parser.
+
+**Решение (для команды downstream-repo):** проверять
+`Boolean.TRUE.equals(response.success())`, а на null трактовать как
+"контракт нарушен" и падать с понятной диагностикой
+(`UnableToExportContentException("meter returned response without 'success' field")`).
+До тех пор kodik-parser продолжит ловить такие ответы как обычные
+исключения — back-off retry-канал уже закрывает worst case.
+
+#### LIVE-2 [DONE]: `st.kp.yandex.net` отдаёт `403 Forbidden` без User-Agent / Referer
+
+**Где:** `downstream-repo/kodik-parser/.../KodikMediaDownloader.java`.
+
+**Что нашли:** 5 из 7 элементов имели `posterUrl=https://st.kp.yandex.net/...`
+(KinoPoisk thumbnails). Yandex анти-хотлинк блокирует пустой User-Agent →
+WebClient получает 403 Forbidden → `posterFilepath=null` → meter получает
+запись без постера. Только записи с `https://shikimori.io/uploads/poster/...`
+скачались успешно (24-40 KB JPEG, попали в `local/movies/kodik/posters/`).
+
+**Решение (реализовано в downstream-repo/kodik-parser):**
+- WebClient теперь штампит `User-Agent: Mozilla/5.0 (...) Chrome/135.0.0.0`
+  на каждый GET постера.
+- `Referer` подбирается по домену: `kinopoisk.ru/` для `*.yandex.net` /
+  `kinopoisk.*`, `shikimori.one/` для `shikimori.*`, `kodik.info/` для
+  `*.kodik*`. Без referer-а Yandex/Shikimori всё равно отдают 403.
+- Перегрузка `downloadAndStorePoster(primary, fallback, id)`: если primary
+  отдаёт любую ошибку (включая 403) — автоматически переходим на
+  `screenshots[0]`. Scheduler передаёт `dto.posterUrl()` как primary и
+  `dto.screenshots().get(0)` как fallback в одном вызове.
+- Покрытие: `KodikMediaDownloaderTest` (5 кейсов) + обновлённые
+  `KodikExportSchedulerTest` (11 кейсов) — все зелёные.
+
+#### LIVE-3 [DONE]: scheduler не возвращался к FAILED-записям (retry pipeline missing)
+
+**Где:** `kodik-parser/.../KodikExportScheduler.java`.
+
+**Что нашли:** когда meter был недоступен, kodik-parser ставил
+`status=FAILED, next_retry_at=now+backoff`. После восстановления meter
+запись **никогда не получала retry**, потому что `lastPollTimestamp` уже
+сдвинут в "сейчас", и orinuno возвращает `No new content`. То есть
+`next_retry_at` существует в схеме, но никто его не использует. FAILED
+оседали в БД навсегда.
+
+**Решение (реализовано в kodik-parser живого прогона):**
+- Repo: `findRetryReady(now, limit)` → `SELECT kodik_content_id FROM ... WHERE
+  status='FAILED' AND next_retry_at <= ? ORDER BY next_retry_at ASC LIMIT ?`.
+- Scheduler: после основного poll-цикла безусловно вызывать `retryFailed()`,
+  который для каждого id дёргает `sourceKodikClient.getExportData(id)` и
+  гонит DTO через тот же `processExportItem(...)`. Идёмпотентность гарантирует
+  state-machine.
+- Bugfix: ранний `return` при пустом ответе orinuno **пропускал** retry pass
+  — переписать на `else`, чтобы `retryFailed()` всегда выполнялся.
+
+#### LIVE-4 [DONE]: MyBatis NPE на `markPending` (`No setter found for keyProperty 'id'`)
+
+**Где:** `kodik-parser/.../KodikExportStateMapper.xml::markPending`.
+
+**Что нашли:** `<insert useGeneratedKeys="true" keyProperty="id">` с парам-
+типом `Long kodikContentId` (примитив-обёртка). MyBatis пытается записать
+generated key обратно в `Long` и валится с `No setter found for the keyProperty
+'id' in 'java.lang.Long'`. На каждой первой попытке экспорта парсер падал
+до того, как успевал хоть что-то полезное сделать.
+
+**Решение (реализовано):** убрать `useGeneratedKeys="true" keyProperty="id"`
+из `<insert id="markPending">`. Generated id никем не используется.
+
+#### LIVE-5 [DONE]: дефолты `application.yml` kodik-parser не совпадают с
+`docker/docker-compose.yml`
+
+**Где:** `kodik-parser/src/main/resources/application.yml`.
+
+**Что нашли:** дефолты были `MINIO_KEY=minioadmin`, `MINIO_BUCKET=corporate`,
+`DB_PASSWORD=root`. Compose-стек поднимает MinIO с `secret1234/secret1234`,
+bucket `movies`, MySQL `root/123`. Без явных env-overrides сервис не
+авторизовался ни в MinIO, ни в БД.
+
+**Решение (реализовано):** дефолты в `application.yml` приведены к значениям
+из `docker/docker-compose.yml`. Теперь kodik-parser стартует **без
+ENV-overrides** на нативном downstream-repo compose.
+
+#### Что E2E-3 теперь покрывает
+
+Полный цикл проверен живым прогоном:
+
+1. `meter` режим **fail** + рестарт kodik-parser → 7 записей `PENDING → FAILED`,
+   `retry_count=1`, `next_retry_at=now+30s`.
+2. Внутри back-off-окна: следующий poll-цикл выбирает FAILED-id из БД,
+   `findRetryReady` возвращает 0 (next_retry_at в будущем) → ничего не делается.
+3. После истечения back-off + переключения `meter` в **ok**: `findRetryReady`
+   возвращает 7 id, scheduler рефетчит каждый через `getExportData(id)`,
+   процессит → 7 записей `FAILED → EXPORTED`, `retry_count=0`,
+   `last_exported_at` заполнено, постеры от shikimori лежат в MinIO.
+
+#### Что E2E-4 теперь покрывает
+
+`posterUrl` приходит из orinuno (см. orinuno-side fix `ContentExportDto.posterUrl`
+извлекается из `material_data.poster_url_original`/`poster_url`). kodik-parser
+читает `dto.posterUrl()` первым приоритетом, на null-валидном — fallback на
+`screenshots[0]`. На реальном датасете 7 ready-items: 7/7 имеют `posterUrl`,
+5 от kinopoisk → 403 (LIVE-2), 2 от shikimori → попадают в MinIO с
+`posterFilepath=kodik/posters/kodik_{id}.jpeg` и передаются в meter request.
+
 ### IDEA-6: Webhook/Event уведомления
 
 **Приоритет:** Низкий
