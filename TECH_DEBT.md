@@ -53,6 +53,41 @@
 - Backend: `DownloadState` gained `expectedTotalBytes`; `DownloadProgress` tracks `expectedTotalBytes` (from `Content-Length`) and increments `totalBytes` as each `DataBuffer` is written. A fast-path in `VideoDownloadService.downloadWithStrategy` now goes straight to the CDN when `variant.mp4_link` is already decoded, cutting time-to-first-byte from ~37s (Playwright timeout) to ~2s.
 - Frontend: `ContentDetailView.vue` introduced `ProgressView` with three modes (`segments`, `bytes`, `indeterminate`), a `phaseHint` (`Browser handshake`, `Direct MP4 (CDN)`, `Playwright timed out — falling back to direct MP4`), and an `elapsed` timer in every mode so stalled downloads are obvious.
 
+## Phase 0 e2e — Cross-Repo Issues with parser-kodik (NEW 2026-04-25)
+
+**Priority:** High (blocks full integration)
+**Context:** Spent a session bringing `backend-master/parser-kodik` up locally against orinuno (with the corporate-VPN access to `harbor.dats.tech`). Polling cycle works (`Fetched 3 items from sourcekodik`), DTO mapping into `ExportSerialRequest` is correct, but the rest of the pipeline has five concrete defects. Full breakdown (with code refs and proposed fixes) lives in `BACKLOG.md` → section **E2E-PHASE0-FINDINGS**. Short version:
+
+- **E2E-1** — `parser-kodik/application.yml` declares `storage.minio.*` and `meter-api.url`, but `MinioStorageProperty`/`MeterApiProperty` use `prefix = "minio"` and `prefix = "meter"`. The application can't start on a clean local box without supplying `MINIO_URL`, `MINIO_ACCESS_KEY`, `MINIO_ACCESS_SECRET`, `MINIO_DEFAULT_BUCKET_NAME`, `MINIO_DEFAULT_BASE_FOLDER`, `MINIO_DEFAULT_REGION`, `METER_BASE_URL` envs by hand. Likely masked in prod by a central ConfigMap.
+- **E2E-2** — `parser-kodik/pom.xml` ships only the Liquibase Maven plugin, not `liquibase-core`, so Spring Boot autoconfig never runs migrations on startup. First DB call dies with `Table 'parser_kodik.kodik_export_state' doesn't exist`. Workaround: `mvn liquibase:update`.
+- **E2E-3** — `KodikExportScheduler.processExportItem` only `upsert`s on success and `updateStatus(FAILED)` on error, but the row doesn't exist yet → `UPDATE` is a no-op → no record of failed attempts → every poll cycle retries from scratch and we lose visibility.
+- **E2E-4** — Poster is taken from `screenshots[0]`, which is a frame thumbnail, not a kinopoisk poster. Plus on the test run not a single "Stored poster" log fired even though `screenshots` was non-empty in DTO — likely because parser-kodik calls `/export/ready` without `with_material_data=true`, so orinuno returns a trimmed DTO. Need to add an explicit `posterUrl` field on orinuno's `ContentExportDto` and have parser-kodik download from there.
+- **E2E-5** — `Episode.filepath` and `EpisodeVariant.filepath` go to meter-api as raw, time-bombed Kodik CDN URLs (e.g. `…/720.mp4` with `:2026042514` expiry baked in). If meter-api persists them as-is, every export rots in ~24-48h. Need a contract decision: parser-kodik downloads to MinIO before exporting / meter-api proxies on demand / meter-api re-decodes from orinuno.
+
+**Owners:** E2E-1..E2E-3 are pure backend-master work. E2E-4 has an orinuno side (add `posterUrl` to export DTO + OpenAPI spec). E2E-5 is a contract-level discussion across both repos.
+
+## Phase 0 e2e — Live Run (UPDATED 2026-04-26)
+
+**Status:** Live dry-run executed against the official `backend-master/docker/docker-compose.yml` stack (`storage`, `storage-create-buckets`, `percona`, plus a Python HTTP stub for `meter-api` on `:8082`). orinuno boot, polling cycle, mapping into `ContentExportRequest`, MinIO write, and the freshly added retry channel were all exercised. Orinuno-side fixes (`posterUrl` on `ContentExportDto`, OpenAPI update, defensive filters in `ParserService.selectBestQuality`) and parser-kodik-side fixes (canonical `application.yml` defaults, state-machine, retry channel via `findRetryReady`) are all merged.
+
+**What the live run covered (and what unit tests did not catch):**
+
+- ✅ E2E-3 happy path: 7/7 ready-items go `PENDING → EXPORTED` on a clean cycle, `retry_count=0`, `last_exported_at` populated, `poster_filepath` set for the two items whose `posterUrl` is hosted on `shikimori.io`.
+- ✅ E2E-3 negative path: meter stub flipped to 503 → all 7 items go `FAILED`, `retry_count=1`, `next_retry_at = now + KODIK_RETRY_BACKOFF_MS`, `error_message="Retries exhausted: 3/3"` (reactor's inner `backoff(3, 100ms)` first).
+- ✅ E2E-3 back-off skip: while `next_retry_at` is in the future, the next poll tick runs `findRetryReady(now, batch)` and gets 0 rows — no spam against meter.
+- ✅ E2E-3 retry recovery: after the back-off elapses and meter recovers, `findRetryReady` returns the FAILED ids, the scheduler refetches each via `getExportData(id)`, runs `processExportItem(...)`, and the rows transition `FAILED → EXPORTED` with `retry_count` reset to 0.
+- ✅ E2E-4: `dto.posterUrl()` is the first source-of-truth, with `screenshots[0]` only as a logged debug fallback. On the live dataset 5/7 posters are kinopoisk URLs and 2/7 are shikimori URLs.
+
+**New issues discovered by the live run (all logged in `BACKLOG.md` → section `E2E-PHASE0-LIVE-RUN-FINDINGS`):**
+
+- **LIVE-1 [PUNTED → backend-master team]** — `MeterApiService.exportContent` calls `response.success().booleanValue()` without null-check; any meter response missing the field crashes parser-kodik with NPE. Should be `Boolean.TRUE.equals(response.success())` with an explicit "contract broken" exception otherwise. **Не делаем сами**: правка в shared `meter-api-spring-boot-starter` затрагивает все парсеры (`parser-alloha`, `parser-seasonvars`, …). Передано команде backend-master через `backend-master/parser-kodik/BACKLOG.md`.
+- **LIVE-2 [DONE]** — `KodikMediaDownloader` теперь штампит `User-Agent: Mozilla/5.0 ... Chrome/135.0.0.0` и доменно-специфичный `Referer` (`kinopoisk.ru/` для yandex.net, `shikimori.one/` для shikimori, `kodik.info/` для kodik mirror) на каждый запрос постера. Перегрузка `downloadAndStorePoster(primary, fallback, id)` падает с primary на `screenshots[0]` при любой ошибке (включая 403). Покрыто `KodikMediaDownloaderTest` (5 кейсов) + обновлёнными `KodikExportSchedulerTest` (11 кейсов).
+- **LIVE-3 [DONE]** — `findRetryReady` + `retryFailed()` pass + bug-fix для early-return в `pollAndExport`. FAILED-записи теперь прорабатываются по back-off расписанию.
+- **LIVE-4 [DONE]** — `useGeneratedKeys="true" keyProperty="id"` убран из `<insert id="markPending">` в `KodikExportStateMapper.xml`.
+- **LIVE-5 [DONE]** — Дефолты `parser-kodik/application.yml` (`MINIO_KEY=secret1234`, `MINIO_BUCKET=movies`, `DB_PASSWORD=123`) приведены к значениям `docker/docker-compose.yml`. `./mvnw spring-boot:run` стартует без env-overrides.
+
+**E2E-5 [BLOCKED → contract decision]** — `Episode.filepath` / `EpisodeVariant.filepath` всё ещё уходят в meter как сырые временные kodik CDN URLs с зашитым `:expiry`. Не правим односторонне: нужно решение от owner-а meter-api контракта, кто хранит финальный mp4 (parser-kodik скачивает в MinIO до экспорта / meter-api проксирует / meter-api re-decode через orinuno). Записано в `backend-master/parser-kodik/BACKLOG.md` как `E2E-5` для обсуждения на синке.
+
 ## Playwright Geo-block Mitigation via Proxy Rotation
 
 **Priority:** Medium
