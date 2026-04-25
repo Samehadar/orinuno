@@ -92,6 +92,30 @@ public class ParserService {
                 .then();
     }
 
+    /** Decode exactly one variant by id. Returns true if decode was performed, false if skipped. */
+    public Mono<Boolean> decodeForVariant(Long variantId, boolean force) {
+        return Mono.fromCallable(() -> episodeVariantRepository.findById(variantId))
+                .flatMap(
+                        opt -> {
+                            if (opt.isEmpty()) {
+                                return Mono.error(
+                                        new IllegalArgumentException(
+                                                "Variant not found: " + variantId));
+                            }
+                            KodikEpisodeVariant variant = opt.get();
+                            if (!force && variant.getMp4Link() != null) {
+                                log.info(
+                                        "ℹ️ Variant id={} already has mp4_link, skipping (pass"
+                                                + " force=true to redo)",
+                                        variantId);
+                                return Mono.just(false);
+                            }
+                            log.info(
+                                    "🔓 Decoding single variant id={}, force={}", variantId, force);
+                            return decodeVariant(variant).thenReturn(true);
+                        });
+    }
+
     /** PF-I3: Force re-decode all variants for content (ignoring existing mp4_link). */
     public Mono<Void> forceDecodeForContent(Long contentId) {
         List<KodikEpisodeVariant> all = episodeVariantRepository.findByContentId(contentId);
@@ -206,10 +230,12 @@ public class ParserService {
                 .then();
     }
 
-    private String selectBestQuality(Map<String, String> videoLinks) {
-        if (videoLinks.isEmpty()) return null;
+    static String selectBestQuality(Map<String, String> videoLinks) {
+        if (videoLinks == null || videoLinks.isEmpty()) return null;
 
         return videoLinks.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith("_"))
+                .filter(e -> e.getValue() != null && e.getValue().startsWith("http"))
                 .max(
                         (a, b) -> {
                             try {

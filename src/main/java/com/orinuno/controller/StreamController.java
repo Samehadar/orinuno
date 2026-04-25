@@ -151,6 +151,8 @@ public class StreamController {
 
     private String pickBestQuality(Map<String, String> videoLinks) {
         return videoLinks.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith("_"))
+                .filter(e -> e.getValue() != null && e.getValue().startsWith("http"))
                 .max(Comparator.comparingInt(e -> parseQuality(e.getKey())))
                 .map(Map.Entry::getValue)
                 .orElseThrow(() -> new RuntimeException("No video URLs decoded"));

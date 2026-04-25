@@ -44,6 +44,17 @@ flowchart LR
 8. **URL-safe Base64 decode** — replace `-` → `+`, `_` → `/`, pad with `=`,
    then `Base64.getDecoder().decode(...)`.
 
+## Geo-blocked responses
+
+When Kodik refuses to serve the player from the caller's IP, step 6 parses a
+response that carries no real URLs — just placeholder strings like `"true"`.
+`parseVideoResponse` detects this pattern and returns an **empty** quality
+map: no sentinel keys, no sentinel values. Downstream consumers
+(`ParserService.selectBestQuality`, `VideoDownloadService.pickBestQualityUrl`,
+`StreamController.pickBestQuality`) additionally drop any key starting with
+`_` and any value that does not start with `http`, so a future sentinel that
+escapes the decoder cannot leak into `mp4_link`.
+
 ## Why brute-force
 
 `KodikDownloader` (one of the reference projects) hard-codes ROT +18. That

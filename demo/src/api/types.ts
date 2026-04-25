@@ -50,6 +50,7 @@ export interface DownloadState {
   totalSegments: number | null
   downloadedSegments: number | null
   totalBytes: number | null
+  expectedTotalBytes: number | null
 }
 
 export interface PageResponse<T> {

@@ -27,6 +27,45 @@ const hlsUrl = ref<string | null>(null)
 
 const downloadStates = reactive<Map<number, DownloadState>>(new Map())
 const pollingTimers = new Map<number, ReturnType<typeof setInterval>>()
+const downloadStartedAt = reactive<Map<number, number>>(new Map())
+
+interface Toast {
+  id: number
+  kind: 'success' | 'error' | 'info'
+  title: string
+  body?: string
+}
+const toasts = ref<Toast[]>([])
+let toastSeq = 0
+
+function pushToast(kind: Toast['kind'], title: string, body?: string, ttlMs = 5000) {
+  const t: Toast = { id: ++toastSeq, kind, title, body }
+  toasts.value.push(t)
+  if (ttlMs > 0) {
+    setTimeout(() => {
+      toasts.value = toasts.value.filter(x => x.id !== t.id)
+    }, ttlMs)
+  }
+}
+
+function dismissToast(id: number) {
+  toasts.value = toasts.value.filter(x => x.id !== id)
+}
+
+function shorten(url: string | null | undefined, head = 28, tail = 16): string {
+  if (!url) return ''
+  if (url.length <= head + tail + 1) return url
+  return `${url.slice(0, head)}…${url.slice(-tail)}`
+}
+
+async function copyToClipboard(text: string, label = 'Copied') {
+  try {
+    await navigator.clipboard.writeText(text)
+    pushToast('success', label, shorten(text), 2500)
+  } catch {
+    pushToast('error', 'Copy failed', 'Clipboard not available', 3000)
+  }
+}
 
 function stopPolling(variantId: number) {
   const timer = pollingTimers.get(variantId)
@@ -49,7 +88,13 @@ function startPolling(variantId: number) {
 
       if (state.status === 'COMPLETED' || state.status === 'FAILED') {
         stopPolling(variantId)
+        downloadStartedAt.delete(variantId)
         variants.value = await api.getVariants(id)
+        if (state.status === 'COMPLETED') {
+          pushToast('success', `Variant ${variantId} downloaded`, state.filepath ? shorten(state.filepath) : undefined, 5000)
+        } else {
+          pushToast('error', `Variant ${variantId} download failed`, state.error ?? 'unknown', 7000)
+        }
         if (autoPlayAfterDownload.value === variantId) {
           if (state.status === 'COMPLETED') {
             const v = variants.value.find(vv => vv.id === variantId)
@@ -60,6 +105,7 @@ function startPolling(variantId: number) {
       }
     } catch {
       stopPolling(variantId)
+      downloadStartedAt.delete(variantId)
     }
   }, 2000)
   pollingTimers.set(variantId, timer)
@@ -86,27 +132,77 @@ async function load() {
   }
 }
 
+function snapshotMp4(): Map<number, string | null> {
+  const m = new Map<number, string | null>()
+  for (const v of variants.value) m.set(v.id, v.mp4Link)
+  return m
+}
+
+function describeDecodeDiff(before: Map<number, string | null>): { gained: number; refreshed: number; lost: number; firstNewLink: string | null } {
+  let gained = 0
+  let refreshed = 0
+  let lost = 0
+  let firstNewLink: string | null = null
+  for (const v of variants.value) {
+    const prev = before.get(v.id) ?? null
+    const next = v.mp4Link ?? null
+    if (!prev && next) {
+      gained++
+      if (!firstNewLink) firstNewLink = next
+    } else if (prev && next && prev !== next) {
+      refreshed++
+    } else if (prev && !next) {
+      lost++
+    }
+  }
+  return { gained, refreshed, lost, firstNewLink }
+}
+
 async function decodeAll(force = false) {
   decoding.value = true
+  const before = snapshotMp4()
   try {
     await api.decodeContent(id, force)
     await new Promise(r => setTimeout(r, 2000))
     variants.value = await api.getVariants(id)
+    const diff = describeDecodeDiff(before)
+    if (diff.gained === 0 && diff.refreshed === 0) {
+      pushToast('info', force ? 'Force re-decode finished' : 'Decode finished', 'No new mp4 links — try Force re-decode or check decoder health', 6000)
+    } else {
+      pushToast(
+        'success',
+        force ? `Force re-decoded ${diff.refreshed + diff.gained} variants` : `Decoded ${diff.gained} variants`,
+        diff.firstNewLink ? `Sample: ${shorten(diff.firstNewLink)}` : undefined,
+        6000,
+      )
+    }
   } catch (e: any) {
     error.value = e.message
+    pushToast('error', 'Decode failed', e.message, 6000)
   } finally {
     decoding.value = false
   }
 }
 
-async function decodeSingleVariant(variant: EpisodeVariantDto) {
+async function decodeSingleVariant(variant: EpisodeVariantDto, force = false) {
   decodingVariantId.value = variant.id
+  const beforeLink = variant.mp4Link ?? null
   try {
-    await api.decodeContent(id, false)
-    await new Promise(r => setTimeout(r, 3000))
+    const result = await api.decodeVariant(variant.id, force)
     variants.value = await api.getVariants(id)
+    const after = variants.value.find(v => v.id === variant.id)
+    if (!result.decoded) {
+      pushToast('info', `Variant ${variant.id}: already decoded`, 'Use Force to re-decode', 4000)
+    } else if (after?.mp4Link && beforeLink !== after.mp4Link) {
+      pushToast('success', `Variant ${variant.id} decoded`, shorten(after.mp4Link), 6000)
+    } else if (after?.mp4Link) {
+      pushToast('info', `Variant ${variant.id}: link unchanged`, shorten(after.mp4Link), 4500)
+    } else {
+      pushToast('info', `Variant ${variant.id}: no link returned`, 'Likely geo-blocked or decoder unavailable', 6000)
+    }
   } catch (e: any) {
     error.value = e.message
+    pushToast('error', `Decode failed for variant ${variant.id}`, e.message, 6000)
   } finally {
     decodingVariantId.value = null
   }
@@ -114,22 +210,32 @@ async function decodeSingleVariant(variant: EpisodeVariantDto) {
 
 async function downloadSingleVariant(variant: EpisodeVariantDto, thenPlay = false) {
   if (thenPlay) autoPlayAfterDownload.value = variant.id
+  downloadStartedAt.set(variant.id, Date.now())
   try {
     const state = await api.downloadVariant(variant.id)
     downloadStates.set(variant.id, state)
     if (state.status === 'COMPLETED') {
+      downloadStartedAt.delete(variant.id)
       variants.value = await api.getVariants(id)
+      pushToast('success', `Variant ${variant.id} already downloaded`, undefined, 3500)
       if (thenPlay) {
         autoPlayAfterDownload.value = null
         const v = variants.value.find(vv => vv.id === variant.id)
         if (v) selectedVariant.value = v
       }
     } else if (state.status === 'IN_PROGRESS') {
+      pushToast('info', `Download started for variant ${variant.id}`, thenPlay ? 'Will play automatically when ready' : 'Tracking progress in the row below', 5000)
       startPolling(variant.id)
+    } else if (state.status === 'FAILED') {
+      downloadStartedAt.delete(variant.id)
+      pushToast('error', `Download failed for variant ${variant.id}`, state.error ?? 'unknown', 7000)
+      autoPlayAfterDownload.value = null
     }
   } catch (e: any) {
     error.value = e.message
+    downloadStartedAt.delete(variant.id)
     autoPlayAfterDownload.value = null
+    pushToast('error', 'Download request failed', e.message, 6000)
   }
 }
 
@@ -174,8 +280,10 @@ async function copyHlsUrl(variant: EpisodeVariantDto) {
     const result = await api.getHlsUrl(variant.id)
     hlsUrl.value = result.url
     await navigator.clipboard.writeText(result.url)
+    pushToast('success', `HLS link copied (variant ${variant.id})`, shorten(result.url), 4000)
   } catch (e: any) {
     error.value = `HLS error: ${e.message}`
+    pushToast('error', 'HLS link failed', e.message, 6000)
   } finally {
     hlsLoading.value = null
   }
@@ -183,25 +291,100 @@ async function copyHlsUrl(variant: EpisodeVariantDto) {
 
 function isDownloading(variantId: number): boolean {
   const st = downloadStates.get(variantId)
-  return st?.status === 'IN_PROGRESS'
+  return st?.status === 'IN_PROGRESS' || downloadStartedAt.has(variantId)
 }
 
-function getProgress(variantId: number): { downloaded: number; total: number; bytes: number } | null {
+interface ProgressView {
+  kind: 'segments' | 'bytes' | 'indeterminate'
+  percent: number
+  caption: string
+  subCaption?: string
+  elapsedLabel: string
+  phaseHint?: string
+}
+
+const nowTick = ref(Date.now())
+let nowTimer: ReturnType<typeof setInterval> | null = null
+
+function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  if (total < 60) return `${total}s`
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}m ${s.toString().padStart(2, '0')}s`
+}
+
+function getProgressView(variantId: number): ProgressView | null {
   const st = downloadStates.get(variantId)
-  if (!st || st.status !== 'IN_PROGRESS') return null
-  if (st.totalSegments == null || st.totalSegments === 0) return null
+  const started = downloadStartedAt.get(variantId)
+  const isActive = (st?.status === 'IN_PROGRESS') || (!!started)
+  if (!isActive) return null
+
+  const elapsedMs = started ? (nowTick.value - started) : 0
+  const elapsedLabel = started ? formatElapsed(elapsedMs) : '0s'
+
+  if (st?.totalSegments && st.totalSegments > 0) {
+    const done = st.downloadedSegments ?? 0
+    const pct = Math.round((done / st.totalSegments) * 100)
+    return {
+      kind: 'segments',
+      percent: pct,
+      caption: `${pct}%`,
+      subCaption: `${done}/${st.totalSegments} segments${st.totalBytes ? ` · ${formatBytes(st.totalBytes)}` : ''}`,
+      elapsedLabel,
+      phaseHint: 'HLS segments (Playwright)',
+    }
+  }
+
+  if (st?.totalBytes && st?.expectedTotalBytes && st.expectedTotalBytes > 0) {
+    const pct = Math.min(100, Math.round((st.totalBytes / st.expectedTotalBytes) * 100))
+    return {
+      kind: 'bytes',
+      percent: pct,
+      caption: `${pct}%`,
+      subCaption: `${formatBytes(st.totalBytes)} / ${formatBytes(st.expectedTotalBytes)}`,
+      elapsedLabel,
+      phaseHint: 'Direct MP4 (CDN)',
+    }
+  }
+
+  if (st?.totalBytes && st.totalBytes > 0) {
+    return {
+      kind: 'bytes',
+      percent: 0,
+      caption: formatBytes(st.totalBytes),
+      subCaption: 'size unknown',
+      elapsedLabel,
+      phaseHint: 'Direct MP4 (CDN, streaming)',
+    }
+  }
+
+  const elapsedSec = Math.floor(elapsedMs / 1000)
+  const phaseHint = elapsedSec < 30
+    ? 'Browser handshake (Playwright, up to 30s)'
+    : elapsedSec < 45
+      ? 'Playwright timed out — falling back to direct MP4'
+      : 'Decoding fresh CDN URL (fallback)'
   return {
-    downloaded: st.downloadedSegments ?? 0,
-    total: st.totalSegments,
-    bytes: Number(st.totalBytes ?? 0),
+    kind: 'indeterminate',
+    percent: 0,
+    caption: 'Initializing…',
+    subCaption: 'waiting for first byte',
+    elapsedLabel,
+    phaseHint,
   }
 }
 
-function getProgressPercent(variantId: number): number {
-  const p = getProgress(variantId)
-  if (!p || p.total === 0) return 0
-  return Math.round((p.downloaded / p.total) * 100)
-}
+const activeDownloadIds = computed<number[]>(() => {
+  const ids: number[] = []
+  for (const [vid, st] of downloadStates.entries()) {
+    if (st.status === 'IN_PROGRESS') ids.push(vid)
+  }
+  for (const vid of downloadStartedAt.keys()) {
+    if (!ids.includes(vid)) ids.push(vid)
+  }
+  return ids
+})
 
 function toggleGroup(key: string) {
   if (expandedGroups.value.has(key)) expandedGroups.value.delete(key)
@@ -329,8 +512,14 @@ function collapseAll() {
   expandedGroups.value.clear()
 }
 
-onMounted(load)
-onUnmounted(stopAllPolling)
+onMounted(() => {
+  load()
+  nowTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
+})
+onUnmounted(() => {
+  stopAllPolling()
+  if (nowTimer) clearInterval(nowTimer)
+})
 </script>
 
 <template>
@@ -595,7 +784,7 @@ onUnmounted(stopAllPolling)
                         <th class="px-4 py-2 text-left">Episode</th>
                       </template>
                       <th class="px-4 py-2 text-left">Quality</th>
-                      <th class="px-4 py-2 text-left">MP4</th>
+                      <th class="px-4 py-2 text-left min-w-[280px]">Links</th>
                       <th class="px-4 py-2 text-left">Status</th>
                       <th class="px-4 py-2 text-left">Actions</th>
                     </tr>
@@ -627,30 +816,61 @@ onUnmounted(stopAllPolling)
                           {{ v.quality ?? '—' }}
                         </span>
                       </td>
-                      <td class="px-4 py-2.5">
-                        <span v-if="v.mp4Link" class="text-[var(--color-neon-green)]">✓</span>
-                        <span v-else class="text-[var(--color-text-muted)]">—</span>
+                      <td class="px-4 py-2.5 align-top">
+                        <div class="flex flex-col gap-1.5 min-w-[260px] max-w-[320px]">
+                          <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] w-12 flex-shrink-0">kodik</span>
+                            <code
+                              v-if="v.kodikLink"
+                              class="text-[11px] text-[var(--color-text-muted)] truncate flex-1 cursor-pointer hover:text-white"
+                              :title="v.kodikLink"
+                              @click="copyToClipboard(v.kodikLink!, 'kodik link copied')"
+                            >{{ shorten(v.kodikLink) }}</code>
+                            <span v-else class="text-[11px] text-[var(--color-text-muted)] italic flex-1">—</span>
+                          </div>
+                          <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] w-12 flex-shrink-0">mp4</span>
+                            <code
+                              v-if="v.mp4Link"
+                              class="text-[11px] text-[var(--color-neon-green)] truncate flex-1 cursor-pointer hover:underline"
+                              :title="v.mp4Link"
+                              @click="copyToClipboard(v.mp4Link!, 'mp4 link copied')"
+                            >{{ shorten(v.mp4Link) }}</code>
+                            <span v-else class="text-[11px] text-[var(--color-text-muted)] italic flex-1">
+                              not decoded — press Decode
+                            </span>
+                          </div>
+                        </div>
                       </td>
                       <td class="px-4 py-2.5">
                         <template v-if="isDownloading(v.id)">
-                          <div class="flex flex-col gap-1 min-w-[120px]">
+                          <div class="flex flex-col gap-1 min-w-[160px]">
                             <div class="flex items-center gap-1.5">
                               <span class="inline-block animate-spin text-[var(--color-neon-blue)] text-xs">⟳</span>
-                              <span class="text-xs text-[var(--color-neon-blue)]">
-                                {{ getProgressPercent(v.id) }}%
+                              <span class="text-xs text-[var(--color-neon-blue)] font-medium">
+                                {{ getProgressView(v.id)?.caption }}
                               </span>
-                              <span v-if="getProgress(v.id)" class="text-[10px] text-[var(--color-text-muted)]">
-                                {{ getProgress(v.id)!.downloaded }}/{{ getProgress(v.id)!.total }}
+                              <span class="ml-auto text-[10px] text-[var(--color-text-muted)] tabular-nums">
+                                {{ getProgressView(v.id)?.elapsedLabel }}
                               </span>
                             </div>
                             <div class="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
                               <div
+                                v-if="getProgressView(v.id)?.kind !== 'indeterminate'"
                                 class="h-full rounded-full bg-[var(--color-neon-blue)] transition-all duration-500"
-                                :style="{ width: `${getProgressPercent(v.id)}%` }"
+                                :style="{ width: `${getProgressView(v.id)?.percent ?? 0}%` }"
+                              />
+                              <div
+                                v-else
+                                class="h-full rounded-full bg-[var(--color-neon-blue)]/40 animate-pulse"
+                                style="width: 100%"
                               />
                             </div>
-                            <span v-if="getProgress(v.id)?.bytes" class="text-[10px] text-[var(--color-text-muted)]">
-                              {{ formatBytes(getProgress(v.id)?.bytes) }}
+                            <span v-if="getProgressView(v.id)?.subCaption" class="text-[10px] text-[var(--color-text-muted)]">
+                              {{ getProgressView(v.id)?.subCaption }}
+                            </span>
+                            <span v-if="getProgressView(v.id)?.phaseHint" class="text-[10px] text-[var(--color-text-muted)]/80 italic">
+                              {{ getProgressView(v.id)?.phaseHint }}
                             </span>
                           </div>
                         </template>
@@ -764,31 +984,86 @@ onUnmounted(stopAllPolling)
         </div>
       </Teleport>
 
-      <!-- Download progress overlay -->
+      <!-- Download progress overlay (shows all active downloads) -->
       <Teleport to="body">
         <div
-          v-if="autoPlayAfterDownload != null"
-          class="fixed bottom-6 right-6 z-40 glass-card p-4 min-w-[280px] border border-[var(--color-neon-blue)]/30"
+          v-if="activeDownloadIds.length > 0"
+          class="fixed bottom-6 right-6 z-40 flex flex-col gap-2 max-w-[340px]"
         >
-          <div class="flex items-center gap-2 mb-2">
-            <span class="inline-block animate-spin text-[var(--color-neon-blue)]">⟳</span>
-            <span class="text-sm font-medium">Downloading video...</span>
-          </div>
-          <template v-if="getProgress(autoPlayAfterDownload)">
+          <div
+            v-for="vid in activeDownloadIds"
+            :key="vid"
+            class="glass-card p-4 border"
+            :class="vid === autoPlayAfterDownload
+              ? 'border-[var(--color-neon-blue)]/50 shadow-lg shadow-[var(--color-neon-blue)]/20'
+              : 'border-[var(--color-neon-blue)]/30'"
+          >
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="flex items-center gap-2">
+                <span class="inline-block animate-spin text-[var(--color-neon-blue)]">⟳</span>
+                <span class="text-sm font-medium">
+                  {{ getProgressView(vid)?.caption ?? 'Downloading' }}
+                </span>
+              </div>
+              <span class="text-[10px] text-[var(--color-text-muted)] tabular-nums">
+                variant {{ vid }} · {{ getProgressView(vid)?.elapsedLabel ?? '0s' }}
+              </span>
+            </div>
             <div class="w-full h-2 rounded-full bg-white/5 overflow-hidden mb-1.5">
               <div
+                v-if="getProgressView(vid)?.kind !== 'indeterminate'"
                 class="h-full rounded-full bg-gradient-to-r from-[var(--color-neon-blue)] to-[var(--color-neon-green)] transition-all duration-500"
-                :style="{ width: `${getProgressPercent(autoPlayAfterDownload)}%` }"
+                :style="{ width: `${getProgressView(vid)?.percent ?? 0}%` }"
+              />
+              <div
+                v-else
+                class="h-full rounded-full bg-[var(--color-neon-blue)]/40 animate-pulse"
+                style="width: 100%"
               />
             </div>
-            <div class="flex justify-between text-[10px] text-[var(--color-text-muted)]">
-              <span>{{ getProgress(autoPlayAfterDownload)!.downloaded }} / {{ getProgress(autoPlayAfterDownload)!.total }} segments</span>
-              <span>{{ formatBytes(getProgress(autoPlayAfterDownload)!.bytes) }}</span>
+            <p v-if="getProgressView(vid)?.subCaption" class="text-[10px] text-[var(--color-text-muted)]">
+              {{ getProgressView(vid)?.subCaption }}
+            </p>
+            <p v-if="getProgressView(vid)?.phaseHint" class="text-[10px] text-[var(--color-text-muted)]/80 italic mt-0.5">
+              {{ getProgressView(vid)?.phaseHint }}
+            </p>
+            <p v-if="vid === autoPlayAfterDownload" class="text-[10px] text-[var(--color-neon-blue)] mt-1.5">
+              ▶ Will play automatically when ready
+            </p>
+          </div>
+        </div>
+      </Teleport>
+
+      <!-- Toast notifications -->
+      <Teleport to="body">
+        <div class="fixed top-6 right-6 z-50 flex flex-col gap-2 w-[320px] max-w-[calc(100vw-3rem)]">
+          <div
+            v-for="t in toasts"
+            :key="t.id"
+            class="glass-card p-3 border flex items-start gap-2 cursor-pointer transition-all duration-200 hover:translate-x-[-2px]"
+            :class="{
+              'border-[var(--color-neon-green)]/40': t.kind === 'success',
+              'border-[var(--color-neon-red)]/40': t.kind === 'error',
+              'border-[var(--color-neon-blue)]/40': t.kind === 'info',
+            }"
+            @click="dismissToast(t.id)"
+          >
+            <span
+              class="text-sm flex-shrink-0"
+              :class="{
+                'text-[var(--color-neon-green)]': t.kind === 'success',
+                'text-[var(--color-neon-red)]': t.kind === 'error',
+                'text-[var(--color-neon-blue)]': t.kind === 'info',
+              }"
+            >
+              {{ t.kind === 'success' ? '✓' : t.kind === 'error' ? '✗' : 'ℹ' }}
+            </span>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium leading-tight">{{ t.title }}</p>
+              <p v-if="t.body" class="text-[10px] text-[var(--color-text-muted)] mt-0.5 break-all">{{ t.body }}</p>
             </div>
-          </template>
-          <p class="text-[10px] text-[var(--color-text-muted)] mt-1.5">
-            Video will play automatically when ready
-          </p>
+            <button class="text-[var(--color-text-muted)] hover:text-white text-xs">×</button>
+          </div>
         </div>
       </Teleport>
     </template>
