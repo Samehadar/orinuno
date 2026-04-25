@@ -148,4 +148,87 @@ class ExportDataServiceTest {
         when(contentRepository.findById(999L)).thenReturn(Optional.empty());
         assertThat(exportDataService.getExportData(999L)).isEmpty();
     }
+
+    @Test
+    @DisplayName("Should expose poster_url_original from material_data as posterUrl")
+    void shouldExposePosterUrlOriginal() {
+        KodikContent content =
+                KodikContent.builder()
+                        .id(1L)
+                        .type("movie")
+                        .title("Test")
+                        .materialData(
+                                "{\"poster_url\":\"https://kp.example/small.jpg\","
+                                    + "\"poster_url_original\":\"https://kp.example/orig.jpg\"}")
+                        .build();
+
+        when(contentRepository.findById(1L)).thenReturn(Optional.of(content));
+        when(episodeVariantRepository.findByContentId(1L))
+                .thenReturn(
+                        List.of(
+                                KodikEpisodeVariant.builder()
+                                        .id(1L)
+                                        .contentId(1L)
+                                        .seasonNumber(0)
+                                        .episodeNumber(0)
+                                        .mp4Link("https://cdn.com/v.mp4")
+                                        .build()));
+
+        ContentExportDto dto = exportDataService.getExportData(1L).orElseThrow();
+        assertThat(dto.posterUrl()).isEqualTo("https://kp.example/orig.jpg");
+    }
+
+    @Test
+    @DisplayName("Should fall back to poster_url when poster_url_original is missing")
+    void shouldFallBackToPosterUrl() {
+        KodikContent content =
+                KodikContent.builder()
+                        .id(2L)
+                        .type("movie")
+                        .title("Test 2")
+                        .materialData("{\"poster_url\":\"https://kp.example/small.jpg\"}")
+                        .build();
+
+        when(contentRepository.findById(2L)).thenReturn(Optional.of(content));
+        when(episodeVariantRepository.findByContentId(2L))
+                .thenReturn(
+                        List.of(
+                                KodikEpisodeVariant.builder()
+                                        .id(2L)
+                                        .contentId(2L)
+                                        .seasonNumber(0)
+                                        .episodeNumber(0)
+                                        .mp4Link("https://cdn.com/v.mp4")
+                                        .build()));
+
+        ContentExportDto dto = exportDataService.getExportData(2L).orElseThrow();
+        assertThat(dto.posterUrl()).isEqualTo("https://kp.example/small.jpg");
+    }
+
+    @Test
+    @DisplayName("Should return null posterUrl when material_data is empty")
+    void shouldReturnNullPosterUrlWhenMaterialDataEmpty() {
+        KodikContent content =
+                KodikContent.builder()
+                        .id(3L)
+                        .type("movie")
+                        .title("Test 3")
+                        .materialData(null)
+                        .build();
+
+        when(contentRepository.findById(3L)).thenReturn(Optional.of(content));
+        when(episodeVariantRepository.findByContentId(3L))
+                .thenReturn(
+                        List.of(
+                                KodikEpisodeVariant.builder()
+                                        .id(3L)
+                                        .contentId(3L)
+                                        .seasonNumber(0)
+                                        .episodeNumber(0)
+                                        .mp4Link("https://cdn.com/v.mp4")
+                                        .build()));
+
+        ContentExportDto dto = exportDataService.getExportData(3L).orElseThrow();
+        assertThat(dto.posterUrl()).isNull();
+    }
 }

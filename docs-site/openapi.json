@@ -870,6 +870,10 @@
                     "shikimoriId": {
                         "type": "string"
                     },
+                    "posterUrl": {
+                        "type": "string",
+                        "description": "Kinopoisk poster URL extracted from Kodik material_data (poster_url_original preferred over poster_url). Null if material_data is missing or has no poster fields."
+                    },
                     "screenshots": {
                         "type": "array",
                         "items": {
