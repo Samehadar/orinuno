@@ -12,6 +12,7 @@ public record ContentExportDto(
         String kinopoiskId,
         String imdbId,
         String shikimoriId,
+        String posterUrl,
         List<String> screenshots,
         Boolean camrip,
         Boolean lgbt,

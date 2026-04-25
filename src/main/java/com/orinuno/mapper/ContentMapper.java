@@ -116,6 +116,9 @@ public class ContentMapper {
                                 })
                         .toList();
 
+        Map<String, Object> materialData = parseMaterialData(content.getMaterialData());
+        String posterUrl = extractPosterUrl(materialData);
+
         return new ContentExportDto(
                 content.getId(),
                 content.getType(),
@@ -126,10 +129,26 @@ public class ContentMapper {
                 content.getKinopoiskId(),
                 content.getImdbId(),
                 content.getShikimoriId(),
+                posterUrl,
                 parseScreenshots(content.getScreenshots()),
                 content.getCamrip(),
                 content.getLgbt(),
                 seasons);
+    }
+
+    private String extractPosterUrl(Map<String, Object> materialData) {
+        if (materialData == null) {
+            return null;
+        }
+        Object original = materialData.get("poster_url_original");
+        if (original instanceof String s && !s.isBlank()) {
+            return s;
+        }
+        Object regular = materialData.get("poster_url");
+        if (regular instanceof String s && !s.isBlank()) {
+            return s;
+        }
+        return null;
     }
 
     private Map<String, Object> parseMaterialData(String json) {
