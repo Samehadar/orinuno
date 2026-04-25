@@ -38,6 +38,55 @@
 **Priority:** Low
 **Context:** `spotbugs-maven-plugin` is configured in `pom.xml` but only runs on demand (`mvn spotbugs:check`). The codebase currently has zero findings after applying `spotbugs-exclude.xml`, so promoting the check to `mvn verify` (and adding it to `ci.yml`) is a cheap, non-breaking upgrade. Defer until we're confident the exclusion filter hasn't hidden anything important and we have baseline findings after the next round of features.
 
+## Pre-commit Hook for Spotless / SpotBugs
+
+**Priority:** Low
+**Discovered:** 2026-04-26 (после коммитов `feat(export): expose posterUrl ...` и
+`docs(backlog): record Phase 0 live-run findings ...` — оба прошли без
+автоматической проверки стиля).
+
+**Context:** `spotless-maven-plugin` сконфигурирован с `<phase>validate</phase>`,
+а `spotbugs-maven-plugin` вообще без `<executions>` и с
+`<failOnError>false</failOnError>`. Это значит:
+
+- Spotless срабатывает только на Maven-командах, проходящих через фазу
+  `validate` (`mvn compile/test/package/verify/...`), и **никогда** на
+  `git commit` — git ничего не запускает (см. ниже).
+- SpotBugs нигде не запускается автоматически — даже `mvn verify` его не
+  трогает; нужен явный `mvn spotbugs:check`, и тот не ломает билд.
+- В `.git/hooks/` лежат только дефолтные `*.sample` (неактивные шаблоны
+  от `git init`). `core.hooksPath` не переопределён. Husky / lefthook /
+  `pre-commit` framework тоже не установлены. Поэтому `git commit` идёт
+  напрямую, без какой-либо проверки.
+
+**Следствие:** можно закоммитить и запушить код с нарушениями
+google-java-format (AOSP) и/или с новыми SpotBugs-предупреждениями.
+Сейчас спасает только то, что Composer обычно держит стиль, и что мы
+вручную помним прогнать `mvn spotless:check` перед коммитом.
+
+**Предлагаемое решение (один из вариантов или их комбинация):**
+
+1. `.pre-commit-config.yaml` в корне + `pre-commit install` после клона.
+   Хук вида: на staged `*.java` запускать `mvn -q spotless:apply`
+   (или `spotless:check`, чтобы не молча переписывать файлы) и
+   `git add -u` обратно. Стандартный путь, переносим между машинами.
+2. Сырой `.git/hooks/pre-commit` в репозитории + `core.hooksPath` или
+   `git-hooks-installer` script. Минимально, но требует ручной установки
+   у каждого разработчика.
+3. Привязать SpotBugs к фазе `verify` с `failOnError=true` — закрывает
+   серверный CI-скан, но не локальные коммиты.
+4. Добавить `mvn -q spotless:check spotbugs:check` шагом в
+   `.github/workflows/ci.yml` — самое надёжное (CI всегда отработает),
+   но обратная связь медленная (после push).
+
+Связано с существующим "SpotBugs — Promote to CI" пунктом выше, но
+шире: там только про CI-step, тут — про локальную обратную связь до
+push.
+
+**Scope:** касается только orinuno. backend-master / parser-kodik в
+этом раунде не трогаем — там и Spotless/SpotBugs не подключены, и
+любая правка quality-pipeline затронет другие парсеры.
+
 ## `mp4Link='true'` Data Quality (CLOSED 2026-04-25)
 
 **Status:** CLOSED — `KodikVideoDecoderService.parseVideoResponse` used to embed a `_geo_blocked: "true"` sentinel into the quality map whenever Kodik returned a geo-blocked placeholder. `ParserService.selectBestQuality` then happily picked the string `"true"` as the "best" quality, and the export surface returned `mp4Link: "true"` to consumers. Fixed in three places: decoder now returns an empty map on geo-block (no sentinel); `ParserService.selectBestQuality`, `VideoDownloadService.pickBestQualityUrl`, and `StreamController.pickBestQuality` all defensively skip keys starting with `_` and values that do not start with `http`. Liquibase migration `20260425010000_cleanup_invalid_mp4_link.sql` nulls out pre-existing bad rows on first boot. Covered by `KodikVideoDecoderServiceTest.parseVideoResponseReturnsEmptyForGeoBlocked` and `ParserServiceTest.selectBestQualityIgnoresSentinelsAndNonHttpValues`.
