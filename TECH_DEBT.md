@@ -47,6 +47,77 @@ makes after-the-fact investigation of intermittent Kodik shape changes harder
 `orinuno.requests.list-debug-enabled=false`) that records the raw response
 into a new `kodik_list_debug_log` table for offline replay/diff. Default off.
 
+## TD-PR-4: /list nextPage cursor — token leakage
+
+**Priority:** Low
+**Discovered:** 2026-04-26 (live integration: parser-kodik discovery loop ↔
+orinuno /api/v1/kodik/list).
+
+**Context:** `KodikListProxyService` rewrites the upstream Kodik
+`next_page`/`prev_page` URL into a relative proxy URL of the form
+`/api/v1/kodik/list?next_page=<URL_ENCODED_UPSTREAM>` so callers can pass it
+back unchanged. The encoded upstream URL still contains
+`token=<kodik-token>` because `KodikApiClient.postForMapAbsoluteUrl(...)` POSTs
+the raw absolute URL to Kodik and there is no token-injection branch on that
+path. Net effect: the Kodik token bleeds into parser-kodik's
+`kodik_discovery_state.last_next_page` column.
+
+**Why it's only Low:** parser-kodik and orinuno share the same trust boundary
+in the current deployment (both internal services, both behind the same API
+key). The leak is *intra-stack* and never reaches an external client.
+
+**Proposed solution (when we either open the proxy externally or rotate
+tokens often enough to care):**
+
+1. **Cursor-token approach (preferred).** Maintain a small short-lived
+   `kodik_list_cursor` map keyed by an opaque random token; the response
+   surfaces `?cursor=<opaque>` instead of the upstream URL. On follow-up
+   the controller resolves the opaque cursor → upstream URL → forwards.
+2. **Strip + re-inject.** Strip the `token=` query parameter before
+   encoding; teach `postForMapAbsoluteUrl` to reattach the current
+   `tokenRegistry.currentToken(...)` if the URL has none. Slightly
+   simpler but couples token plumbing across two code paths.
+
+**Not blocking for Phase 2.** Tracked separately so it does not get lost.
+
+## TD-PR-5: Single shared scheduler thread blocks RequestWorker
+
+**Priority:** Medium → fixed in Phase 2 live-run, but follow-ups remain
+**Discovered:** 2026-04-26 (live integration: 20 PENDING parse requests
+were never claimed by `RequestWorker.tick()`).
+
+**Context:** Spring Boot's default `TaskScheduler` is a single-threaded
+`ThreadPoolTaskScheduler` (pool=1). orinuno currently has multiple
+`@Scheduled` methods sharing that pool:
+- `RequestWorker.tick()` — every 2s, blocking;
+- `RequestWorker.recoverStale()` — every 60s, blocking;
+- `ParserService.refreshExpiredLinks()` — every 1h, **synchronous**
+  `.block()` over a `Flux` of up to 50 expired variants × 30s decoder
+  timeout × 3 retries (so the first invocation can pin the single
+  scheduler thread for hours, especially under geo-block).
+- `ParserService.retryFailedDecodes()` — same shape, init-delay 30 min.
+- `KodikTokenLifecycle.validate()` — every 6h.
+
+**Symptom:** under live VPN-induced geo-block, `refreshExpiredLinks` fired
+first and held the scheduler thread; `RequestWorker.tick()` never ran,
+so the parse-request queue stayed PENDING forever even though
+`POST /api/v1/parse/requests` kept accepting new rows.
+
+**Quick fix (already landed in `OrinunoApplication`):** explicit
+`ThreadPoolTaskScheduler` bean with `poolSize=4`. Independent
+`@Scheduled` jobs now run on separate threads.
+
+**Outstanding follow-ups:**
+1. **Bound the blocking jobs.** `refreshExpiredLinks` / `retryFailedDecodes`
+   should be capped per tick (e.g. `min(batchSize, 5)` and a hard wall-clock
+   timeout) so a single bad batch can't pin a worker for an hour.
+2. **Per-job pools.** Split into two schedulers (`request-worker-*` and
+   `decoder-maintenance-*`) so background decode-refresh can never starve
+   the parse-request queue, even under contention.
+3. **Observability.** Emit Micrometer gauges for `pending parse requests`
+   and `worker tick latency` so this regression would have surfaced in
+   Grafana instead of via "why is the queue not draining" investigation.
+
 ## TD-PR-3: Phase2EndToEndIT
 
 **Priority:** Medium
