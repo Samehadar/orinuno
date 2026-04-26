@@ -143,6 +143,60 @@ orinuno:
     max-page-limit: 200
 ```
 
+## kodik-parser discovery flow
+
+The full cross-service picture for the **discover → parse → consume → meter**
+journey looks like this:
+
+```mermaid
+flowchart LR
+    subgraph PK["kodik-parser"]
+        DSC[KodikDiscoveryScheduler]
+        EXP[KodikExportScheduler]
+        STATE[(parser_kodik MySQL)]
+    end
+
+    subgraph OR["orinuno (this service)"]
+        LISTC[KodikListController]
+        PRC[ParseRequestController]
+        EXC[ContentExportController]
+        WORK[RequestWorker]
+        SVC[ParserService]
+        ORDB[(orinuno MySQL)]
+    end
+
+    KODIK[(Kodik API)]
+    METER[meter-api]
+    MINIO[(MinIO)]
+
+    DSC -- "GET /list" --> LISTC
+    DSC -- "POST /parse/requests" --> PRC
+    DSC -- "GET /parse/requests?limit=0 (X-Total-Count)" --> PRC
+    PRC --> ORDB
+    WORK <--> ORDB
+    WORK --> SVC
+    LISTC --> SVC
+    SVC --> KODIK
+
+    EXP -- "GET /export/ready, /export/&lcub;id&rcub;" --> EXC
+    EXC --> ORDB
+    EXP --> METER
+    EXP --> MINIO
+
+    DSC <--> STATE
+    EXP <--> STATE
+```
+
+The **only** synchronous coupling between kodik-parser and orinuno is
+discovery → submit. After `POST /parse/requests` returns, the two
+services run independent loops that meet again only when
+`KodikExportScheduler` polls `/export/ready`. kodik-parser never reads
+`/parse/requests/{id}` to drive its state machine — that's the
+no-polling rule above.
+
+Full flow with timing details: see
+[kodik-parser/README → "Sequence: end-to-end"](https://github.com/corporate/downstream-repo/blob/main/kodik-parser/README.md#sequence-end-to-end-discover-one-new-title--land-in-meter).
+
 ## See also
 
 - [Kodik /list proxy](kodik-api-flow.md) — the discovery side (read).
