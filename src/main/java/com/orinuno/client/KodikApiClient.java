@@ -274,7 +274,7 @@ public class KodikApiClient {
     private Mono<Map<String, Object>> postForMapAbsoluteUrl(String absoluteUrl) {
         return kodikApiWebClient
                 .post()
-                .uri(absoluteUrl)
+                .uri(java.net.URI.create(absoluteUrl))
                 .retrieve()
                 .bodyToMono(
                         new org.springframework.core.ParameterizedTypeReference<

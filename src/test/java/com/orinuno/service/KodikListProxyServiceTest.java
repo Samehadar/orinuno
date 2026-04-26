@@ -62,7 +62,8 @@ class KodikListProxyServiceTest {
         assertThat(page).isNotNull();
         assertThat(page.schemaDriftObserved()).isFalse();
         assertThat(page.page().total()).isEqualTo(1);
-        assertThat(page.page().nextPage()).startsWith("https://kodik-api.com/list?next=");
+        assertThat(page.page().nextPage()).startsWith("/api/v1/kodik/list?next_page=");
+        assertThat(page.page().nextPage()).contains("kodik-api.com");
         assertThat(page.page().results()).hasSize(1);
         assertThat(page.page().results().get(0).id()).isEqualTo("kodik-001");
         assertThat(page.page().results().get(0).posterUrl())
