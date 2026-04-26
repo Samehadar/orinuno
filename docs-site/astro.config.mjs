@@ -78,6 +78,7 @@ export default defineConfig({
             { slug: 'architecture/hls-manifest' },
             { slug: 'architecture/video-download' },
             { slug: 'architecture/schema-drift' },
+            { slug: 'architecture/parse-requests' },
             { slug: 'architecture/database' },
           ],
         },
