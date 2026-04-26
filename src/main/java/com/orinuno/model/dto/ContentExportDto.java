@@ -16,6 +16,13 @@ public record ContentExportDto(
         List<String> screenshots,
         Boolean camrip,
         Boolean lgbt,
+        Integer lastSeason,
+        Integer lastEpisode,
+        Integer episodesCount,
+        String animeStatus,
+        String dramaStatus,
+        String allStatus,
+        Boolean ongoing,
         List<SeasonExportDto> seasons) {
     public record SeasonExportDto(Integer seasonNumber, List<EpisodeExportDto> episodes) {}
 
