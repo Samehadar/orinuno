@@ -118,21 +118,47 @@ so the parse-request queue stayed PENDING forever even though
    and `worker tick latency` so this regression would have surfaced in
    Grafana instead of via "why is the queue not draining" investigation.
 
-## TD-PR-3: Phase2EndToEndIT
+## TD-PR-3: Phase2EndToEndIT — **DONE** (2026-04-26)
 
-**Priority:** Medium
-**Context:** Phase 2 currently has unit + WebTestClient coverage. There is no
-end-to-end integration test covering the full
-`POST /parse/requests → worker tick → searchInternal → DONE → /export/ready`
-loop against a Testcontainers MySQL. Manual smoke is fine for Phase 2 cutover
-but should not be the long-term gate for refactors.
+**Status:** Implemented as
+`src/test/java/com/orinuno/integration/Phase2EndToEndIT.java` and gated
+behind the `e2e` Maven profile + JUnit 5 `@Tag("e2e")`.
 
-**Proposed solution:** `Phase2EndToEndIT` under
-`src/test/java/com/orinuno/integration/`, tagged `@Tag("e2e")` so we can run
-it on demand (`mvn -Pe2e verify`) without slowing the main test suite.
-Spin up Percona/MySQL via Testcontainers, mock Kodik with `MockWebServer`,
-seed a small content fixture, submit a request, wait for `phase=DONE`, hit
-`/api/v1/export/ready`, assert the seasons/episodes structure.
+**Coverage (4 tests, ~12s on cold MySQL container):**
+- `submitFlowReachesDone` — `POST /api/v1/parse/requests` → `RequestWorker`
+  claims via `SELECT … FOR UPDATE SKIP LOCKED` → mocked
+  `ParserService.searchInternal` returns a seeded `KodikContent` →
+  `markDone` writes `result_content_ids` → `GET /parse/requests/{id}`
+  reports `status=DONE` with the saved id.
+- `idempotentSubmitReturnsExistingActiveRequest` — second submit with
+  identical body returns 200 (not 201) and the same id, proving the
+  canonical-JSON SHA-256 idempotency key.
+- `exportReadyReturnsContentWithDecodedVariants` — pre-seeded
+  `kodik_content` + `kodik_episode_variant` (with `mp4_link`) shows up in
+  `GET /api/v1/export/ready` with the Phase 2 metadata fields
+  (`lastSeason`, `lastEpisode`, `episodesCount`) and the nested
+  seasons → episodes → variants tree.
+- `listLimitZeroExposesTotalCountHeader` — `GET /parse/requests?limit=0`
+  returns empty rows + `X-Total-Count` header (the contract
+  parser-kodik's discovery-loop relies on for backpressure).
+
+**How to run:**
+```sh
+mvn test -Pe2e -Dtest=Phase2EndToEndIT
+```
+Default `mvn test` skips it via `excludedGroups=e2e` in surefire so the
+fast unit suite stays under 5 seconds.
+
+**Wiring exercised for real:** Spring Boot context, Testcontainers
+MySQL 8 + Liquibase migrations, MyBatis mappers, HikariCP, full
+WebFlux stack via `WebTestClient`, scheduled `RequestWorker` ticking on
+the dedicated `orinuno-sched-*` thread pool.
+
+**Wiring deliberately mocked:** only the outermost
+`ParserService.searchInternal` boundary (so the test does not hit Kodik
+or Playwright). `KodikApiClient`, decoder, token registry are loaded
+with `validate-on-startup=false` and `playwright.enabled=false` so the
+context boots without external dependencies.
 
 ## Parse Rate Limiting
 

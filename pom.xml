@@ -164,6 +164,23 @@
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                        Include *IT classes alongside *Test/*Tests; e2e-tagged tests
+                        (Testcontainers, slow) are opt-in via the `e2e` Maven profile.
+                        Default `mvn test` skips them via excludedGroups=e2e.
+                    -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <excludedGroups>e2e</excludedGroups>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
                 <version>${spotless-maven-plugin.version}</version>
@@ -219,4 +236,32 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            E2E tests (Testcontainers MySQL, full Spring context, slow).
+            Activate with:  mvn test -Pe2e
+            Run a single class:  mvn test -Pe2e -Dtest=Phase2EndToEndIT
+        -->
+        <profile>
+            <id>e2e</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*Test.java</include>
+                                <include>**/*Tests.java</include>
+                                <include>**/*IT.java</include>
+                            </includes>
+                            <excludedGroups combine.self="override"/>
+                            <groups>e2e</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

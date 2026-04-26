@@ -1,11 +1,11 @@
 ---
 title: Testing
-description: Three test suites — unit, live integration, and API stability — plus how to run each one in isolation.
+description: Four test suites — unit, e2e, live integration, and API stability — plus how to run each one in isolation.
 ---
 
-Orinuno has three test suites. Most of the time you will only need the unit
-suite, which has no external dependencies. The other two require a valid
-Kodik token and — for the integration suite — Docker for Testcontainers.
+Orinuno has four test suites. Most of the time you will only need the unit
+suite, which has no external dependencies. The other three require either
+a valid Kodik token, Docker for Testcontainers, or both.
 
 ## Unit tests
 
@@ -26,6 +26,33 @@ What they cover:
 - `ProxyProviderServiceTest` — round-robin rotation.
 - `OpenSourceGuardTest` — asserts there are no imports from private
   projects. Keeps the standalone boundary clean.
+
+## Phase 2 e2e test (Testcontainers)
+
+`Phase2EndToEndIT` boots the full Spring context against a Testcontainers
+MySQL 8 container and exercises the parse-request log + export-ready
+flow end-to-end (HTTP → MyBatis → MySQL → scheduled `RequestWorker` →
+HTTP). Only the outermost `ParserService.searchInternal` boundary is
+mocked, so no Kodik token or network access is required.
+
+```sh
+mvn test -Pe2e -Dtest=Phase2EndToEndIT
+```
+
+Default `mvn test` skips it via `excludedGroups=e2e` so the unit suite
+stays fast (≈4s). The e2e run takes ~12s on a warm MySQL image.
+
+What it covers:
+
+- `POST /api/v1/parse/requests` → `RequestWorker.tick()` claims via
+  `SELECT … FOR UPDATE SKIP LOCKED` → `markDone` writes
+  `result_content_ids` → `GET /parse/requests/{id}` reports `DONE`.
+- Idempotent re-submit returns the same id (canonical-JSON SHA-256).
+- `GET /api/v1/export/ready` returns the seeded content with the
+  Phase 2 metadata fields (`lastSeason`, `lastEpisode`,
+  `episodesCount`) and the nested seasons/episodes/variants tree.
+- `GET /parse/requests?limit=0` exposes `X-Total-Count` (the
+  contract parser-kodik's discovery loop reads for backpressure).
 
 ## Live integration tests
 
