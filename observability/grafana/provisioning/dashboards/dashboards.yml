@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: orinuno
+    orgId: 1
+    folder: orinuno
+    type: file
+    disableDeletion: false
+    editable: true
+    allowUiUpdates: true
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

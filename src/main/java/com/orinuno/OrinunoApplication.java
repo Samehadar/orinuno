@@ -26,16 +26,32 @@ public class OrinunoApplication {
     }
 
     /**
-     * Custom {@link TaskScheduler} so independent {@link
-     * org.springframework.scheduling.annotation.Scheduled} jobs (request worker, link refresh,
-     * stale-recovery, token validation) don't queue behind each other on Spring's default
-     * single-threaded pool. See TECH_DEBT TD-PR-5.
+     * Pool dedicated to short-lived {@link org.springframework.scheduling.annotation.Scheduled}
+     * jobs that must remain responsive: parse-request worker tick, stale recovery, token
+     * revalidation. Long-running decoder maintenance lives on its own pool (see {@link
+     * #decoderMaintenanceScheduler()}) so a stuck mp4 batch can never starve the parse queue. See
+     * TECH_DEBT TD-PR-5.
      */
     @Bean
     public TaskScheduler taskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(4);
+        scheduler.setPoolSize(2);
         scheduler.setThreadNamePrefix("orinuno-sched-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(false);
+        scheduler.initialize();
+        return scheduler;
+    }
+
+    /**
+     * Pool reserved for the blocking decoder maintenance jobs (link TTL refresh, failed-decode
+     * retry). Isolated from {@link #taskScheduler()} so a slow Playwright batch can never block
+     * {@code RequestWorker.tick()} from claiming new parse requests. See TECH_DEBT TD-PR-5.
+     */
+    @Bean(name = "decoderMaintenanceTaskScheduler")
+    public TaskScheduler decoderMaintenanceTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("orinuno-decoder-maint-");
         scheduler.setWaitForTasksToCompleteOnShutdown(false);
         scheduler.initialize();
         return scheduler;

@@ -41,6 +41,19 @@ public class OrinunoProperties {
         private int linkTtlHours = 20;
         private long refreshIntervalMs = 3600000;
         private int refreshBatchSize = 50;
+        private MaintenanceProperties maintenance = new MaintenanceProperties();
+    }
+
+    /**
+     * Bounds for the long-running decoder maintenance jobs ({@code refreshExpiredLinks}, {@code
+     * retryFailedDecodes}). Without these caps a single bad batch — for example, all 50 variants
+     * timing out under VPN-induced geo-block — could pin a worker thread for tens of minutes and
+     * starve unrelated scheduled jobs. See TECH_DEBT TD-PR-5.
+     */
+    @Data
+    public static class MaintenanceProperties {
+        private int maxBatchPerTick = 10;
+        private long tickTimeoutSeconds = 600;
     }
 
     private PlaywrightProperties playwright = new PlaywrightProperties();

@@ -25,15 +25,76 @@ curl -sS http://localhost:8085/api/v1/health/decoder | jq
 ## Prometheus
 
 Actuator exposes Prometheus metrics on the management port (default
-`8081`). Scrape path: `/actuator/prometheus`. Interesting series:
+`8081`). Scrape path: `/actuator/prometheus`.
 
-- `kodik_api_requests_total{endpoint,status}` — per-endpoint call counts.
+### Parse-request log (Phase 2.5)
+
+Added in TD-PR-5 to make the async parse-request worker observable.
+Without these the only way to spot a stuck `RequestWorker` was tailing
+logs.
+
+| Series | Type | Labels | What it tells you |
+| --- | --- | --- | --- |
+| `orinuno_parse_requests` | gauge | `status=PENDING\|RUNNING\|DONE\|FAILED` | Current row count per status. Sustained high `PENDING` ⇒ worker isn't draining. |
+| `orinuno_parse_request_worker_tick_seconds` | timer | `quantile=0.5,0.95,0.99` | Wall-clock latency of one `RequestWorker.tick()` (claim → process → mark terminal). |
+| `orinuno_parse_request_processing_seconds` | timer | `outcome=DONE\|FAILED`, `quantile=…` | Time from claim to terminal status, split by outcome. |
+| `orinuno_parse_requests_completed_total` | counter | `outcome=DONE\|FAILED` | Lifetime terminal-state transitions (use `rate()` for throughput). |
+
+### Other interesting series
+
+- `kodik_tokens_count{tier=stable|unstable|legacy|dead}` — token-pool depth per tier.
+- `http_server_requests_seconds_count` — standard Micrometer HTTP metrics for the REST API.
+- `kodik_api_requests_total{endpoint,status}` — per-endpoint Kodik client call counts.
 - `kodik_decoder_attempts_total{outcome}` — decoder successes vs failures.
-- `http_server_requests_seconds_count` — standard Micrometer HTTP metrics
-  for the REST API.
 
-Add them to your Grafana dashboard as needed; no reference dashboard is
-shipped yet.
+## Local Grafana stack
+
+The repo ships a Prometheus + Grafana stack pre-wired to scrape orinuno
+and load a reference dashboard. Both services live behind the
+`observability` Compose profile, so plain `docker compose up` stays
+minimal.
+
+### Bring it up
+
+```sh
+docker compose --profile observability up -d prometheus grafana
+```
+
+URLs once both are up:
+
+| Service | URL | Notes |
+| --- | --- | --- |
+| Prometheus | http://localhost:9090 | Scrapes `/actuator/prometheus` every 5 s |
+| Grafana | http://localhost:3001 | `admin / admin`, anonymous `Viewer` allowed |
+| Dashboard | [`orinuno → orinuno — parse requests`](http://localhost:3001/d/orinuno-parse-requests) | Auto-provisioned |
+
+Prometheus is configured with **two** static targets:
+
+- `app:8081` — when orinuno itself runs as the `app` Compose service.
+- `host.docker.internal:8081` — when orinuno runs on the developer's
+  host (e.g. `mvn spring-boot:run`).
+
+Whichever target is live shows `up=1`; the other shows `up=0` and is
+ignored by the dashboard (which aggregates over the `service=orinuno`
+label).
+
+### Files
+
+```
+observability/
+├── prometheus/
+│   └── prometheus.yml                    # scrape config (5s interval)
+└── grafana/
+    ├── provisioning/
+    │   ├── datasources/datasource.yml    # Prometheus auto-wired
+    │   └── dashboards/dashboards.yml     # auto-loads /var/lib/grafana/dashboards
+    └── dashboards/
+        └── orinuno-parse-requests.json   # reference dashboard
+```
+
+The dashboard JSON is editable in Grafana (provisioning leaves
+`allowUiUpdates: true`); commit changes back to the file to keep the
+preset version up to date.
 
 ## Schema drift telemetry
 

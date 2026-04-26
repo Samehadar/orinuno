@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -167,11 +166,16 @@ public class ParserService {
                 .then();
     }
 
-    /** PF-I3: Scheduled task to refresh expired mp4 links. */
-    @Scheduled(fixedDelayString = "${orinuno.decoder.refresh-interval-ms:3600000}")
+    /**
+     * PF-I3: Refresh expired mp4 links. Triggered by {@code DecoderMaintenanceScheduler} on the
+     * dedicated {@code orinuno-decoder-maint-*} pool. Bounded by {@code
+     * orinuno.decoder.maintenance.max-batch-per-tick} (cap) and {@code
+     * orinuno.decoder.maintenance.tick-timeout-seconds} (wall-clock) so a single bad batch can't
+     * pin the maintenance pool indefinitely. See TECH_DEBT TD-PR-5.
+     */
     public void refreshExpiredLinks() {
         int ttlHours = properties.getDecoder().getLinkTtlHours();
-        int batchSize = properties.getDecoder().getRefreshBatchSize();
+        int batchSize = boundedBatchSize();
         List<KodikEpisodeVariant> expired =
                 episodeVariantRepository.findExpiredLinks(ttlHours, batchSize);
 
@@ -180,21 +184,20 @@ public class ParserService {
             return;
         }
 
-        log.info("🔄 Refreshing {} expired mp4 links (TTL={}h)", expired.size(), ttlHours);
-
-        Flux.fromIterable(expired)
-                .delayElements(Duration.ofMillis(properties.getKodik().getRequestDelayMs()))
-                .flatMap(variant -> decodeVariant(variant), 1)
-                .then()
-                .block();
+        log.info(
+                "🔄 Refreshing {} expired mp4 links (TTL={}h, cap={})",
+                expired.size(),
+                ttlHours,
+                batchSize);
+        runBoundedDecodeBatch("refreshExpiredLinks", expired);
     }
 
-    /** PF-I4: Scheduled task to retry previously failed decodes. */
-    @Scheduled(
-            fixedDelayString = "${orinuno.decoder.refresh-interval-ms:3600000}",
-            initialDelayString = "1800000")
+    /**
+     * PF-I4: Retry previously failed decodes. Same bounding rules as {@link
+     * #refreshExpiredLinks()}. See TECH_DEBT TD-PR-5.
+     */
     public void retryFailedDecodes() {
-        int batchSize = properties.getDecoder().getRefreshBatchSize();
+        int batchSize = boundedBatchSize();
         List<KodikEpisodeVariant> failed = episodeVariantRepository.findFailedDecode(batchSize);
 
         if (failed.isEmpty()) {
@@ -202,13 +205,35 @@ public class ParserService {
             return;
         }
 
-        log.info("🔁 Retrying {} previously failed decodes", failed.size());
+        log.info("🔁 Retrying {} previously failed decodes (cap={})", failed.size(), batchSize);
+        runBoundedDecodeBatch("retryFailedDecodes", failed);
+    }
 
-        Flux.fromIterable(failed)
-                .delayElements(Duration.ofMillis(properties.getKodik().getRequestDelayMs()))
-                .flatMap(variant -> decodeVariant(variant), 1)
-                .then()
-                .block();
+    private int boundedBatchSize() {
+        int rawBatch = properties.getDecoder().getRefreshBatchSize();
+        int cap = properties.getDecoder().getMaintenance().getMaxBatchPerTick();
+        return Math.max(1, Math.min(rawBatch, cap));
+    }
+
+    private void runBoundedDecodeBatch(String label, List<KodikEpisodeVariant> batch) {
+        Duration tickTimeout =
+                Duration.ofSeconds(
+                        properties.getDecoder().getMaintenance().getTickTimeoutSeconds());
+        try {
+            Flux.fromIterable(batch)
+                    .delayElements(Duration.ofMillis(properties.getKodik().getRequestDelayMs()))
+                    .flatMap(variant -> decodeVariant(variant), 1)
+                    .then()
+                    .block(tickTimeout);
+        } catch (IllegalStateException timeout) {
+            log.warn(
+                    "⚠️ {} aborted: tick wall-clock timeout {}s exceeded ({} variants in batch)",
+                    label,
+                    tickTimeout.toSeconds(),
+                    batch.size());
+        } catch (RuntimeException ex) {
+            log.warn("⚠️ {} aborted: {}", label, ex.toString());
+        }
     }
 
     private Mono<Void> decodeAllPending(
