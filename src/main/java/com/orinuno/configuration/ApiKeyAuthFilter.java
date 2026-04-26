@@ -41,6 +41,7 @@ public class ApiKeyAuthFilter implements WebFilter {
         return path.startsWith("/api/v1/parse")
                 || path.startsWith("/api/v1/export")
                 || path.startsWith("/api/v1/content")
-                || path.startsWith("/api/v1/download");
+                || path.startsWith("/api/v1/download")
+                || path.startsWith("/api/v1/kodik");
     }
 }
