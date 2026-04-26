@@ -16,6 +16,7 @@ public class OrinunoProperties {
     private DecoderProperties decoder = new DecoderProperties();
     private ProxyProperties proxy = new ProxyProperties();
     private StorageProperties storage = new StorageProperties();
+    private RequestsProperties requests = new RequestsProperties();
 
     @Data
     public static class KodikProperties {
@@ -91,5 +92,16 @@ public class OrinunoProperties {
     public static class ReferenceCacheProperties {
         private boolean enabled = true;
         private long ttlSeconds = 21_600;
+    }
+
+    @Data
+    public static class RequestsProperties {
+        private long workerPollMs = 2_000;
+        private long staleRecoveryMs = 60_000;
+        private long staleAfterMs = 300_000;
+        private long progressFlushMs = 1_000;
+        private int maxRetries = 3;
+        private int defaultPageLimit = 50;
+        private int maxPageLimit = 200;
     }
 }
