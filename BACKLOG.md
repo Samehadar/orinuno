@@ -33,12 +33,14 @@
 
 Текущая модель — один worker × один поток × один инстанс. Когда / если упрёмся в throughput, см. **TECH_DEBT.md → TD-PR-1** (worker pool, fully reactive boundary).
 
-### TD-1a: openapi.json snapshot — пересобрать после Phase 2
+### TD-1a: openapi.json snapshot — пересобрать после Phase 2 — **DONE** (2026-04-26)
 
-**Приоритет:** Низкий
-**Статус:** Pending — мелкая операционная задача.
-
-`docs-site/openapi.json` собирается живым curl'ом с `/v3/api-docs` (см. `docs-site/README.md`). После Phase 2 надо поднять сервис локально и обновить snapshot, чтобы starlight-openapi показал `parse-requests` и `kodik/list`. Пока документация ссылается на новый раздел `architecture/parse-requests` напрямую — критичной потери нет.
+**Статус:** Реализовано. `docs-site/openapi.json` пересобран живым curl'ом с
+`http://localhost:8085/v3/api-docs` после Phase 2. Snapshot теперь содержит
+`/api/v1/parse/requests`, `/api/v1/parse/requests/{id}`,
+`/api/v1/parse/decode/variant/{variantId}`, `/api/v1/kodik/list` плюс
+обновлённые схемы для `/api/v1/export/*` (поля `ongoing`, `lastSeason`,
+`lastEpisode`, `episodesCount`, `*Status`).
 
 ### TD-2: ParseRequestDto валидация
 
