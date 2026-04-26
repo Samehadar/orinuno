@@ -82,6 +82,14 @@ orinuno:
     reference:
       enabled: ${ORINUNO_CACHE_REFERENCE_ENABLED:true}
       ttl-seconds: ${ORINUNO_CACHE_REFERENCE_TTL_SECONDS:21600}
+  requests:
+    worker-poll-ms: ${ORINUNO_REQUESTS_WORKER_POLL_MS:2000}
+    stale-recovery-ms: ${ORINUNO_REQUESTS_STALE_RECOVERY_MS:60000}
+    stale-after-ms: ${ORINUNO_REQUESTS_STALE_AFTER_MS:300000}
+    progress-flush-ms: ${ORINUNO_REQUESTS_PROGRESS_FLUSH_MS:1000}
+    max-retries: ${ORINUNO_REQUESTS_MAX_RETRIES:3}
+    default-page-limit: ${ORINUNO_REQUESTS_DEFAULT_PAGE_LIMIT:50}
+    max-page-limit: ${ORINUNO_REQUESTS_MAX_PAGE_LIMIT:200}
   drift:
     enabled: ${ORINUNO_DRIFT_ENABLED:true}
     item-sampling:
