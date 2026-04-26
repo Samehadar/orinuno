@@ -15,6 +15,7 @@
 | 4 | [TTL refresh & retry](#4-ttl-refresh--retry-background) | [docs/4_ttl_refresh.puml](docs/4_ttl_refresh.puml) | PlantUML sequence |
 | 5 | [HLS manifest retrieval](#5-hls-manifest-retrieval) | [docs/7_hls_manifest.puml](docs/7_hls_manifest.puml) | PlantUML sequence |
 | 6 | [Video download (Playwright + HLS)](#6-video-download-via-playwright--hls) | [docs/6_video_download_playwright.puml](docs/6_video_download_playwright.puml) | PlantUML sequence |
+| 7 | [Async parse-request log](#7-async-parse-request-log) | inline Mermaid | Mermaid sequence |
 
 ---
 
@@ -44,6 +45,8 @@ C4Context
 graph TB
     subgraph Controllers
         PC[ParseController<br/>/api/v1/parse]
+        PRC[ParseRequestController<br/>/api/v1/parse/requests]
+        KLC[KodikListController<br/>/api/v1/kodik/list]
         CC[ContentController<br/>/api/v1/content]
         EC[ExportController<br/>/api/v1/export]
         HC[HealthController<br/>/api/v1/health]
@@ -60,6 +63,10 @@ graph TB
         PPS[ProxyProviderService]
         VDS[VideoDownloadService]
         PVF[PlaywrightVideoFetcher]
+        PRS[ParseRequestService]
+        PRQ[ParseRequestQueueService]
+        RW[RequestWorker<br/>@Scheduled]
+        KLP[KodikListProxyService]
     end
 
     subgraph Clients
@@ -76,6 +83,7 @@ graph TB
         CR[(ContentRepository)]
         EVR[(EpisodeVariantRepository)]
         PR[(ProxyRepository)]
+        PRR[(ParseRequestRepository)]
     end
 
     subgraph External
@@ -89,6 +97,8 @@ graph TB
     end
 
     PC --> PS
+    PRC --> PRS
+    KLC --> KLP
     CC --> CS
     EC --> EDS
     HC --> DHT
@@ -96,6 +106,13 @@ graph TB
     DLC --> VDS
     SC --> VDS
     SC --> PVF
+
+    PRS --> PRR
+    PRQ --> PRR
+    RW --> PRQ
+    RW --> PRS
+    RW --> PS
+    KLP --> KAC
 
     PS --> KAC
     PS --> CS
@@ -127,6 +144,7 @@ graph TB
     CR --> DB
     EVR --> DB
     PR --> DB
+    PRR --> DB
 
     style PC fill:#4a9eff,color:#fff
     style CC fill:#4a9eff,color:#fff
@@ -653,6 +671,63 @@ deactivate DC
 
 ---
 
+### 7. Async parse-request log
+
+Phase 2 turns synchronous Kodik searches into a durable, idempotent
+request log so `parser-kodik` discovery can fan out work without holding
+HTTP connections open. The synchronous `POST /api/v1/parse/search`
+remains for the demo site / human exploration; this flow is for
+machine-driven discovery.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as parser-kodik
+    participant API as ParseRequestController
+    participant Service as ParseRequestService
+    participant DB as orinuno_parse_request
+    participant Worker as RequestWorker (@Scheduled 2s)
+    participant Parser as ParserService.searchInternal
+    participant Kodik as Kodik API
+
+    Client->>API: POST /api/v1/parse/requests {title, ids, decodeLinks}
+    API->>Service: submit(dto, createdBy)
+    Service->>Service: canonical-JSON SHA-256
+    alt active row exists
+        Service->>DB: findActiveByHash(hash)
+        DB-->>Service: row (PENDING|RUNNING)
+        Service-->>API: SubmitResult(view, created=false)
+        API-->>Client: 200 OK + view
+    else fresh request
+        Service->>DB: insert(row, status=PENDING, phase=QUEUED)
+        Service-->>API: SubmitResult(view, created=true)
+        API-->>Client: 201 Created + view
+    end
+
+    loop every 2s
+        Worker->>DB: SELECT id ... FOR UPDATE SKIP LOCKED
+        Worker->>DB: UPDATE status='RUNNING', phase='SEARCHING'
+        Worker->>Parser: searchInternal(dto, ThrottledProgressReporter)
+        Parser->>Kodik: /search
+        Worker->>DB: UPDATE phase='DECODING'
+        Parser-->>Worker: per-variant decode progress (throttled ≥1s)
+        Worker->>DB: UPDATE status='DONE', result_content_ids=[…]
+    end
+
+    Note over Client,DB: Recovery: a separate @Scheduled(60s) recoverStale<br/>resets RUNNING rows whose last_heartbeat_at is older<br/>than 5 min back to PENDING (or to FAILED after max-retries).
+```
+
+**Key invariants**
+
+- **Idempotency** — submit returns the existing active row (200) instead of inserting on duplicates. Hash is computed over a canonical JSON form (sorted keys, normalized strings, null fields stripped).
+- **At-most-one worker per row** — `SELECT … FOR UPDATE SKIP LOCKED` plus the explicit `markClaimed` update inside `ParseRequestQueueService.@Transactional`. The queue service is a separate Spring bean specifically so that `@Transactional` is honoured (Spring's proxy is bypassed on intra-class self-invocation, hence the split from `RequestWorker`).
+- **Heartbeats, not timeouts** — `ThrottledProgressReporter` updates `last_heartbeat_at` on every flush; `recoverStale` uses that column instead of wall-clock duration.
+- **No-polling for parser-kodik** — discovery treats `GET /api/v1/export/ready?updatedSince=…` as the completion signal. The list endpoint is allowed only with `?status=PENDING&limit=0` to read `X-Total-Count` for backpressure.
+
+See [`docs-site/architecture/parse-requests`](docs-site/src/content/docs/architecture/parse-requests.md) for the full SLA table, configuration knobs and the no-polling rationale.
+
+---
+
 ## Entity Relationship Diagram
 
 ```mermaid
@@ -709,6 +784,24 @@ erDiagram
         INT fail_count
         TIMESTAMP created_at
         TIMESTAMP updated_at
+    }
+
+    orinuno_parse_request {
+        BIGINT id PK
+        CHAR(64) request_hash "SHA-256 of canonical JSON"
+        JSON request_json
+        ENUM status "PENDING, RUNNING, DONE, FAILED"
+        ENUM phase "QUEUED, SEARCHING, DECODING, DONE, FAILED"
+        INT progress_decoded
+        INT progress_total
+        JSON result_content_ids "BIGINT[] on DONE"
+        TEXT error_message
+        INT retry_count
+        VARCHAR created_by
+        DATETIME created_at
+        DATETIME started_at
+        DATETIME finished_at
+        DATETIME last_heartbeat_at "for recoverStale"
     }
 
     kodik_content ||--o{ kodik_episode_variant : "has many"
@@ -775,6 +868,30 @@ sequenceDiagram
 1. **Инкрементальный poll** — фильтр `updatedSince` возвращает только записи, обновлённые с момента последнего поллинга.
 2. **Идемпотентность** — на своей стороне ведите состояние «экспортировано / ошибка» по `kinopoisk_id` или `orinuno_content_id`, чтобы переигровка не создавала дубли.
 3. **Отдельное хранилище ассетов** — mp4/скриншоты/постеры лучше складывать в отдельное хранилище (S3/MinIO/CDN), а не гонять напрямую с Kodik CDN каждый раз — ссылки TTL-ом стираются.
+
+### Async submit pattern (parser-kodik discovery)
+
+For machine-driven discovery (e.g. parser-kodik gap-filling missing
+titles in meter-api), use the async parse-request log instead of the
+synchronous `/parse/search`:
+
+```bash
+# 1. Backpressure — read pending queue depth without polling individual rows
+curl -sI "http://localhost:8085/api/v1/parse/requests?status=PENDING&limit=0" \
+  -H "X-API-KEY: $KEY" | grep -i x-total-count
+
+# 2. Submit (idempotent — same payload twice returns 200, not 201)
+curl -X POST "http://localhost:8085/api/v1/parse/requests" \
+  -H "X-API-KEY: $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"shikimoriId":"42897","decodeLinks":true}'
+
+# 3. Watch /export/ready for completion (NOT /parse/requests/{id})
+curl "http://localhost:8085/api/v1/export/ready?updatedSince=2026-04-26T00:00:00Z" \
+  -H "X-API-KEY: $KEY"
+```
+
+See [docs-site/architecture/parse-requests](docs-site/src/content/docs/architecture/parse-requests.md) for the full no-polling rule and SLA targets.
 
 ### Quick start for consumers
 

@@ -18,21 +18,27 @@
 
 ## 1. Технический долг (существующий)
 
-### TD-1: Async Jobs для долгих операций декодирования
+### TD-1: Async Jobs для долгих операций декодирования — **DONE (Phase 2, 2026-04-26)**
 
-**Приоритет:** Высокий
-**Статус:** Не реализовано
-**Файлы:** `ParserService.java`, `ParseController.java`
+**Статус:** Реализовано в Phase 2.
+**Файлы:** `ParseRequestController.java`, `ParseRequestService.java`, `ParseRequestQueueService.java`, `RequestWorker.java`, `RequestHashService.java`, `ThrottledProgressReporter.java`, миграция `20260426010000_create_orinuno_parse_request.sql`.
 
-Декодирование mp4-ссылок для больших сериалов (Naruto — 220 эпизодов × N озвучек) занимает часы. Текущий API синхронный — HTTP-соединение висит всё время.
+Что сделано:
+- `POST /api/v1/parse/requests` возвращает 201 Created (или 200 OK при идемпотентном повторе) c `id` сразу после insert.
+- `GET /api/v1/parse/requests/{id}` отдаёт `ParseRequestDtoView` со `status`, гранулярным `phase` (`QUEUED → SEARCHING → DECODING → DONE/FAILED`) и счётчиками `progress_decoded/total`. Список + `X-Total-Count` для backpressure (`?status=PENDING&limit=0`).
+- Идемпотентность по SHA-256 над canonical-JSON — повторный сабмит того же payload в активной фазе возвращает существующую строку.
+- `RequestWorker` — `@Scheduled(2s)`, `SELECT … FOR UPDATE SKIP LOCKED` через отдельный `ParseRequestQueueService` (чтобы Spring `@Transactional` отрабатывал, а не self-invocation бипасил прокси).
+- `recoverStale` (`@Scheduled(60s)`) переводит залипшие RUNNING → PENDING (или FAILED при `retry_count >= max-retries`) на основе `last_heartbeat_at`.
+- Полные правила и SLA: [`docs-site/architecture/parse-requests`](docs-site/src/content/docs/architecture/parse-requests.md), `ARCHITECTURE.md` §7.
 
-**Решение:**
-- `POST /api/v1/parse/search` возвращает `jobId` немедленно
-- `GET /api/v1/jobs/{jobId}` — статус и прогресс (процент, текущий шаг)
-- Таблица jobs в БД: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`
-- Background thread pool обрабатывает задачи
+Текущая модель — один worker × один поток × один инстанс. Когда / если упрёмся в throughput, см. **TECH_DEBT.md → TD-PR-1** (worker pool, fully reactive boundary).
 
-**Референс:** parser-kinopub в backend-master использует RabbitMQ + State Machine. Для standalone-сервиса предпочтительнее REST-based job polling.
+### TD-1a: openapi.json snapshot — пересобрать после Phase 2
+
+**Приоритет:** Низкий
+**Статус:** Pending — мелкая операционная задача.
+
+`docs-site/openapi.json` собирается живым curl'ом с `/v3/api-docs` (см. `docs-site/README.md`). После Phase 2 надо поднять сервис локально и обновить snapshot, чтобы starlight-openapi показал `parse-requests` и `kodik/list`. Пока документация ссылается на новый раздел `architecture/parse-requests` напрямую — критичной потери нет.
 
 ### TD-2: ParseRequestDto валидация
 
@@ -313,6 +319,22 @@ Sibnet — крупнейший сибирский видеохостинг с *
 ---
 
 ## 3. Идеи для реализации
+
+### PHASE-2: Async parse-requests + Kodik /list proxy + ContentExportDto v2 — **DONE** (2026-04-26)
+
+**Статус:** Реализовано полным ходом, см. TD-1 выше и `ARCHITECTURE.md` §7.
+
+Что вошло в Phase 2:
+
+1. **Async request log** — таблица `orinuno_parse_request`, контроллер `/api/v1/parse/requests`, `RequestWorker`, идемпотентность по SHA-256 канонического JSON, `phase` enum (QUEUED → SEARCHING → DECODING → DONE/FAILED), throttled progress + `recoverStale`.
+2. **Kodik /list proxy** — `GET /api/v1/kodik/list` (минимальный `KodikListItemView`, `next_page` в `KodikListPageView.nextPage`). Schema-drift в этом эндпоинте бьёт `Warning: 199 …` хедером, чтобы parser-kodik увидел drift, не получая полный сырой респонс.
+3. **API-key auth** — `ApiKeyAuthFilter` теперь покрывает `/api/v1/parse/requests` и `/api/v1/kodik` префиксы.
+4. **ContentExportDto v2** — добавлены `lastSeason`, `lastEpisode`, `episodesCount`, `animeStatus`, `dramaStatus`, `allStatus` и derived `ongoing`. Используются parser-kodik’ом для приоритизации онгоингов и выбора между gap-fill / fresh re-parse.
+
+Связанные пункты бэклога, которые **остаются** PENDING после Phase 2:
+
+- **PHASE-2-A: gap-fill из meter-api catalog** — заблокирован на стороне `backend-master/meter-api`: нужен эндпоинт `/catalog/missing-by-source?source=KODIK` для выдачи списка `kinopoiskId/shikimoriId/imdbId`, которых ещё нет в каталоге, отсортированных по приоритету. Без него parser-kodik discovery работает только в режиме «full Kodik /list pagination → submit на всё». Передать запрос в backend-master.
+- **PHASE-2-B: операторский UI приоритетного добавления** — отложено до того, как операторский UI orinuno вырастет до уровня, на котором имеет смысл вводить ручные «срочные» сабмиты (`POST /api/v1/parse/requests` с приоритетом). Сейчас demo-сайт прямо ходит через `/parse/search`, для приоритетной очереди нужен отдельный экран.
 
 ### IDEA-1: REST endpoint для reference данных — **DONE** (2026-04-24)
 

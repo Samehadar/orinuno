@@ -1,17 +1,67 @@
 # Technical Debt
 
-## PF-I7: Async Jobs for Long-Running Decode Operations
+## PF-I7: Async Jobs for Long-Running Decode Operations (PARTIAL — Phase 2 landing)
 
 **Priority:** Medium
-**Context:** Decoding mp4 links for large anime serials (e.g., Naruto with 220 episodes * N translations) can take hours. The current API is synchronous -- the HTTP connection stays open for the entire duration.
+**Status:** Phase 2 introduces a request-log (`orinuno_parse_request`) plus
+`POST /api/v1/parse/requests` that returns 201/200 immediately, a single
+`@Scheduled(2s)` `RequestWorker`, idempotent submit by canonical-JSON SHA-256,
+phase tracking (`QUEUED → SEARCHING → DECODING → DONE/FAILED`), throttled
+progress updates and `recoverStale` for crash recovery. The existing synchronous
+`/api/v1/parse/search` is preserved for direct callers.
 
-**Proposed solution:**
-- `POST /api/v1/parse/search` returns a `jobId` immediately instead of blocking
-- `GET /api/v1/jobs/{jobId}` returns job status and progress (percentage, current step)
-- Jobs stored in a database table with states: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`
-- Background thread pool processes jobs sequentially
+The follow-ups below are now tracked individually (TD-PR-1..TD-PR-3) instead of
+a single umbrella item.
 
-**Reference:** KinoPub parser in backend-master uses RabbitMQ + State Machine for this. For a standalone service, a simpler REST-based job polling pattern is preferred.
+**Reference:** KinoPub parser in backend-master uses RabbitMQ + State Machine.
+We deliberately picked DB-polling instead because orinuno is a standalone
+service and parser-kodik is the only consumer of the request log.
+
+## TD-PR-1: Single-thread RequestWorker
+
+**Priority:** Medium
+**Context:** Phase 2 ships exactly one `@Scheduled(2s)` worker thread per
+orinuno instance, claimed via `SELECT … FOR UPDATE SKIP LOCKED` and processed
+synchronously with a blocking `Mono.block()`. This keeps Kodik request-rate
+predictable, avoids reactor↔MyBatis thread bridging, and makes the failure
+modes obvious. Trade-off: a single slow request (e.g. 220 episodes ×
+N translations) blocks every other request behind it.
+
+**Proposed solution when load grows:**
+- bump worker pool to N threads, each claiming its own row;
+- migrate the pipeline to a fully reactive `WebClient` boundary (no `block()`);
+- consider per-request worker prioritisation (ongoing first, gap-fill second).
+
+Defer to Phase 4/5 — current single-source workload is well within one worker.
+
+## TD-PR-2: Dry-write debug for /list proxy
+
+**Priority:** Low
+**Context:** `KodikListProxyService` deliberately does not persist incoming
+Kodik payloads — drift detection runs in-memory and the controller forwards
+the minimal `KodikListItemView` view. This is fine for the steady state but
+makes after-the-fact investigation of intermittent Kodik shape changes harder
+(the team has to be live-tailing logs while drift fires).
+
+**Proposed solution:** optional `?dryWrite=true` query parameter (gated by
+`orinuno.requests.list-debug-enabled=false`) that records the raw response
+into a new `kodik_list_debug_log` table for offline replay/diff. Default off.
+
+## TD-PR-3: Phase2EndToEndIT
+
+**Priority:** Medium
+**Context:** Phase 2 currently has unit + WebTestClient coverage. There is no
+end-to-end integration test covering the full
+`POST /parse/requests → worker tick → searchInternal → DONE → /export/ready`
+loop against a Testcontainers MySQL. Manual smoke is fine for Phase 2 cutover
+but should not be the long-term gate for refactors.
+
+**Proposed solution:** `Phase2EndToEndIT` under
+`src/test/java/com/orinuno/integration/`, tagged `@Tag("e2e")` so we can run
+it on demand (`mvn -Pe2e verify`) without slowing the main test suite.
+Spin up Percona/MySQL via Testcontainers, mock Kodik with `MockWebServer`,
+seed a small content fixture, submit a request, wait for `phase=DONE`, hit
+`/api/v1/export/ready`, assert the seasons/episodes structure.
 
 ## Parse Rate Limiting
 
