@@ -80,43 +80,78 @@ tokens often enough to care):**
 
 **Not blocking for Phase 2.** Tracked separately so it does not get lost.
 
-## TD-PR-5: Single shared scheduler thread blocks RequestWorker
+## TD-PR-5: Single shared scheduler thread blocks RequestWorker — **DONE** (2026-04-26)
 
-**Priority:** Medium → fixed in Phase 2 live-run, but follow-ups remain
+**Priority:** Medium → fully closed in Phase 2.5 hardening.
 **Discovered:** 2026-04-26 (live integration: 20 PENDING parse requests
 were never claimed by `RequestWorker.tick()`).
 
-**Context:** Spring Boot's default `TaskScheduler` is a single-threaded
-`ThreadPoolTaskScheduler` (pool=1). orinuno currently has multiple
+**Original problem:** Spring Boot's default `TaskScheduler` is a single
+threaded `ThreadPoolTaskScheduler` (pool=1). orinuno had multiple
 `@Scheduled` methods sharing that pool:
+
 - `RequestWorker.tick()` — every 2s, blocking;
 - `RequestWorker.recoverStale()` — every 60s, blocking;
 - `ParserService.refreshExpiredLinks()` — every 1h, **synchronous**
   `.block()` over a `Flux` of up to 50 expired variants × 30s decoder
-  timeout × 3 retries (so the first invocation can pin the single
+  timeout × 3 retries (so the first invocation could pin the single
   scheduler thread for hours, especially under geo-block).
 - `ParserService.retryFailedDecodes()` — same shape, init-delay 30 min.
 - `KodikTokenLifecycle.validate()` — every 6h.
 
-**Symptom:** under live VPN-induced geo-block, `refreshExpiredLinks` fired
-first and held the scheduler thread; `RequestWorker.tick()` never ran,
-so the parse-request queue stayed PENDING forever even though
+Under live VPN-induced geo-block, `refreshExpiredLinks` fired first and
+held the scheduler thread; `RequestWorker.tick()` never ran, so the
+parse-request queue stayed PENDING forever even though
 `POST /api/v1/parse/requests` kept accepting new rows.
 
-**Quick fix (already landed in `OrinunoApplication`):** explicit
-`ThreadPoolTaskScheduler` bean with `poolSize=4`. Independent
-`@Scheduled` jobs now run on separate threads.
+### Phase 2.5 fixes (all landed)
 
-**Outstanding follow-ups:**
-1. **Bound the blocking jobs.** `refreshExpiredLinks` / `retryFailedDecodes`
-   should be capped per tick (e.g. `min(batchSize, 5)` and a hard wall-clock
-   timeout) so a single bad batch can't pin a worker for an hour.
-2. **Per-job pools.** Split into two schedulers (`request-worker-*` and
-   `decoder-maintenance-*`) so background decode-refresh can never starve
-   the parse-request queue, even under contention.
-3. **Observability.** Emit Micrometer gauges for `pending parse requests`
-   and `worker tick latency` so this regression would have surfaced in
-   Grafana instead of via "why is the queue not draining" investigation.
+1. **Bounded blocking** —
+   `OrinunoProperties.DecoderProperties.MaintenanceProperties` adds
+   `maxBatchPerTick` (default 10) and `tickTimeoutSeconds` (default 600).
+   `ParserService.refreshExpiredLinks` / `retryFailedDecodes` now cap
+   the repository query and call `.block(Duration.ofSeconds(...))` so a
+   single hung batch returns control after at most the configured
+   wall-clock budget. Covered by `ParserServiceTest`
+   `refreshExpiredLinksHonoursMaxBatchPerTick`,
+   `retryFailedDecodesHonoursMaxBatchPerTick`,
+   `refreshExpiredLinksAbortsOnTickTimeout`.
+
+2. **Per-job pools** — `OrinunoApplication` now exposes two
+   `TaskScheduler` beans:
+   - `taskScheduler` (prefix `orinuno-sched-`, pool=2) drives the
+     responsive `@Scheduled` jobs (`RequestWorker.tick()`,
+     `recoverStale()`, `KodikTokenLifecycle.scheduledRevalidation()`).
+   - `decoderMaintenanceTaskScheduler` (prefix
+     `orinuno-decoder-maint-`, pool=2) is reserved for the long-running
+     decoder maintenance jobs.
+
+   `DecoderMaintenanceScheduler` (new component) registers the
+   `refreshExpiredLinks` / `retryFailedDecodes` ticks against the
+   maintenance pool via `scheduleWithFixedDelay`. `@Scheduled` on those
+   `ParserService` methods was removed. Verified by
+   `DecoderMaintenanceSchedulerTest.runsOnDedicatedPool`.
+
+3. **Observability (Phase 2.5)** —
+   `com.orinuno.service.requestlog.ParseRequestMetrics` registers:
+   - `orinuno.parse.requests` (gauge, tag `status`)
+   - `orinuno.parse.request.worker.tick` (timer, p50/p95/p99)
+   - `orinuno.parse.request.processing` (timer, tag `outcome`)
+   - `orinuno.parse.requests.completed` (counter, tag `outcome`)
+
+   Exposed at `/actuator/prometheus`. The repo also ships a local
+   Prometheus + Grafana stack under `observability/` and the
+   `observability` Compose profile, with a pre-provisioned dashboard
+   `orinuno → orinuno — parse requests`. See
+   `docs-site/src/content/docs/operations/monitoring.md`.
+
+**How to verify locally:**
+
+```sh
+docker compose --profile observability up -d prometheus grafana
+mvn spring-boot:run                      # or `docker compose up app`
+open http://localhost:3001/d/orinuno-parse-requests
+```
 
 ## TD-PR-3: Phase2EndToEndIT — **DONE** (2026-04-26)
 

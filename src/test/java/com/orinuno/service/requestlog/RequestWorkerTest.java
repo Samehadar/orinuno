@@ -14,6 +14,7 @@ import com.orinuno.model.OrinunoParseRequest;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.ParseRequestRepository;
 import com.orinuno.service.ParserService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -41,9 +42,18 @@ class RequestWorkerTest {
         repository = mock(ParseRequestRepository.class);
         parserService = mock(ParserService.class);
         OrinunoProperties props = new OrinunoProperties();
+        ParseRequestMetrics metrics =
+                new ParseRequestMetrics(repository, new SimpleMeterRegistry());
+        metrics.init();
         worker =
                 new RequestWorker(
-                        queueService, repository, parserService, mapper, props, fixedClock);
+                        queueService,
+                        repository,
+                        parserService,
+                        mapper,
+                        props,
+                        fixedClock,
+                        metrics);
     }
 
     @Test

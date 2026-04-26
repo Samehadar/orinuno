@@ -2,17 +2,20 @@ package com.orinuno.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 import com.orinuno.client.KodikApiClient;
 import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikContent;
+import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -151,5 +154,87 @@ class ParserServiceTest {
 
         assertThat(ParserService.selectBestQuality(videoLinks))
                 .isEqualTo("https://cdn.example/480.mp4");
+    }
+
+    @Test
+    @DisplayName("refreshExpiredLinks: caps repo batch by maintenance.maxBatchPerTick (TD-PR-5)")
+    void refreshExpiredLinksHonoursMaxBatchPerTick() {
+        OrinunoProperties props = new OrinunoProperties();
+        props.getKodik().setRequestDelayMs(0);
+        props.getDecoder().setRefreshBatchSize(50);
+        props.getDecoder().getMaintenance().setMaxBatchPerTick(3);
+        props.getDecoder().getMaintenance().setTickTimeoutSeconds(5);
+        ParserService bounded =
+                new ParserService(
+                        kodikApiClient,
+                        contentService,
+                        decoderService,
+                        episodeVariantRepository,
+                        props);
+
+        when(episodeVariantRepository.findExpiredLinks(anyInt(), anyInt())).thenReturn(List.of());
+
+        bounded.refreshExpiredLinks();
+
+        verify(episodeVariantRepository).findExpiredLinks(props.getDecoder().getLinkTtlHours(), 3);
+        verifyNoInteractions(decoderService);
+    }
+
+    @Test
+    @DisplayName("retryFailedDecodes: caps repo batch by maintenance.maxBatchPerTick (TD-PR-5)")
+    void retryFailedDecodesHonoursMaxBatchPerTick() {
+        OrinunoProperties props = new OrinunoProperties();
+        props.getKodik().setRequestDelayMs(0);
+        props.getDecoder().setRefreshBatchSize(50);
+        props.getDecoder().getMaintenance().setMaxBatchPerTick(2);
+        ParserService bounded =
+                new ParserService(
+                        kodikApiClient,
+                        contentService,
+                        decoderService,
+                        episodeVariantRepository,
+                        props);
+
+        when(episodeVariantRepository.findFailedDecode(anyInt())).thenReturn(List.of());
+
+        bounded.retryFailedDecodes();
+
+        verify(episodeVariantRepository).findFailedDecode(2);
+    }
+
+    @Test
+    @DisplayName(
+            "refreshExpiredLinks: returns within wall-clock timeout when decoder hangs (TD-PR-5)")
+    void refreshExpiredLinksAbortsOnTickTimeout() {
+        OrinunoProperties props = new OrinunoProperties();
+        props.getKodik().setRequestDelayMs(0);
+        props.getDecoder().setRefreshBatchSize(2);
+        props.getDecoder().getMaintenance().setMaxBatchPerTick(2);
+        props.getDecoder().getMaintenance().setTickTimeoutSeconds(1);
+        ParserService bounded =
+                new ParserService(
+                        kodikApiClient,
+                        contentService,
+                        decoderService,
+                        episodeVariantRepository,
+                        props);
+
+        List<KodikEpisodeVariant> expired =
+                IntStream.range(0, 2)
+                        .mapToObj(
+                                i ->
+                                        KodikEpisodeVariant.builder()
+                                                .id((long) i)
+                                                .kodikLink("//k/" + i)
+                                                .build())
+                        .toList();
+        when(episodeVariantRepository.findExpiredLinks(anyInt(), anyInt())).thenReturn(expired);
+        when(decoderService.decode(any())).thenReturn(Mono.never());
+
+        long start = System.currentTimeMillis();
+        bounded.refreshExpiredLinks();
+        long elapsedMs = System.currentTimeMillis() - start;
+
+        assertThat(elapsedMs).isLessThan(5_000L);
     }
 }

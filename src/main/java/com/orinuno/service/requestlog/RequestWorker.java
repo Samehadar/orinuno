@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.OrinunoParseRequest;
+import com.orinuno.model.ParseRequestStatus;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.ParseRequestRepository;
 import com.orinuno.service.ParserService;
+import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -40,17 +42,23 @@ public class RequestWorker {
     private final ObjectMapper objectMapper;
     private final OrinunoProperties properties;
     private final Clock clock;
+    private final ParseRequestMetrics metrics;
 
     @Scheduled(fixedDelayString = "${orinuno.requests.worker-poll-ms:2000}")
     public void tick() {
-        Optional<Long> claimed;
+        Timer.Sample sample = Timer.start();
         try {
-            claimed = queueService.claimNext();
-        } catch (Exception e) {
-            log.warn("⚠️ Worker failed to claim next pending request", e);
-            return;
+            Optional<Long> claimed;
+            try {
+                claimed = queueService.claimNext();
+            } catch (Exception e) {
+                log.warn("⚠️ Worker failed to claim next pending request", e);
+                return;
+            }
+            claimed.ifPresent(this::process);
+        } finally {
+            sample.stop(metrics.workerTickTimer());
         }
-        claimed.ifPresent(this::process);
     }
 
     private void process(Long requestId) {
@@ -65,7 +73,9 @@ public class RequestWorker {
             dto = objectMapper.readValue(claimed.getRequestJson(), ParseRequestDto.class);
         } catch (Exception e) {
             log.error("❌ Failed to deserialize request_json for id={}", requestId, e);
+            long failStart = System.nanoTime();
             failRequest(requestId, claimed, "invalid request_json: " + e.getMessage());
+            metrics.recordCompletion(ParseRequestStatus.FAILED, failStart);
             return;
         }
 
@@ -73,6 +83,7 @@ public class RequestWorker {
         ThrottledProgressReporter reporter =
                 new ThrottledProgressReporter(repository, requestId, flush, clock);
 
+        long startNanos = System.nanoTime();
         try {
             List<KodikContent> contents = parserService.searchInternal(dto, reporter).block();
             reporter.flush();
@@ -88,6 +99,7 @@ public class RequestWorker {
             }
             LocalDateTime finishedAt = nowLdt();
             repository.markDone(requestId, resultJson, finishedAt);
+            metrics.recordCompletion(ParseRequestStatus.DONE, startNanos);
             log.info(
                     "✅ Parse request id={} finished, results={}",
                     requestId,
@@ -96,6 +108,7 @@ public class RequestWorker {
             log.error("❌ Parse request id={} failed", requestId, e);
             reporter.flush();
             failRequest(requestId, claimed, e.getClass().getSimpleName() + ": " + e.getMessage());
+            metrics.recordCompletion(ParseRequestStatus.FAILED, startNanos);
         }
     }
 

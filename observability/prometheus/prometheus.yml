@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  evaluation_interval: 15s
+
+# Two targets are listed so the same docker-compose stack works in both
+# common local setups:
+#   - "compose mode": orinuno itself runs as the `app` service inside the
+#     compose network → app:8081 resolves, host target is DOWN (ignored).
+#   - "host mode": orinuno runs on the developer's host via `mvn
+#     spring-boot:run` → host.docker.internal:8081 resolves, app:8081 is DOWN.
+# Prometheus will surface the live one with `up=1`; the dashboard aggregates
+# across the `service` label and is unaffected by the dead target.
+scrape_configs:
+  - job_name: orinuno
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - app:8081
+        labels:
+          service: orinuno
+          env: compose
+      - targets:
+          - host.docker.internal:8081
+        labels:
+          service: orinuno
+          env: host
