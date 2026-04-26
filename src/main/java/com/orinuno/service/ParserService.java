@@ -7,11 +7,14 @@ import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.mapper.EntityFactory;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikEpisodeVariant;
+import com.orinuno.model.ParseRequestPhase;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
+import com.orinuno.service.requestlog.ProgressReporter;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,6 +35,15 @@ public class ParserService {
     private final OrinunoProperties properties;
 
     public Mono<List<KodikContent>> search(ParseRequestDto request) {
+        return searchInternal(request, ProgressReporter.NOOP);
+    }
+
+    /**
+     * Internal search overload that reports phase transitions and decode progress to the supplied
+     * {@link ProgressReporter}. Used by RequestWorker for async parse-request processing.
+     */
+    public Mono<List<KodikContent>> searchInternal(
+            ParseRequestDto request, ProgressReporter reporter) {
         KodikSearchRequest searchRequest =
                 KodikSearchRequest.builder()
                         .title(request.getTitle())
@@ -42,11 +54,13 @@ public class ParserService {
 
         return kodikApiClient
                 .search(searchRequest)
-                .flatMap(response -> processSearchResults(response, request.isDecodeLinks()));
+                .flatMap(
+                        response ->
+                                processSearchResults(response, request.isDecodeLinks(), reporter));
     }
 
     private Mono<List<KodikContent>> processSearchResults(
-            KodikSearchResponse response, boolean decodeLinks) {
+            KodikSearchResponse response, boolean decodeLinks, ProgressReporter reporter) {
         if (response.getResults() == null || response.getResults().isEmpty()) {
             log.info("📭 No results from Kodik API");
             return Mono.just(List.of());
@@ -69,11 +83,26 @@ public class ParserService {
                 .collectList()
                 .flatMap(
                         contents -> {
-                            if (decodeLinks) {
-                                return decodeAllPending(contents).thenReturn(contents);
+                            if (!decodeLinks) {
+                                return Mono.just(contents);
                             }
-                            return Mono.just(contents);
+                            int totalPending = countPendingVariants(contents);
+                            reporter.phaseTransition(ParseRequestPhase.DECODING);
+                            reporter.update(0, totalPending);
+                            if (totalPending == 0) {
+                                return Mono.just(contents);
+                            }
+                            AtomicInteger decodedCounter = new AtomicInteger();
+                            return decodeAllPending(
+                                            contents, reporter, decodedCounter, totalPending)
+                                    .thenReturn(contents);
                         });
+    }
+
+    private int countPendingVariants(List<KodikContent> contents) {
+        return contents.stream()
+                .mapToInt(c -> episodeVariantRepository.findByContentIdWithoutMp4(c.getId()).size())
+                .sum();
     }
 
     public Mono<Void> decodeForContent(Long contentId) {
@@ -182,9 +211,42 @@ public class ParserService {
                 .block();
     }
 
-    private Mono<Void> decodeAllPending(List<KodikContent> contents) {
+    private Mono<Void> decodeAllPending(
+            List<KodikContent> contents,
+            ProgressReporter reporter,
+            AtomicInteger decodedCounter,
+            int totalPending) {
         return Flux.fromIterable(contents)
-                .flatMap(content -> decodeForContent(content.getId()), 1)
+                .flatMap(
+                        content ->
+                                decodeForContentReporting(
+                                        content.getId(), reporter, decodedCounter, totalPending),
+                        1)
+                .then();
+    }
+
+    private Mono<Void> decodeForContentReporting(
+            Long contentId,
+            ProgressReporter reporter,
+            AtomicInteger decodedCounter,
+            int totalPending) {
+        List<KodikEpisodeVariant> pending =
+                episodeVariantRepository.findByContentIdWithoutMp4(contentId);
+        if (pending.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Flux.fromIterable(pending)
+                .delayElements(Duration.ofMillis(properties.getKodik().getRequestDelayMs()))
+                .flatMap(
+                        variant ->
+                                decodeVariant(variant)
+                                        .doOnSuccess(
+                                                v ->
+                                                        reporter.update(
+                                                                decodedCounter.incrementAndGet(),
+                                                                totalPending)),
+                        1)
                 .then();
     }
 
