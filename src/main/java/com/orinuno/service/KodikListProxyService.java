@@ -5,6 +5,8 @@ import com.orinuno.client.dto.KodikListRequest;
 import com.orinuno.drift.DriftDetector;
 import com.orinuno.model.dto.KodikListItemView;
 import com.orinuno.model.dto.KodikListPageView;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -49,9 +51,22 @@ public class KodikListProxyService {
             }
         }
         Integer total = asInt(raw.get("total"));
-        String nextPage = asString(raw.get("next_page"));
-        String prevPage = asString(raw.get("prev_page"));
+        String nextPage = wrapAsProxyUrl(asString(raw.get("next_page")));
+        String prevPage = wrapAsProxyUrl(asString(raw.get("prev_page")));
         return new KodikListPageView(items, total, nextPage, prevPage);
+    }
+
+    /**
+     * Rewrites the upstream Kodik {@code next_page}/{@code prev_page} URL into a relative proxy URL
+     * so callers can pass it back unchanged via {@code GET /api/v1/kodik/list?next_page=...}. Keeps
+     * the upstream Kodik token from leaking out of orinuno.
+     */
+    private static String wrapAsProxyUrl(String upstreamUrl) {
+        if (upstreamUrl == null || upstreamUrl.isBlank()) {
+            return null;
+        }
+        String encoded = URLEncoder.encode(upstreamUrl, StandardCharsets.UTF_8);
+        return "/api/v1/kodik/list?next_page=" + encoded;
     }
 
     private KodikListItemView toItem(Map<?, ?> m) {
