@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.ParseRequestRepository">
+
+    <resultMap id="parseRequestResultMap" type="com.orinuno.model.OrinunoParseRequest">
+        <id property="id" column="id"/>
+        <result property="requestHash" column="request_hash"/>
+        <result property="requestJson" column="request_json"/>
+        <result property="status" column="status"
+                typeHandler="org.apache.ibatis.type.EnumTypeHandler"
+                javaType="com.orinuno.model.ParseRequestStatus"/>
+        <result property="phase" column="phase"
+                typeHandler="org.apache.ibatis.type.EnumTypeHandler"
+                javaType="com.orinuno.model.ParseRequestPhase"/>
+        <result property="progressDecoded" column="progress_decoded"/>
+        <result property="progressTotal" column="progress_total"/>
+        <result property="resultContentIds" column="result_content_ids"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="startedAt" column="started_at"/>
+        <result property="finishedAt" column="finished_at"/>
+        <result property="lastHeartbeatAt" column="last_heartbeat_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO orinuno_parse_request (
+            request_hash, request_json, status, phase,
+            progress_decoded, progress_total, result_content_ids,
+            error_message, retry_count, created_by,
+            created_at, started_at, finished_at, last_heartbeat_at
+        ) VALUES (
+            #{requestHash}, #{requestJson}, #{status}, #{phase},
+            #{progressDecoded}, #{progressTotal}, #{resultContentIds},
+            #{errorMessage}, #{retryCount}, #{createdBy},
+            #{createdAt}, #{startedAt}, #{finishedAt}, #{lastHeartbeatAt}
+        )
+    </insert>
+
+    <select id="findById" resultMap="parseRequestResultMap">
+        SELECT * FROM orinuno_parse_request WHERE id = #{id}
+    </select>
+
+    <select id="findActiveByHash" resultMap="parseRequestResultMap">
+        SELECT * FROM orinuno_parse_request
+        WHERE request_hash = #{hash}
+          AND status IN ('PENDING','RUNNING')
+        ORDER BY created_at DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectPendingIdForClaim" resultType="java.lang.Long">
+        SELECT id FROM orinuno_parse_request
+        WHERE status = 'PENDING'
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="markClaimed">
+        UPDATE orinuno_parse_request
+        SET status = 'RUNNING',
+            phase = 'SEARCHING',
+            started_at = #{startedAt},
+            last_heartbeat_at = #{heartbeat}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updatePhase">
+        UPDATE orinuno_parse_request
+        SET phase = #{phase},
+            last_heartbeat_at = #{heartbeat}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateProgress">
+        UPDATE orinuno_parse_request
+        SET progress_decoded = #{decoded},
+            progress_total = #{total},
+            last_heartbeat_at = #{heartbeat}
+        WHERE id = #{id}
+    </update>
+
+    <update id="markDone">
+        UPDATE orinuno_parse_request
+        SET status = 'DONE',
+            phase = 'DONE',
+            result_content_ids = #{resultContentIds},
+            finished_at = #{finishedAt},
+            last_heartbeat_at = #{finishedAt}
+        WHERE id = #{id}
+    </update>
+
+    <update id="markFailed">
+        UPDATE orinuno_parse_request
+        SET status = 'FAILED',
+            phase = 'FAILED',
+            error_message = #{errorMessage},
+            retry_count = #{retryCount},
+            finished_at = #{finishedAt},
+            last_heartbeat_at = #{finishedAt}
+        WHERE id = #{id}
+    </update>
+
+    <update id="recoverStale">
+        UPDATE orinuno_parse_request
+        SET status = CASE WHEN retry_count + 1 &gt;= #{maxRetries} THEN 'FAILED' ELSE 'PENDING' END,
+            phase  = CASE WHEN retry_count + 1 &gt;= #{maxRetries} THEN 'FAILED' ELSE 'QUEUED' END,
+            retry_count = retry_count + 1,
+            error_message = CASE WHEN retry_count + 1 &gt;= #{maxRetries}
+                                 THEN COALESCE(error_message, 'stale RUNNING reached max retries')
+                                 ELSE error_message END,
+            finished_at = CASE WHEN retry_count + 1 &gt;= #{maxRetries} THEN #{staleBeforeTs} ELSE finished_at END
+        WHERE status = 'RUNNING'
+          AND last_heartbeat_at &lt; #{staleBeforeTs}
+    </update>
+
+    <select id="findAll" resultMap="parseRequestResultMap">
+        SELECT * FROM orinuno_parse_request
+        <where>
+            <if test="status != null">
+                status = #{status}
+            </if>
+        </where>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(*) FROM orinuno_parse_request
+        <where>
+            <if test="status != null">
+                status = #{status}
+            </if>
+        </where>
+    </select>
+
+</mapper>
