@@ -118,6 +118,10 @@ public class ContentMapper {
 
         Map<String, Object> materialData = parseMaterialData(content.getMaterialData());
         String posterUrl = extractPosterUrl(materialData);
+        String animeStatus = extractStringField(materialData, "anime_status");
+        String dramaStatus = extractStringField(materialData, "drama_status");
+        String allStatus = extractStringField(materialData, "all_status");
+        Boolean ongoing = deriveOngoing(animeStatus, dramaStatus, allStatus);
 
         return new ContentExportDto(
                 content.getId(),
@@ -133,7 +137,44 @@ public class ContentMapper {
                 parseScreenshots(content.getScreenshots()),
                 content.getCamrip(),
                 content.getLgbt(),
+                content.getLastSeason(),
+                content.getLastEpisode(),
+                content.getEpisodesCount(),
+                animeStatus,
+                dramaStatus,
+                allStatus,
+                ongoing,
                 seasons);
+    }
+
+    private String extractStringField(Map<String, Object> materialData, String key) {
+        if (materialData == null) return null;
+        Object value = materialData.get(key);
+        return value instanceof String s && !s.isBlank() ? s : null;
+    }
+
+    /**
+     * Returns Boolean.TRUE if any *_status field reports an ongoing/airing/releasing-style value;
+     * Boolean.FALSE for a recognised completed value; null when none of the status fields are
+     * available so callers can decide between "unknown" and "treat as completed".
+     */
+    private Boolean deriveOngoing(String animeStatus, String dramaStatus, String allStatus) {
+        if (animeStatus == null && dramaStatus == null && allStatus == null) {
+            return null;
+        }
+        return isOngoingValue(animeStatus)
+                || isOngoingValue(dramaStatus)
+                || isOngoingValue(allStatus);
+    }
+
+    private boolean isOngoingValue(String status) {
+        if (status == null) return false;
+        String normalised = status.toLowerCase();
+        return normalised.contains("ongoing")
+                || normalised.contains("airing")
+                || normalised.contains("releasing")
+                || normalised.contains("currently")
+                || normalised.equals("anons");
     }
 
     private String extractPosterUrl(Map<String, Object> materialData) {
