@@ -100,6 +100,12 @@ orinuno:
     item-sampling:
       mode: ${ORINUNO_DRIFT_ITEM_SAMPLING_MODE:FIRST_N}
       limit: ${ORINUNO_DRIFT_ITEM_SAMPLING_LIMIT:10}
+  calendar:
+    enabled: ${ORINUNO_CALENDAR_ENABLED:true}
+    url: ${ORINUNO_CALENDAR_URL:https://dumps.kodikres.com/calendar.json}
+    cache-ttl-seconds: ${ORINUNO_CALENDAR_CACHE_TTL_SECONDS:300}
+    request-timeout-seconds: ${ORINUNO_CALENDAR_REQUEST_TIMEOUT_SECONDS:10}
+    max-response-bytes: ${ORINUNO_CALENDAR_MAX_RESPONSE_BYTES:4194304}
 
 ---
 spring.config.activate.on-profile: local

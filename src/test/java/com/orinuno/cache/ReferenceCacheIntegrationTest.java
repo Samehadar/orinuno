@@ -21,11 +21,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.cache.support.NoOpCacheManager;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
@@ -39,7 +39,7 @@ import reactor.core.publisher.Mono;
 @DisplayName("Reference cache toggle — enabled/disabled wiring and behaviour")
 class ReferenceCacheIntegrationTest {
 
-    @Configuration
+    @TestConfiguration
     @EnableConfigurationProperties(OrinunoProperties.class)
     @Import({ReferenceCacheConfig.class, ReferenceService.class})
     static class Ctx {

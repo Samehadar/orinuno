@@ -61,6 +61,7 @@ public class OrinunoProperties {
     private CorsProperties cors = new CorsProperties();
     private CacheProperties cache = new CacheProperties();
     private DriftSamplingProperties drift = new DriftSamplingProperties();
+    private CalendarProperties calendar = new CalendarProperties();
 
     @Data
     public static class SecurityProperties {
@@ -114,5 +115,20 @@ public class OrinunoProperties {
         private int maxRetries = 3;
         private int defaultPageLimit = 50;
         private int maxPageLimit = 200;
+    }
+
+    /**
+     * On-demand fetcher for the public Kodik calendar dump (IDEA-AP-5). Endpoint is unauthenticated
+     * but heavy (~few MB), so we cap response size, cache aggressively (5 min TTL), and use
+     * conditional GET (ETag / Last-Modified). Disable {@code enabled} to fail fast on the
+     * controller without making upstream calls — useful when the dump is reported broken.
+     */
+    @Data
+    public static class CalendarProperties {
+        private boolean enabled = true;
+        private String url = "https://dumps.kodikres.com/calendar.json";
+        private long cacheTtlSeconds = 300;
+        private long requestTimeoutSeconds = 10;
+        private long maxResponseBytes = 4L * 1024 * 1024;
     }
 }

@@ -147,4 +147,13 @@
         DELETE FROM kodik_content WHERE id = #{id}
     </delete>
 
+    <select id="findIdsByShikimoriIds" resultType="map">
+        SELECT id, shikimori_id AS shikimoriId
+        FROM kodik_content
+        WHERE shikimori_id IN
+        <foreach collection="shikimoriIds" item="sid" open="(" separator="," close=")">
+            #{sid}
+        </foreach>
+    </select>
+
 </mapper>
