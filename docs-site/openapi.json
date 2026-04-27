@@ -1,1822 +1,2015 @@
 {
-  "openapi": "3.1.0",
-  "info": {
-    "title": "Orinuno API",
-    "description": "API for parsing video content from Kodik",
-    "version": "1.0.0"
-  },
-  "servers": [
-    {
-      "url": "http://localhost:8085",
-      "description": "Generated server url"
-    }
-  ],
-  "tags": [
-    {
-      "name": "Content",
-      "description": "CRUD operations for parsed Kodik content"
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Orinuno API",
+        "description": "API for parsing video content from Kodik",
+        "version": "1.0.0"
     },
-    {
-      "name": "Stream",
-      "description": "Video streaming proxy"
-    },
-    {
-      "name": "Parse",
-      "description": "Trigger parsing and decoding operations"
-    },
-    {
-      "name": "Reference",
-      "description": "Typed Kodik reference dictionaries (cached)"
-    },
-    {
-      "name": "Download",
-      "description": "Video download to local storage"
-    },
-    {
-      "name": "Kodik",
-      "description": "Thin proxy over the Kodik HTTP API"
-    },
-    {
-      "name": "Export",
-      "description": "Export parsed content data for external consumers"
-    },
-    {
-      "name": "ParseRequests",
-      "description": "Async parse-request log: submit a request and poll completion. parser-kodik must not poll status here — use GET /api/v1/export/ready?updatedSince="
-    },
-    {
-      "name": "Health",
-      "description": "Service health and diagnostics"
-    },
-    {
-      "name": "HLS",
-      "description": "HLS manifest retrieval for streaming integration"
-    }
-  ],
-  "paths": {
-    "/api/v1/parse/search": {
-      "post": {
-        "tags": [
-          "Parse"
-        ],
-        "summary": "Search and parse content from Kodik",
-        "operationId": "search",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ParseRequestDto"
-              }
-            }
-          },
-          "required": true
+    "servers": [
+        {
+            "url": "http://localhost:8080",
+            "description": "Generated server url"
+        }
+    ],
+    "tags": [
+        {
+            "name": "Content",
+            "description": "CRUD operations for parsed Kodik content"
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ContentDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/parse/requests": {
-      "get": {
-        "tags": [
-          "ParseRequests"
-        ],
-        "summary": "List parse requests",
-        "description": "X-Total-Count header reports the total matching rows for the supplied status filter. Use limit=0 to obtain only the count without rows.",
-        "operationId": "list",
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "description": "Filter by status",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "PENDING",
-                "RUNNING",
-                "DONE",
-                "FAILED"
-              ]
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 50
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ParseRequestDtoView"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "ParseRequests"
-        ],
-        "summary": "Submit a parse request (idempotent by canonical-JSON SHA-256)",
-        "description": "Returns 201 for newly-created requests and 200 for an existing active (PENDING/RUNNING) request with the same hash.",
-        "operationId": "submit",
-        "parameters": [
-          {
-            "name": "X-Created-By",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ParseRequestDto"
-              }
-            }
-          },
-          "required": true
+        {
+            "name": "Stream",
+            "description": "Video streaming proxy"
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParseRequestDtoView"
+        {
+            "name": "Parse",
+            "description": "Trigger parsing and decoding operations"
+        },
+        {
+            "name": "Reference",
+            "description": "Typed Kodik reference dictionaries (cached)"
+        },
+        {
+            "name": "Download",
+            "description": "Video download to local storage"
+        },
+        {
+            "name": "Kodik",
+            "description": "Thin proxy over the Kodik HTTP API"
+        },
+        {
+            "name": "Export",
+            "description": "Export parsed content data for external consumers"
+        },
+        {
+            "name": "ParseRequests",
+            "description": "Async parse-request log: submit a request and poll completion. parser-kodik must not poll status here \u2014 use GET /api/v1/export/ready?updatedSince="
+        },
+        {
+            "name": "Health",
+            "description": "Service health and diagnostics"
+        },
+        {
+            "name": "HLS",
+            "description": "HLS manifest retrieval for streaming integration"
+        },
+        {
+            "name": "Calendar",
+            "description": "Public Kodik calendar dump (premiere schedule)"
+        }
+    ],
+    "paths": {
+        "/api/v1/parse/search": {
+            "post": {
+                "tags": [
+                    "Parse"
+                ],
+                "summary": "Search and parse content from Kodik",
+                "operationId": "search",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ParseRequestDto"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ContentDto"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/parse/decode/{contentId}": {
-      "post": {
-        "tags": [
-          "Parse"
-        ],
-        "summary": "Decode mp4 links for specific content",
-        "operationId": "decode",
-        "parameters": [
-          {
-            "name": "contentId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "force",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/parse/decode/variant/{variantId}": {
-      "post": {
-        "tags": [
-          "Parse"
-        ],
-        "summary": "Decode mp4 link for a single variant",
-        "operationId": "decodeVariant",
-        "parameters": [
-          {
-            "name": "variantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          {
-            "name": "force",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
+        },
+        "/api/v1/parse/requests": {
+            "get": {
+                "tags": [
+                    "ParseRequests"
+                ],
+                "summary": "List parse requests",
+                "description": "X-Total-Count header reports the total matching rows for the supplied status filter. Use limit=0 to obtain only the count without rows.",
+                "operationId": "list",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filter by status",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "PENDING",
+                                "RUNNING",
+                                "DONE",
+                                "FAILED"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 50
+                        }
+                    },
+                    {
+                        "name": "offset",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 0
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ParseRequestDtoView"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/download/{variantId}": {
-      "post": {
-        "tags": [
-          "Download"
-        ],
-        "summary": "Start downloading a single variant (returns immediately, poll status via GET)",
-        "operationId": "downloadVariant",
-        "parameters": [
-          {
-            "name": "variantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadState"
+            },
+            "post": {
+                "tags": [
+                    "ParseRequests"
+                ],
+                "summary": "Submit a parse request (idempotent by canonical-JSON SHA-256)",
+                "description": "Returns 201 for newly-created requests and 200 for an existing active (PENDING/RUNNING) request with the same hash.",
+                "operationId": "submit",
+                "parameters": [
+                    {
+                        "name": "X-Created-By",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ParseRequestDto"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ParseRequestDtoView"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/download/content/{contentId}": {
-      "post": {
-        "tags": [
-          "Download"
-        ],
-        "summary": "Download all undecoded variants for a content item",
-        "operationId": "downloadContent",
-        "parameters": [
-          {
-            "name": "contentId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
+        },
+        "/api/v1/parse/decode/{contentId}": {
+            "post": {
+                "tags": [
+                    "Parse"
+                ],
+                "summary": "Decode mp4 links for specific content",
+                "operationId": "decode",
+                "parameters": [
+                    {
+                        "name": "contentId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "force",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/stream/{variantId}": {
-      "get": {
-        "tags": [
-          "Stream"
-        ],
-        "summary": "Stream video — serves local file if downloaded, otherwise proxies from CDN",
-        "operationId": "stream",
-        "parameters": [
-          {
-            "name": "variantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/reference/years": {
-      "get": {
-        "tags": [
-          "Reference"
-        ],
-        "summary": "List years with content counts (cached)",
-        "operationId": "years",
-        "parameters": [
-          {
-            "name": "fresh",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/KodikReferenceResponseKodikYearDto"
+        },
+        "/api/v1/parse/decode/variant/{variantId}": {
+            "post": {
+                "tags": [
+                    "Parse"
+                ],
+                "summary": "Decode mp4 link for a single variant",
+                "operationId": "decodeVariant",
+                "parameters": [
+                    {
+                        "name": "variantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "force",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/reference/translations": {
-      "get": {
-        "tags": [
-          "Reference"
-        ],
-        "summary": "List translation authors (cached)",
-        "operationId": "translations",
-        "parameters": [
-          {
-            "name": "fresh",
-            "in": "query",
-            "description": "Skip cache and hit Kodik directly",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/KodikReferenceResponseKodikTranslationDto"
+        },
+        "/api/v1/download/{variantId}": {
+            "post": {
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Start downloading a single variant (returns immediately, poll status via GET)",
+                "operationId": "downloadVariant",
+                "parameters": [
+                    {
+                        "name": "variantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DownloadState"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/reference/qualities": {
-      "get": {
-        "tags": [
-          "Reference"
-        ],
-        "summary": "List qualities (cached)",
-        "operationId": "qualities",
-        "parameters": [
-          {
-            "name": "fresh",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/KodikReferenceResponseKodikQualityDto"
+        },
+        "/api/v1/download/content/{contentId}": {
+            "post": {
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Download all undecoded variants for a content item",
+                "operationId": "downloadContent",
+                "parameters": [
+                    {
+                        "name": "contentId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/reference/genres": {
-      "get": {
-        "tags": [
-          "Reference"
-        ],
-        "summary": "List genres (cached)",
-        "operationId": "genres",
-        "parameters": [
-          {
-            "name": "fresh",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/KodikReferenceResponseKodikGenreDto"
+        },
+        "/api/v1/stream/{variantId}": {
+            "get": {
+                "tags": [
+                    "Stream"
+                ],
+                "summary": "Stream video \u2014 serves local file if downloaded, otherwise proxies from CDN",
+                "operationId": "stream",
+                "parameters": [
+                    {
+                        "name": "variantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/reference/countries": {
-      "get": {
-        "tags": [
-          "Reference"
-        ],
-        "summary": "List countries (cached)",
-        "operationId": "countries",
-        "parameters": [
-          {
-            "name": "fresh",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/KodikReferenceResponseKodikCountryDto"
+        },
+        "/api/v1/reference/years": {
+            "get": {
+                "tags": [
+                    "Reference"
+                ],
+                "summary": "List years with content counts (cached)",
+                "operationId": "years",
+                "parameters": [
+                    {
+                        "name": "fresh",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/KodikReferenceResponseKodikYearDto"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/parse/requests/{id}": {
-      "get": {
-        "tags": [
-          "ParseRequests"
-        ],
-        "summary": "Fetch a single parse request by id",
-        "operationId": "findById",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParseRequestDtoView"
+        },
+        "/api/v1/reference/translations": {
+            "get": {
+                "tags": [
+                    "Reference"
+                ],
+                "summary": "List translation authors (cached)",
+                "operationId": "translations",
+                "parameters": [
+                    {
+                        "name": "fresh",
+                        "in": "query",
+                        "description": "Skip cache and hit Kodik directly",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/KodikReferenceResponseKodikTranslationDto"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/kodik/list": {
-      "get": {
-        "tags": [
-          "Kodik"
-        ],
-        "summary": "Proxy GET /list — minimal subset of fields",
-        "operationId": "list_1",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          {
-            "name": "types",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "year",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "translation_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "translation_type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "order",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "anime_status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "drama_status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "all_status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "with_material_data",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "next_page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/KodikListPageView"
+        },
+        "/api/v1/reference/qualities": {
+            "get": {
+                "tags": [
+                    "Reference"
+                ],
+                "summary": "List qualities (cached)",
+                "operationId": "qualities",
+                "parameters": [
+                    {
+                        "name": "fresh",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/KodikReferenceResponseKodikQualityDto"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/hls/{variantId}/url": {
-      "get": {
-        "tags": [
-          "HLS"
-        ],
-        "summary": "Get fresh m3u8 URL for a variant (requires fresh decode)",
-        "operationId": "getHlsUrl",
-        "parameters": [
-          {
-            "name": "variantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  }
+        },
+        "/api/v1/reference/genres": {
+            "get": {
+                "tags": [
+                    "Reference"
+                ],
+                "summary": "List genres (cached)",
+                "operationId": "genres",
+                "parameters": [
+                    {
+                        "name": "fresh",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/KodikReferenceResponseKodikGenreDto"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/hls/{variantId}/manifest": {
-      "get": {
-        "tags": [
-          "HLS"
-        ],
-        "summary": "Get absolutized m3u8 manifest for a variant (fresh decode + download + absolutize)",
-        "operationId": "getAbsolutizedManifest",
-        "parameters": [
-          {
-            "name": "variantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/vnd.apple.mpegurl": {
-                "schema": {
-                  "type": "string"
+        },
+        "/api/v1/reference/countries": {
+            "get": {
+                "tags": [
+                    "Reference"
+                ],
+                "summary": "List countries (cached)",
+                "operationId": "countries",
+                "parameters": [
+                    {
+                        "name": "fresh",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/KodikReferenceResponseKodikCountryDto"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/health": {
-      "get": {
-        "tags": [
-          "Health"
-        ],
-        "summary": "General health check",
-        "operationId": "health",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
+        },
+        "/api/v1/parse/requests/{id}": {
+            "get": {
+                "tags": [
+                    "ParseRequests"
+                ],
+                "summary": "Fetch a single parse request by id",
+                "operationId": "findById",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ParseRequestDtoView"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/health/tokens": {
-      "get": {
-        "tags": [
-          "Health"
-        ],
-        "summary": "Kodik token registry status (masked)",
-        "operationId": "tokensHealth",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
+        },
+        "/api/v1/kodik/list": {
+            "get": {
+                "tags": [
+                    "Kodik"
+                ],
+                "summary": "Proxy GET /list \u2014 minimal subset of fields",
+                "operationId": "list_1",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32"
+                        }
+                    },
+                    {
+                        "name": "types",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "year",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "translation_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "translation_type",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "sort",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "order",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "anime_status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "drama_status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "all_status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "with_material_data",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "next_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/KodikListPageView"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/health/schema-drift": {
-      "get": {
-        "tags": [
-          "Health"
-        ],
-        "summary": "Kodik API schema drift detection status",
-        "operationId": "schemaDrift",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
+        },
+        "/api/v1/hls/{variantId}/url": {
+            "get": {
+                "tags": [
+                    "HLS"
+                ],
+                "summary": "Get fresh m3u8 URL for a variant (requires fresh decode)",
+                "operationId": "getHlsUrl",
+                "parameters": [
+                    {
+                        "name": "variantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/health/proxy": {
-      "get": {
-        "tags": [
-          "Health"
-        ],
-        "summary": "Proxy pool statistics",
-        "operationId": "proxyHealth",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
+        },
+        "/api/v1/hls/{variantId}/manifest": {
+            "get": {
+                "tags": [
+                    "HLS"
+                ],
+                "summary": "Get absolutized m3u8 manifest for a variant (fresh decode + download + absolutize)",
+                "operationId": "getAbsolutizedManifest",
+                "parameters": [
+                    {
+                        "name": "variantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/vnd.apple.mpegurl": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/health/decoder": {
-      "get": {
-        "tags": [
-          "Health"
-        ],
-        "summary": "Decoder health and statistics (PF6)",
-        "operationId": "decoderHealth",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
+        },
+        "/api/v1/health": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "General health check",
+                "operationId": "health",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/export/{contentId}": {
-      "get": {
-        "tags": [
-          "Export"
-        ],
-        "summary": "Get full export package for specific content",
-        "operationId": "getExportData",
-        "parameters": [
-          {
-            "name": "contentId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContentExportDto"
+        },
+        "/api/v1/health/tokens": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Kodik token registry status (masked)",
+                "operationId": "tokensHealth",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/export/ready": {
-      "get": {
-        "tags": [
-          "Export"
-        ],
-        "summary": "List content ready for export (with decoded mp4 links)",
-        "operationId": "getReadyForExport",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "updatedSince",
-            "in": "query",
-            "description": "Only return content updated after this timestamp (ISO 8601)",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/PageResponseContentExportDto"
+        },
+        "/api/v1/health/schema-drift": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Kodik API schema drift detection status",
+                "operationId": "schemaDrift",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/download/{variantId}/status": {
-      "get": {
-        "tags": [
-          "Download"
-        ],
-        "summary": "Check download status for a variant",
-        "operationId": "getStatus",
-        "parameters": [
-          {
-            "name": "variantId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadState"
+        },
+        "/api/v1/health/proxy": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Proxy pool statistics",
+                "operationId": "proxyHealth",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/content": {
-      "get": {
-        "tags": [
-          "Content"
-        ],
-        "summary": "List all content with pagination",
-        "operationId": "findAll",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 0
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          },
-          {
-            "name": "sortBy",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "id"
-            }
-          },
-          {
-            "name": "order",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "ASC"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/PageResponseContentDto"
+        },
+        "/api/v1/health/decoder": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Decoder health and statistics (PF6)",
+                "operationId": "decoderHealth",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/content/{id}": {
-      "get": {
-        "tags": [
-          "Content"
-        ],
-        "summary": "Get content by ID",
-        "operationId": "findById_1",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContentDto"
+        },
+        "/api/v1/export/{contentId}": {
+            "get": {
+                "tags": [
+                    "Export"
+                ],
+                "summary": "Get full export package for specific content",
+                "operationId": "getExportData",
+                "parameters": [
+                    {
+                        "name": "contentId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ContentExportDto"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/content/{id}/variants": {
-      "get": {
-        "tags": [
-          "Content"
-        ],
-        "summary": "Get all episode variants for content",
-        "operationId": "findVariants",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/EpisodeVariantDto"
-                  }
+        },
+        "/api/v1/export/ready": {
+            "get": {
+                "tags": [
+                    "Export"
+                ],
+                "summary": "List content ready for export (with decoded mp4 links)",
+                "operationId": "getReadyForExport",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 0
+                        }
+                    },
+                    {
+                        "name": "size",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 20
+                        }
+                    },
+                    {
+                        "name": "updatedSince",
+                        "in": "query",
+                        "description": "Only return content updated after this timestamp (ISO 8601)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PageResponseContentExportDto"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-    },
-    "/api/v1/content/by-kinopoisk/{kinopoiskId}": {
-      "get": {
-        "tags": [
-          "Content"
-        ],
-        "summary": "Find content by Kinopoisk ID",
-        "operationId": "findByKinopoiskId",
-        "parameters": [
-          {
-            "name": "kinopoiskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContentDto"
+        },
+        "/api/v1/download/{variantId}/status": {
+            "get": {
+                "tags": [
+                    "Download"
+                ],
+                "summary": "Check download status for a variant",
+                "operationId": "getStatus",
+                "parameters": [
+                    {
+                        "name": "variantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DownloadState"
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
+        },
+        "/api/v1/content": {
+            "get": {
+                "tags": [
+                    "Content"
+                ],
+                "summary": "List all content with pagination",
+                "operationId": "findAll",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 0
+                        }
+                    },
+                    {
+                        "name": "size",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 20
+                        }
+                    },
+                    {
+                        "name": "sortBy",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "id"
+                        }
+                    },
+                    {
+                        "name": "order",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "ASC"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PageResponseContentDto"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/content/{id}": {
+            "get": {
+                "tags": [
+                    "Content"
+                ],
+                "summary": "Get content by ID",
+                "operationId": "findById_1",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ContentDto"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/content/{id}/variants": {
+            "get": {
+                "tags": [
+                    "Content"
+                ],
+                "summary": "Get all episode variants for content",
+                "operationId": "findVariants",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/EpisodeVariantDto"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/content/by-kinopoisk/{kinopoiskId}": {
+            "get": {
+                "tags": [
+                    "Content"
+                ],
+                "summary": "Find content by Kinopoisk ID",
+                "operationId": "findByKinopoiskId",
+                "parameters": [
+                    {
+                        "name": "kinopoiskId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ContentDto"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/calendar": {
+            "get": {
+                "tags": [
+                    "Calendar"
+                ],
+                "summary": "Fetch the public Kodik calendar dump",
+                "description": "Cached on-demand fetcher for https://dumps.kodikres.com/calendar.json (5 min TTL, conditional GET). Filters are optional and combinable.",
+                "operationId": "getCalendar",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filter by Shikimori status (e.g. ongoing, anons, released)",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "kind",
+                        "in": "query",
+                        "description": "Filter by Shikimori kind (e.g. tv, movie, ova, ona)",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "minScore",
+                        "in": "query",
+                        "description": "Inclusive lower bound for Shikimori score",
+                        "required": false,
+                        "schema": {
+                            "type": "number",
+                            "format": "double"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Cap returned entries (after filtering)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32"
+                        }
+                    },
+                    {
+                        "name": "enrich",
+                        "in": "query",
+                        "description": "Match Shikimori ids to local kodik_content",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CalendarResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-      }
+    },
+    "components": {
+        "schemas": {
+            "ParseRequestDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "kinopoiskId": {
+                        "type": "string"
+                    },
+                    "imdbId": {
+                        "type": "string"
+                    },
+                    "shikimoriId": {
+                        "type": "string"
+                    },
+                    "decodeLinks": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ContentDto": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "kodikId": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "titleOrig": {
+                        "type": "string"
+                    },
+                    "otherTitle": {
+                        "type": "string"
+                    },
+                    "year": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "kinopoiskId": {
+                        "type": "string"
+                    },
+                    "imdbId": {
+                        "type": "string"
+                    },
+                    "shikimoriId": {
+                        "type": "string"
+                    },
+                    "worldartLink": {
+                        "type": "string"
+                    },
+                    "screenshots": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "materialData": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "kinopoiskRating": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "imdbRating": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "shikimoriRating": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "genres": {
+                        "type": "string"
+                    },
+                    "blockedCountries": {
+                        "type": "string"
+                    },
+                    "camrip": {
+                        "type": "boolean"
+                    },
+                    "lgbt": {
+                        "type": "boolean"
+                    },
+                    "lastSeason": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "lastEpisode": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "episodesCount": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "quality": {
+                        "type": "string"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "ParseRequestDtoView": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "requestHash": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "PENDING",
+                            "RUNNING",
+                            "DONE",
+                            "FAILED"
+                        ]
+                    },
+                    "phase": {
+                        "type": "string",
+                        "enum": [
+                            "QUEUED",
+                            "SEARCHING",
+                            "DECODING",
+                            "DONE",
+                            "FAILED"
+                        ]
+                    },
+                    "progressDecoded": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "progressTotal": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "resultContentIds": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    "errorMessage": {
+                        "type": "string"
+                    },
+                    "retryCount": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "startedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "finishedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "lastHeartbeatAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "DownloadState": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "PENDING",
+                            "IN_PROGRESS",
+                            "COMPLETED",
+                            "FAILED"
+                        ]
+                    },
+                    "filepath": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    },
+                    "totalSegments": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "downloadedSegments": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "totalBytes": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "expectedTotalBytes": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "KodikReferenceResponseKodikYearDto": {
+                "type": "object",
+                "properties": {
+                    "time": {
+                        "type": "string"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/KodikYearDto"
+                        }
+                    }
+                }
+            },
+            "KodikYearDto": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "KodikReferenceResponseKodikTranslationDto": {
+                "type": "object",
+                "properties": {
+                    "time": {
+                        "type": "string"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/KodikTranslationDto"
+                        }
+                    }
+                }
+            },
+            "KodikTranslationDto": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "KodikQualityDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "KodikReferenceResponseKodikQualityDto": {
+                "type": "object",
+                "properties": {
+                    "time": {
+                        "type": "string"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/KodikQualityDto"
+                        }
+                    }
+                }
+            },
+            "KodikGenreDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "KodikReferenceResponseKodikGenreDto": {
+                "type": "object",
+                "properties": {
+                    "time": {
+                        "type": "string"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/KodikGenreDto"
+                        }
+                    }
+                }
+            },
+            "KodikCountryDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "count": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "KodikReferenceResponseKodikCountryDto": {
+                "type": "object",
+                "properties": {
+                    "time": {
+                        "type": "string"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/KodikCountryDto"
+                        }
+                    }
+                }
+            },
+            "KodikListItemView": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "titleOrig": {
+                        "type": "string"
+                    },
+                    "otherTitle": {
+                        "type": "string"
+                    },
+                    "year": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "kinopoiskId": {
+                        "type": "string"
+                    },
+                    "imdbId": {
+                        "type": "string"
+                    },
+                    "shikimoriId": {
+                        "type": "string"
+                    },
+                    "posterUrl": {
+                        "type": "string"
+                    },
+                    "lastSeason": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "lastEpisode": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "episodesCount": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "animeStatus": {
+                        "type": "string"
+                    },
+                    "dramaStatus": {
+                        "type": "string"
+                    },
+                    "allStatus": {
+                        "type": "string"
+                    },
+                    "quality": {
+                        "type": "string"
+                    },
+                    "updatedAt": {
+                        "type": "string"
+                    }
+                }
+            },
+            "KodikListPageView": {
+                "type": "object",
+                "properties": {
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/KodikListItemView"
+                        }
+                    },
+                    "total": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "nextPage": {
+                        "type": "string"
+                    },
+                    "prevPage": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ContentExportDto": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "titleOrig": {
+                        "type": "string"
+                    },
+                    "otherTitle": {
+                        "type": "string"
+                    },
+                    "year": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "kinopoiskId": {
+                        "type": "string"
+                    },
+                    "imdbId": {
+                        "type": "string"
+                    },
+                    "shikimoriId": {
+                        "type": "string"
+                    },
+                    "posterUrl": {
+                        "type": "string"
+                    },
+                    "screenshots": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "camrip": {
+                        "type": "boolean"
+                    },
+                    "lgbt": {
+                        "type": "boolean"
+                    },
+                    "lastSeason": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "lastEpisode": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "episodesCount": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "animeStatus": {
+                        "type": "string"
+                    },
+                    "dramaStatus": {
+                        "type": "string"
+                    },
+                    "allStatus": {
+                        "type": "string"
+                    },
+                    "ongoing": {
+                        "type": "boolean"
+                    },
+                    "seasons": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SeasonExportDto"
+                        }
+                    }
+                }
+            },
+            "EpisodeExportDto": {
+                "type": "object",
+                "properties": {
+                    "episodeNumber": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "variants": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/VariantExportDto"
+                        }
+                    }
+                }
+            },
+            "SeasonExportDto": {
+                "type": "object",
+                "properties": {
+                    "seasonNumber": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "episodes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EpisodeExportDto"
+                        }
+                    }
+                }
+            },
+            "VariantExportDto": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "translationId": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "translationTitle": {
+                        "type": "string"
+                    },
+                    "translationType": {
+                        "type": "string"
+                    },
+                    "quality": {
+                        "type": "string"
+                    },
+                    "mp4Link": {
+                        "type": "string"
+                    }
+                }
+            },
+            "PageResponseContentExportDto": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ContentExportDto"
+                        }
+                    },
+                    "page": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "totalElements": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "totalPages": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "PageResponseContentDto": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ContentDto"
+                        }
+                    },
+                    "page": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "totalElements": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "totalPages": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "EpisodeVariantDto": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "contentId": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "seasonNumber": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "episodeNumber": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "translationId": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "translationTitle": {
+                        "type": "string"
+                    },
+                    "translationType": {
+                        "type": "string"
+                    },
+                    "quality": {
+                        "type": "string"
+                    },
+                    "kodikLink": {
+                        "type": "string"
+                    },
+                    "mp4Link": {
+                        "type": "string"
+                    },
+                    "localFilepath": {
+                        "type": "string"
+                    }
+                }
+            },
+            "CalendarResponse": {
+                "type": "object",
+                "properties": {
+                    "fetchedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "etag": {
+                        "type": "string"
+                    },
+                    "total": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "entries": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EnrichedCalendarEntryDto"
+                        }
+                    }
+                }
+            },
+            "EnrichedCalendarEntryDto": {
+                "type": "object",
+                "properties": {
+                    "entry": {
+                        "$ref": "#/components/schemas/KodikCalendarEntryDto"
+                    },
+                    "orinunoContentId": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "KodikCalendarAnimeDto": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "russian": {
+                        "type": "string"
+                    },
+                    "image": {
+                        "$ref": "#/components/schemas/KodikCalendarImageDto"
+                    }
+                }
+            },
+            "KodikCalendarEntryDto": {
+                "type": "object",
+                "properties": {
+                    "nextEpisode": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "nextEpisodeAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "anime": {
+                        "$ref": "#/components/schemas/KodikCalendarAnimeDto"
+                    },
+                    "kind": {
+                        "type": "string"
+                    },
+                    "score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "episodes": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "episodesAired": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "airedOn": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "releasedOn": {
+                        "type": "string",
+                        "format": "date"
+                    }
+                }
+            },
+            "KodikCalendarImageDto": {
+                "type": "object",
+                "properties": {
+                    "original": {
+                        "type": "string"
+                    },
+                    "preview": {
+                        "type": "string"
+                    },
+                    "x96": {
+                        "type": "string"
+                    },
+                    "x48": {
+                        "type": "string"
+                    },
+                    "x24": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
     }
-  },
-  "components": {
-    "schemas": {
-      "ParseRequestDto": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "kinopoiskId": {
-            "type": "string"
-          },
-          "imdbId": {
-            "type": "string"
-          },
-          "shikimoriId": {
-            "type": "string"
-          },
-          "decodeLinks": {
-            "type": "boolean"
-          }
-        }
-      },
-      "ContentDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "kodikId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "titleOrig": {
-            "type": "string"
-          },
-          "otherTitle": {
-            "type": "string"
-          },
-          "year": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "kinopoiskId": {
-            "type": "string"
-          },
-          "imdbId": {
-            "type": "string"
-          },
-          "shikimoriId": {
-            "type": "string"
-          },
-          "worldartLink": {
-            "type": "string"
-          },
-          "screenshots": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "materialData": {
-            "type": "object",
-            "additionalProperties": {}
-          },
-          "kinopoiskRating": {
-            "type": "number",
-            "format": "double"
-          },
-          "imdbRating": {
-            "type": "number",
-            "format": "double"
-          },
-          "shikimoriRating": {
-            "type": "number",
-            "format": "double"
-          },
-          "genres": {
-            "type": "string"
-          },
-          "blockedCountries": {
-            "type": "string"
-          },
-          "camrip": {
-            "type": "boolean"
-          },
-          "lgbt": {
-            "type": "boolean"
-          },
-          "lastSeason": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "lastEpisode": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "episodesCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "quality": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "ParseRequestDtoView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "requestHash": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "PENDING",
-              "RUNNING",
-              "DONE",
-              "FAILED"
-            ]
-          },
-          "phase": {
-            "type": "string",
-            "enum": [
-              "QUEUED",
-              "SEARCHING",
-              "DECODING",
-              "DONE",
-              "FAILED"
-            ]
-          },
-          "progressDecoded": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "progressTotal": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "resultContentIds": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          "errorMessage": {
-            "type": "string"
-          },
-          "retryCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "startedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "finishedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "lastHeartbeatAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "DownloadState": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "PENDING",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "FAILED"
-            ]
-          },
-          "filepath": {
-            "type": "string"
-          },
-          "error": {
-            "type": "string"
-          },
-          "totalSegments": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "downloadedSegments": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalBytes": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "expectedTotalBytes": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "KodikReferenceResponseKodikYearDto": {
-        "type": "object",
-        "properties": {
-          "time": {
-            "type": "string"
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/KodikYearDto"
-            }
-          }
-        }
-      },
-      "KodikYearDto": {
-        "type": "object",
-        "properties": {
-          "year": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "count": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "KodikReferenceResponseKodikTranslationDto": {
-        "type": "object",
-        "properties": {
-          "time": {
-            "type": "string"
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/KodikTranslationDto"
-            }
-          }
-        }
-      },
-      "KodikTranslationDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "count": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "KodikQualityDto": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "count": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "KodikReferenceResponseKodikQualityDto": {
-        "type": "object",
-        "properties": {
-          "time": {
-            "type": "string"
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/KodikQualityDto"
-            }
-          }
-        }
-      },
-      "KodikGenreDto": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "count": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "KodikReferenceResponseKodikGenreDto": {
-        "type": "object",
-        "properties": {
-          "time": {
-            "type": "string"
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/KodikGenreDto"
-            }
-          }
-        }
-      },
-      "KodikCountryDto": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "count": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "KodikReferenceResponseKodikCountryDto": {
-        "type": "object",
-        "properties": {
-          "time": {
-            "type": "string"
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/KodikCountryDto"
-            }
-          }
-        }
-      },
-      "KodikListItemView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "titleOrig": {
-            "type": "string"
-          },
-          "otherTitle": {
-            "type": "string"
-          },
-          "year": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "kinopoiskId": {
-            "type": "string"
-          },
-          "imdbId": {
-            "type": "string"
-          },
-          "shikimoriId": {
-            "type": "string"
-          },
-          "posterUrl": {
-            "type": "string"
-          },
-          "lastSeason": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "lastEpisode": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "episodesCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "animeStatus": {
-            "type": "string"
-          },
-          "dramaStatus": {
-            "type": "string"
-          },
-          "allStatus": {
-            "type": "string"
-          },
-          "quality": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string"
-          }
-        }
-      },
-      "KodikListPageView": {
-        "type": "object",
-        "properties": {
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/KodikListItemView"
-            }
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "nextPage": {
-            "type": "string"
-          },
-          "prevPage": {
-            "type": "string"
-          }
-        }
-      },
-      "ContentExportDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "type": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "titleOrig": {
-            "type": "string"
-          },
-          "otherTitle": {
-            "type": "string"
-          },
-          "year": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "kinopoiskId": {
-            "type": "string"
-          },
-          "imdbId": {
-            "type": "string"
-          },
-          "shikimoriId": {
-            "type": "string"
-          },
-          "posterUrl": {
-            "type": "string"
-          },
-          "screenshots": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "camrip": {
-            "type": "boolean"
-          },
-          "lgbt": {
-            "type": "boolean"
-          },
-          "lastSeason": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "lastEpisode": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "episodesCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "animeStatus": {
-            "type": "string"
-          },
-          "dramaStatus": {
-            "type": "string"
-          },
-          "allStatus": {
-            "type": "string"
-          },
-          "ongoing": {
-            "type": "boolean"
-          },
-          "seasons": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SeasonExportDto"
-            }
-          }
-        }
-      },
-      "EpisodeExportDto": {
-        "type": "object",
-        "properties": {
-          "episodeNumber": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "variants": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VariantExportDto"
-            }
-          }
-        }
-      },
-      "SeasonExportDto": {
-        "type": "object",
-        "properties": {
-          "seasonNumber": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "episodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EpisodeExportDto"
-            }
-          }
-        }
-      },
-      "VariantExportDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "translationId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "translationTitle": {
-            "type": "string"
-          },
-          "translationType": {
-            "type": "string"
-          },
-          "quality": {
-            "type": "string"
-          },
-          "mp4Link": {
-            "type": "string"
-          }
-        }
-      },
-      "PageResponseContentExportDto": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ContentExportDto"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "PageResponseContentDto": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ContentDto"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "size": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalElements": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "totalPages": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "EpisodeVariantDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "contentId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "seasonNumber": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "episodeNumber": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "translationId": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "translationTitle": {
-            "type": "string"
-          },
-          "translationType": {
-            "type": "string"
-          },
-          "quality": {
-            "type": "string"
-          },
-          "kodikLink": {
-            "type": "string"
-          },
-          "mp4Link": {
-            "type": "string"
-          },
-          "localFilepath": {
-            "type": "string"
-          }
-        }
-      }
-    }
-  }
 }

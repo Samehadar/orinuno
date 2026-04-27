@@ -181,3 +181,52 @@ export type ReferenceKind =
   | 'years'
   | 'qualities'
 
+export interface CalendarImage {
+  original: string | null
+  preview: string | null
+  x96: string | null
+  x48: string | null
+  x24: string | null
+}
+
+export interface CalendarAnime {
+  id: string
+  name: string
+  russian: string | null
+  image: CalendarImage | null
+}
+
+export interface CalendarEntry {
+  nextEpisode: number | null
+  nextEpisodeAt: string | null
+  duration: number | null
+  anime: CalendarAnime
+  kind: string | null
+  score: number | null
+  status: string | null
+  episodes: number | null
+  episodesAired: number | null
+  airedOn: string | null
+  releasedOn: string | null
+}
+
+export interface EnrichedCalendarEntry {
+  entry: CalendarEntry
+  orinunoContentId: number | null
+}
+
+export interface CalendarResponse {
+  fetchedAt: string
+  etag: string | null
+  total: number
+  entries: EnrichedCalendarEntry[]
+}
+
+export interface CalendarFilter {
+  status?: string
+  kind?: string
+  minScore?: number
+  limit?: number
+  enrich?: boolean
+}
+

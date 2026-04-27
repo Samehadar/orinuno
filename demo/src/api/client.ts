@@ -1,4 +1,6 @@
 import type {
+  CalendarFilter,
+  CalendarResponse,
   ContentDto,
   ContentExportDto,
   DecoderHealth,
@@ -154,5 +156,16 @@ export const api = {
     return get<ReferenceResponse<KodikQuality>>(
       `/api/v1/reference/qualities${fresh ? '?fresh=true' : ''}`,
     )
+  },
+
+  getCalendar(filter: CalendarFilter = {}) {
+    const params = new URLSearchParams()
+    if (filter.status) params.set('status', filter.status)
+    if (filter.kind) params.set('kind', filter.kind)
+    if (filter.minScore != null) params.set('minScore', String(filter.minScore))
+    if (filter.limit != null) params.set('limit', String(filter.limit))
+    if (filter.enrich) params.set('enrich', 'true')
+    const qs = params.toString()
+    return get<CalendarResponse>(`/api/v1/calendar${qs ? `?${qs}` : ''}`)
   },
 }

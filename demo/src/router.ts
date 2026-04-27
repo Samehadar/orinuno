@@ -8,6 +8,7 @@ const router = createRouter({
     { path: '/content/:id', name: 'content-detail', component: () => import('./views/ContentDetailView.vue') },
     { path: '/export/:id', name: 'export', component: () => import('./views/ExportView.vue') },
     { path: '/reference', name: 'reference', component: () => import('./views/ReferenceView.vue') },
+    { path: '/calendar', name: 'calendar', component: () => import('./views/CalendarView.vue') },
     { path: '/health', name: 'health', component: () => import('./views/HealthView.vue') },
   ],
 })
