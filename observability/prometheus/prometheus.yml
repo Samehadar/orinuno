@@ -3,6 +3,9 @@ global:
   scrape_timeout: 4s
   evaluation_interval: 15s
 
+rule_files:
+  - /etc/prometheus/rules/*.rules.yml
+
 # Two targets are listed so the same docker-compose stack works in both
 # common local setups:
 #   - "compose mode": orinuno itself runs as the `app` service inside the
