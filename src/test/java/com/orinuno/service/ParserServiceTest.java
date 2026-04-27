@@ -12,6 +12,8 @@ import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
+import com.orinuno.service.metrics.KodikCdnHostMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,18 +36,21 @@ class ParserServiceTest {
     @Mock private EpisodeVariantRepository episodeVariantRepository;
 
     private ParserService parserService;
+    private KodikCdnHostMetrics kodikCdnHostMetrics;
 
     @BeforeEach
     void setUp() {
         OrinunoProperties properties = new OrinunoProperties();
         properties.getKodik().setRequestDelayMs(0);
+        kodikCdnHostMetrics = new KodikCdnHostMetrics(new SimpleMeterRegistry());
         parserService =
                 new ParserService(
                         kodikApiClient,
                         contentService,
                         decoderService,
                         episodeVariantRepository,
-                        properties);
+                        properties,
+                        kodikCdnHostMetrics);
     }
 
     @Test
@@ -170,7 +175,8 @@ class ParserServiceTest {
                         contentService,
                         decoderService,
                         episodeVariantRepository,
-                        props);
+                        props,
+                        kodikCdnHostMetrics);
 
         when(episodeVariantRepository.findExpiredLinks(anyInt(), anyInt())).thenReturn(List.of());
 
@@ -193,7 +199,8 @@ class ParserServiceTest {
                         contentService,
                         decoderService,
                         episodeVariantRepository,
-                        props);
+                        props,
+                        kodikCdnHostMetrics);
 
         when(episodeVariantRepository.findFailedDecode(anyInt())).thenReturn(List.of());
 
@@ -217,7 +224,8 @@ class ParserServiceTest {
                         contentService,
                         decoderService,
                         episodeVariantRepository,
-                        props);
+                        props,
+                        kodikCdnHostMetrics);
 
         List<KodikEpisodeVariant> expired =
                 IntStream.range(0, 2)

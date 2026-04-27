@@ -6,6 +6,8 @@ import static org.awaitility.Awaitility.await;
 import com.orinuno.client.KodikApiClient;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.repository.EpisodeVariantRepository;
+import com.orinuno.service.metrics.KodikCdnHostMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -70,7 +72,8 @@ class DecoderMaintenanceSchedulerTest {
                         contentService,
                         decoderService,
                         episodeVariantRepository,
-                        props);
+                        props,
+                        new KodikCdnHostMetrics(new SimpleMeterRegistry()));
 
         scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(2);
