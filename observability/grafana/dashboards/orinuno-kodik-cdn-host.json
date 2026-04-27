@@ -1,0 +1,313 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "uid": "orinuno-kodik-cdn-host",
+  "title": "orinuno — Kodik CDN host drift",
+  "tags": ["orinuno", "kodik", "cdn", "incident-2026-04"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active CDN hosts (6h)",
+      "description": "Distinct Kodik CDN hosts producing decodes in the last 6 hours. 1 = mono-culture risk (matches KodikCdnMonoCulture alert).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 2 },
+              { "color": "green", "value": 3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(sum by (host) (increase(orinuno_kodik_cdn_host_total{host!~\"_.*\"}[6h])) > 0) or vector(0)",
+          "legendFormat": "hosts"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Decodes (last 5m)",
+      "description": "Total successful decodes in the last 5 minutes across all hosts. 0 = decoder wedged → KodikCdnDecoderInactive alert.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 5 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(orinuno_kodik_cdn_host_total[5m]))",
+          "legendFormat": "decodes"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Invalid URL ratio (1h)",
+      "description": "Share of decoded mp4 links whose host could not be parsed. >5% → likely Kodik schema mutation. Backs KodikCdnInvalidUrlSpike alert.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(orinuno_kodik_cdn_host_total{host=\"_invalid\"}[1h])) / clamp_min(sum(increase(orinuno_kodik_cdn_host_total[1h])), 1)",
+          "legendFormat": "invalid"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Cardinality bucket overflow",
+      "description": "Counter for hosts that exceeded the 50-distinct cap. Should be zero. Non-zero = explosion of CDN domains, investigate.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(orinuno_kodik_cdn_host_total{host=\"_overflow\"}) or vector(0)",
+          "legendFormat": "_overflow"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Decode rate per CDN host (req/min)",
+      "description": "Per-host throughput. Mono-culture is visible as a single fat band with the rest at zero.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqpm",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 25,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max", "sum"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (host) (rate(orinuno_kodik_cdn_host_total{host!~\"_.*\"}[5m])) * 60",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Host share — last 6h",
+      "description": "Share of decoded URLs per host in the last 6 hours. Single bar at 100% = mono-culture.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.7 },
+              { "color": "red", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (host) (increase(orinuno_kodik_cdn_host_total{host!~\"_.*\"}[6h])) / clamp_min(scalar(sum(increase(orinuno_kodik_cdn_host_total{host!~\"_.*\"}[6h]))), 1)",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Cumulative decodes per host",
+      "description": "Raw counter. Useful for spotting brand-new hosts (line starts mid-chart) — backs KodikCdnNewHostAppeared.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 5 }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (host) (orinuno_kodik_cdn_host_total)",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Alert state — orinuno-kodik-cdn-host",
+      "description": "Live state of the 5 alert rules wired to this metric. severity / surface labels carry over.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "alertstate" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "firing": { "color": "red", "index": 0, "text": "FIRING" } } },
+                  { "type": "value", "options": { "pending": { "color": "yellow", "index": 1, "text": "PENDING" } } }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": { "show": false, "reducer": ["sum"], "fields": "" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ALERTS{alertname=~\"KodikCdn.*\"}",
+          "legendFormat": "",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true },
+            "indexByName": {
+              "alertname": 0,
+              "alertstate": 1,
+              "severity": 2,
+              "surface": 3
+            },
+            "renameByName": {
+              "alertname": "alert",
+              "alertstate": "state",
+              "severity": "severity",
+              "surface": "surface"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

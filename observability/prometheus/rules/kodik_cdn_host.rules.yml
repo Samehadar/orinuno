@@ -1,0 +1,84 @@
+groups:
+  - name: orinuno-kodik-cdn-host
+    interval: 1m
+    rules:
+      - alert: KodikCdnMonoCulture
+        expr: |
+          count(
+            sum by (host) (
+              increase(orinuno_kodik_cdn_host_total{host!~"_.*"}[6h])
+            ) > 0
+          ) <= 1
+        for: 30m
+        labels:
+          severity: warning
+          surface: kodik
+        annotations:
+          summary: "Kodik decoded URLs come from a single CDN host"
+          description: |
+            Over the last 6 hours all decoded mp4 links resolved to a single CDN host
+            (or no decode activity at all). This is the mono-culture risk flagged by
+            INCIDENT-2026-04 follow-up: if that host degrades, orinuno goes blind.
+            Active hosts: {{ with query "sum by (host) (increase(orinuno_kodik_cdn_host_total{host!~\"_.*\"}[6h])) > 0" }}{{ range . }}{{ .Labels.host }} {{ end }}{{ end }}
+
+      - alert: KodikCdnNewHostAppeared
+        expr: |
+          (sum by (host) (increase(orinuno_kodik_cdn_host_total{host!~"_.*"}[1h])) > 0)
+          unless on (host)
+          (sum by (host) (orinuno_kodik_cdn_host_total{host!~"_.*"} offset 24h) > 0)
+        for: 5m
+        labels:
+          severity: info
+          surface: kodik
+        annotations:
+          summary: "New Kodik CDN host '{{ $labels.host }}' decoded for the first time"
+          description: |
+            Host {{ $labels.host }} appeared in decoded mp4 links within the last hour
+            but was not present 24h ago. Likely upstream Kodik shard rotation.
+            Verify schema-drift coverage and downloader compatibility, then update
+            the trusted-hosts allowlist if applicable.
+
+      - alert: KodikCdnHostDisappeared
+        expr: |
+          (sum by (host) (orinuno_kodik_cdn_host_total{host!~"_.*"} offset 24h) > 0)
+          unless on (host)
+          (sum by (host) (increase(orinuno_kodik_cdn_host_total{host!~"_.*"}[6h])) > 0)
+        for: 1h
+        labels:
+          severity: warning
+          surface: kodik
+        annotations:
+          summary: "Kodik CDN host '{{ $labels.host }}' stopped serving decodes"
+          description: |
+            Host {{ $labels.host }} produced decodes 24h ago but has been silent for
+            the last 6 hours. Either Kodik dropped this CDN, or our decoder lost
+            access (geo-block, IP ban, schema change).
+
+      - alert: KodikCdnDecoderInactive
+        expr: |
+          sum(increase(orinuno_kodik_cdn_host_total[30m])) == 0
+        for: 30m
+        labels:
+          severity: warning
+          surface: kodik
+        annotations:
+          summary: "No Kodik decodes recorded in the last 30 minutes"
+          description: |
+            Zero decoded mp4 links observed across all CDN hosts. Decoder may be
+            wedged, rate-limited, or token-rotated. Cross-check decoder health at
+            /api/v1/health/decoder and parse-request queue depth.
+
+      - alert: KodikCdnInvalidUrlSpike
+        expr: |
+          sum(increase(orinuno_kodik_cdn_host_total{host="_invalid"}[1h]))
+            / clamp_min(sum(increase(orinuno_kodik_cdn_host_total[1h])), 1) > 0.05
+        for: 30m
+        labels:
+          severity: warning
+          surface: kodik
+        annotations:
+          summary: "More than 5% of decoded mp4 links cannot be parsed"
+          description: |
+            Decoder produces URLs whose host cannot be extracted. Likely sign of
+            schema change in Kodik response (URL format mutated) — check decoder
+            normalization pipeline.
