@@ -10,6 +10,7 @@ import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.model.ParseRequestPhase;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
+import com.orinuno.service.metrics.KodikCdnHostMetrics;
 import com.orinuno.service.requestlog.ProgressReporter;
 import java.time.Duration;
 import java.util.List;
@@ -32,6 +33,7 @@ public class ParserService {
     private final KodikVideoDecoderService decoderService;
     private final EpisodeVariantRepository episodeVariantRepository;
     private final OrinunoProperties properties;
+    private final KodikCdnHostMetrics kodikCdnHostMetrics;
 
     public Mono<List<KodikContent>> search(ParseRequestDto request) {
         return searchInternal(request, ProgressReporter.NOOP);
@@ -299,6 +301,7 @@ public class ParserService {
                             String bestLink = selectBestQuality(videoLinks);
                             if (bestLink != null) {
                                 episodeVariantRepository.updateMp4Link(variant.getId(), bestLink);
+                                kodikCdnHostMetrics.recordDecodedUrl(bestLink);
                                 log.info(
                                         "✅ Decoded variant id={}: {} qualities, best={}",
                                         variant.getId(),
