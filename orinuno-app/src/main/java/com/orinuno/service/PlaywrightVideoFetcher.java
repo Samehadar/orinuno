@@ -4,6 +4,10 @@ import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.WaitUntilState;
 import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.service.download.hls.HlsMasterPlaylistResolver;
+import com.orinuno.service.download.hls.HlsMasterPlaylistResolver.OrinunoHlsResolverConfig;
+import com.orinuno.service.download.hls.HlsMediaPlaylist;
+import com.orinuno.service.download.hls.HlsRetryPolicy;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
@@ -498,89 +502,7 @@ public class PlaywrightVideoFetcher {
         return header.startsWith("#EXTM3U");
     }
 
-    private static byte[] downloadHlsSegmentBytes(
-            HttpClient httpClient, HttpRequest request, int oneBasedIdx, int totalSegments) {
-        final int maxAttempts = 4;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                HttpResponse<byte[]> response =
-                        httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-                if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                    byte[] body = response.body();
-                    return body != null ? body : new byte[0];
-                }
-                log.warn(
-                        "Segment {}/{} HTTP {}", oneBasedIdx, totalSegments, response.statusCode());
-                return new byte[0];
-            } catch (IOException e) {
-                log.warn(
-                        "Segment {}/{} I/O attempt {}: {}",
-                        oneBasedIdx,
-                        totalSegments,
-                        attempt,
-                        e.getMessage());
-                if (attempt == maxAttempts) {
-                    return new byte[0];
-                }
-                try {
-                    Thread.sleep(250L * attempt);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    return new byte[0];
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return new byte[0];
-            }
-        }
-        return new byte[0];
-    }
-
-    /**
-     * Downloads .ts segments from HLS manifest in parallel using Java HttpClient.
-     *
-     * <p>Playwright's APIRequestContext is NOT thread-safe (shares a single WebSocket), so we
-     * extract cookies from the BrowserContext and use java.net.http.HttpClient which handles
-     * concurrent requests natively.
-     */
-    private String downloadHlsSegments(
-            BrowserContext context,
-            String manifestUrl,
-            byte[] manifestBytes,
-            Path targetPath,
-            VideoDownloadService.DownloadProgress progress)
-            throws Exception {
-        String manifest = new String(manifestBytes, java.nio.charset.StandardCharsets.UTF_8);
-        String baseUrl = manifestUrl.substring(0, manifestUrl.lastIndexOf('/') + 1);
-
-        java.util.List<String> segmentUrls = new java.util.ArrayList<>();
-        for (String line : manifest.split("\n")) {
-            line = line.trim();
-            if (line.isEmpty() || line.startsWith("#")) continue;
-            if (line.startsWith("./")) {
-                segmentUrls.add(baseUrl + line.substring(2));
-            } else if (line.startsWith("http")) {
-                segmentUrls.add(line);
-            } else {
-                segmentUrls.add(baseUrl + line);
-            }
-        }
-
-        int concurrency = properties.getPlaywright().getHlsConcurrency();
-        log.info(
-                "HLS manifest contains {} segments, downloading with concurrency={}...",
-                segmentUrls.size(),
-                concurrency);
-
-        if (progress != null) {
-            progress.setTotalSegments(segmentUrls.size());
-        }
-
-        String targetStr = targetPath.toString();
-        if (targetStr.endsWith(".mp4")) {
-            targetPath = Path.of(targetStr.replace(".mp4", ".ts"));
-        }
-
+    private static CookieManager buildCookieManager(BrowserContext context) {
         CookieManager cookieManager = new CookieManager();
         for (var cookie : context.cookies()) {
             HttpCookie httpCookie = new HttpCookie(cookie.name, cookie.value);
@@ -599,6 +521,90 @@ public class PlaywrightVideoFetcher {
                 log.debug("Skipped cookie {}: {}", cookie.name, e.getMessage());
             }
         }
+        return cookieManager;
+    }
+
+    static byte[] downloadHlsSegmentBytes(
+            HttpClient httpClient,
+            HttpRequest request,
+            int oneBasedIdx,
+            int totalSegments,
+            int maxAttempts,
+            long baseDelayMs) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                HttpResponse<byte[]> response =
+                        httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                int status = response.statusCode();
+                if (status >= 200 && status < 300) {
+                    byte[] body = response.body();
+                    return body != null ? body : new byte[0];
+                }
+                if (HlsRetryPolicy.isRetriableStatus(status) && attempt < maxAttempts) {
+                    log.warn(
+                            "Segment {}/{} HTTP {} (retriable) attempt {}/{}",
+                            oneBasedIdx,
+                            totalSegments,
+                            status,
+                            attempt,
+                            maxAttempts);
+                    sleepUninterruptibly(HlsRetryPolicy.backoffMillis(baseDelayMs, attempt));
+                    continue;
+                }
+                log.warn(
+                        "Segment {}/{} HTTP {} (giving up after {} attempts)",
+                        oneBasedIdx,
+                        totalSegments,
+                        status,
+                        attempt);
+                return new byte[0];
+            } catch (IOException e) {
+                log.warn(
+                        "Segment {}/{} I/O attempt {}: {}",
+                        oneBasedIdx,
+                        totalSegments,
+                        attempt,
+                        e.getMessage());
+                if (attempt == maxAttempts) {
+                    return new byte[0];
+                }
+                sleepUninterruptibly(HlsRetryPolicy.backoffMillis(baseDelayMs, attempt));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return new byte[0];
+            }
+        }
+        return new byte[0];
+    }
+
+    private static void sleepUninterruptibly(long millis) {
+        if (millis <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Downloads .ts segments from HLS manifest in parallel using Java HttpClient.
+     *
+     * <p>Playwright's APIRequestContext is NOT thread-safe (shares a single WebSocket), so we
+     * extract cookies from the BrowserContext and use java.net.http.HttpClient which handles
+     * concurrent requests natively.
+     */
+    private String downloadHlsSegments(
+            BrowserContext context,
+            String manifestUrl,
+            byte[] manifestBytes,
+            Path targetPath,
+            VideoDownloadService.DownloadProgress progress)
+            throws Exception {
+        var hlsProps = properties.getPlaywright().getHls();
+
+        CookieManager cookieManager = buildCookieManager(context);
         log.debug("Extracted {} cookies from browser context", context.cookies().size());
 
         HttpClient httpClient =
@@ -607,6 +613,33 @@ public class PlaywrightVideoFetcher {
                         .connectTimeout(Duration.ofSeconds(15))
                         .followRedirects(HttpClient.Redirect.NORMAL)
                         .build();
+
+        HlsMasterPlaylistResolver resolver =
+                new HlsMasterPlaylistResolver(
+                        httpClient,
+                        new OrinunoHlsResolverConfig(
+                                hlsProps.getMasterResolutionMaxDepth(), 15_000L));
+        HlsMediaPlaylist resolved = resolver.resolve(manifestUrl, manifestBytes);
+        String resolvedManifestUrl = resolved.manifestUrl();
+        java.util.List<String> segmentUrls = resolved.segmentUrls();
+
+        int concurrency = properties.getPlaywright().getHlsConcurrency();
+        log.info(
+                "HLS manifest resolved to {} segments (manifest={}), downloading with"
+                        + " concurrency={}, retry-attempts={}",
+                segmentUrls.size(),
+                resolvedManifestUrl,
+                concurrency,
+                hlsProps.getSegmentRetryMaxAttempts());
+
+        if (progress != null) {
+            progress.setTotalSegments(segmentUrls.size());
+        }
+
+        String targetStr = targetPath.toString();
+        if (targetStr.endsWith(".mp4")) {
+            targetPath = Path.of(targetStr.replace(".mp4", ".ts"));
+        }
 
         int totalSegments = segmentUrls.size();
         byte[][] segmentData = new byte[totalSegments][];
@@ -636,7 +669,7 @@ public class PlaywrightVideoFetcher {
                                                                     "User-Agent",
                                                                     userAgentProvider
                                                                             .stableDesktop())
-                                                            .header("Referer", manifestUrl)
+                                                            .header("Referer", resolvedManifestUrl)
                                                             .timeout(Duration.ofSeconds(45))
                                                             .GET()
                                                             .build();
@@ -646,7 +679,9 @@ public class PlaywrightVideoFetcher {
                                                             httpClient,
                                                             request,
                                                             idx + 1,
-                                                            totalSegments);
+                                                            totalSegments,
+                                                            hlsProps.getSegmentRetryMaxAttempts(),
+                                                            hlsProps.getSegmentRetryBaseDelayMs());
                                             if (body.length > 0) {
                                                 segmentData[idx] = body;
                                                 if (progress != null) {
@@ -696,6 +731,15 @@ public class PlaywrightVideoFetcher {
             CompletableFuture.allOf(futures).get(10, TimeUnit.MINUTES);
         } finally {
             executor.shutdown();
+        }
+
+        if (hlsProps.isFailOnMissingSegment() && failedCount.get() > 0) {
+            throw new RuntimeException(
+                    "HLS download failed: "
+                            + failedCount.get()
+                            + "/"
+                            + totalSegments
+                            + " segments missing (fail-on-missing-segment=true)");
         }
 
         long totalBytes = 0;

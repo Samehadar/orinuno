@@ -437,3 +437,46 @@ The orchestrator NEVER errors out — both decoders return an empty bucket on fa
 **Related**: DECODE-7 (regex robustness), DECODE-2 (persistent path cache).
 
 ---
+
+## 2026-05-02 — HLS download pipeline understands master playlists + retries 5xx/429 (DOWNLOAD-PARALLEL) [download] [hls] [ffmpeg]
+
+**Symptom**: Three latent bugs in the HLS download path that all manifested as "the file is silently broken":
+
+1. **Master playlists treated as media playlists.** The naive segment-list parser in `PlaywrightVideoFetcher.downloadHlsSegments` walked every non-`#` line and downloaded it as a `.ts` segment. If Kodik ever served an HLS *master* playlist (containing `#EXT-X-STREAM-INF` headers), the variant `.m3u8` URI would be queued as a single broken "segment" — the resulting file was the variant playlist text, not video.
+2. **HTTP 5xx / 429 fast-failed.** `downloadHlsSegmentBytes` only retried on `IOException`. A transient `503 Service Unavailable` from solodcdn during burst fetches produced an empty `byte[0]` and a hole in the final `.ts` — silently, no retry.
+3. **Holes in the final file were tolerated by default.** Missing segments (whatever the cause) were skipped at concat time; downloads never failed even when 50% of segments were empty.
+
+**Root cause**: The original implementation ([`PlaywrightVideoFetcher`](../orinuno-app/src/main/java/com/orinuno/service/PlaywrightVideoFetcher.java)) was written when Kodik only served media playlists and the CDN was rock-solid. Both assumptions degraded over time without any signal in the code that they were assumptions.
+
+**Workaround** (DOWNLOAD-PARALLEL): a new `service/download/hls/` package owns the HLS-specific logic in three small testable units:
+
+- [`HlsManifestParser`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/HlsManifestParser.java) — pure functions: `isValidManifest`, `isMasterPlaylist`, `selectBestVariantUri` (highest BANDWIDTH wins, ties → first declaration), `extractMediaSegmentUris` (skips `#`-comments + nested `.m3u8` URIs as a defensive belt+suspenders).
+- [`HlsMasterPlaylistResolver`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/HlsMasterPlaylistResolver.java) — recursively walks master → media via `HttpClient`. Capped at `master-resolution-max-depth` hops (default 3) so a malicious / misconfigured CDN can't loop us forever. Returns absolutized segment URIs in playback order.
+- [`HlsRetryPolicy`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/HlsRetryPolicy.java) — `isRetriableStatus(int)` returns `true` for 408 / 425 / 429 / 5xx and `false` for everything else (other 4xx fast-fail; retrying a 404/403/451 wastes latency and amplifies the broken link). Backoff is **linear** (`base * attempt`) — HLS segments are tiny and we want the next attempt while the CDN edge is still warm.
+
+`PlaywrightVideoFetcher.downloadHlsSegments` is now a thin orchestrator over these three. The retry-on-5xx / fail-on-missing behaviour is opt-in via `OrinunoProperties.PlaywrightProperties.HlsProperties`:
+
+| Property | Default | Meaning |
+|---|---|---|
+| `master-resolution-max-depth` | `3` | Max recursive hops for master→media resolution. |
+| `segment-retry-max-attempts` | `4` | Max attempts per segment (was hardcoded 4 IOException-only; now also covers 5xx/429). |
+| `segment-retry-base-delay-ms` | `250` | Linear backoff floor. |
+| `fail-on-missing-segment` | `false` | When `true`, abort the download if any segment is empty after retries. Default keeps legacy "best-effort" behaviour because Kodik's CDN flaps occasionally and a 99.x % file is usually playable. |
+| `ffmpeg-mode` | `single-input` | `single-input` (legacy: concat to one big `.ts`, `ffmpeg -i big.ts -c copy out.mp4`) or `concat-demuxer` (per-segment files + `concat.txt` + `ffmpeg -f concat -safe 0 -i concat.txt -c copy out.mp4`, useful for multi-GB playlists where the giant intermediate `.ts` exhausts disk). |
+
+**ffmpeg concat-demuxer mode** is implemented in [`FfmpegRemuxer`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/FfmpegRemuxer.java) but **not yet wired** into `PlaywrightVideoFetcher` — the wiring requires per-segment file storage which is a deeper refactor of `downloadHlsSegments`. The remuxer is a tested standalone capability today; the wiring is parked for a follow-up when we have an actual user that needs to download a multi-GB film. Both modes produce identical MP4 output (stream-copy, no re-encoding, fast-start moov atom).
+
+**Where in code**: [`HlsManifestParser`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/HlsManifestParser.java), [`HlsMasterPlaylistResolver`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/HlsMasterPlaylistResolver.java), [`HlsRetryPolicy`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/HlsRetryPolicy.java), [`HlsMediaPlaylist`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/HlsMediaPlaylist.java), [`FfmpegRemuxer`](../orinuno-app/src/main/java/com/orinuno/service/download/hls/FfmpegRemuxer.java), [`PlaywrightVideoFetcher#downloadHlsSegments`](../orinuno-app/src/main/java/com/orinuno/service/PlaywrightVideoFetcher.java).
+
+**Verified by**:
+
+- [`HlsManifestParserTest`](../orinuno-app/src/test/java/com/orinuno/service/download/hls/HlsManifestParserTest.java) — 9 tests (master/media classification, variant picking, tie-breakers, missing BANDWIDTH tolerance, CRLF handling).
+- [`HlsRetryPolicyTest`](../orinuno-app/src/test/java/com/orinuno/service/download/hls/HlsRetryPolicyTest.java) — 28 parameterized cases.
+- [`HlsMasterPlaylistResolverTest`](../orinuno-app/src/test/java/com/orinuno/service/download/hls/HlsMasterPlaylistResolverTest.java) — 5 tests (inline media-playlist, master→media fetch, depth-cap abort, invalid-manifest rejection, URI absolutization shapes).
+- [`FfmpegRemuxerTest`](../orinuno-app/src/test/java/com/orinuno/service/download/hls/FfmpegRemuxerTest.java) — 7 tests (suffix swap, single-input command-line shape, failure / timeout fallback to keeping `.ts`, concat-demuxer manifest shape + quote escaping).
+
+**Discovered via**: BACKLOG → DOWNLOAD-PARALLEL.
+
+**Related**: DECODE-8 (Playwright sniff fallback uses the same `PlaywrightVideoFetcher` infrastructure).
+
+---
