@@ -1,0 +1,122 @@
+[
+  {
+    "next_episode": 5,
+    "next_episode_at": "2026-05-02T08:30:00Z",
+    "duration": 23,
+    "anime": {
+      "id": "57466",
+      "name": "Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen - Ryoushu no Youjo",
+      "russian": "Власть книжного червя: Приёмная дочь лорда",
+      "image": {
+        "original": "https://shikimori.io/uploads/poster/animes/57466/718b0cb02c7ea1e87ef29ec69f004a42.jpeg",
+        "preview": "https://shikimori.io/uploads/poster/animes/57466/preview-c1e17776eec2007fd271b6482d0a0b9c.webp",
+        "x96": "https://shikimori.io/uploads/poster/animes/57466/main-f112e802e6c2c50bf7857513d0e2513d.webp",
+        "x48": "https://shikimori.io/uploads/poster/animes/57466/mini_2x-df2236cf3922c42c9c7e60a337535559.webp",
+        "x24": "https://shikimori.io/uploads/poster/animes/57466/mini-8a3cf2c525f73da6ba19c2013482dd91.webp"
+      }
+    },
+    "kind": "tv",
+    "score": 7.99,
+    "status": "ongoing",
+    "episodes": 0,
+    "episodes_aired": 4,
+    "aired_on": "2026-04-04",
+    "released_on": null
+  },
+  {
+    "next_episode": 1200,
+    "next_episode_at": "2026-05-02T09:00:00Z",
+    "duration": 24,
+    "anime": {
+      "id": "235",
+      "name": "Meitantei Conan",
+      "russian": "Детектив Конан",
+      "image": {
+        "original": "https://shikimori.io/uploads/poster/animes/235/888fd61952fdd8b6446cec36da268155.jpeg",
+        "preview": "https://shikimori.io/uploads/poster/animes/235/preview-4555b139c4de194e3a677fddf96431aa.webp",
+        "x96": "https://shikimori.io/uploads/poster/animes/235/main-c0912e67fd0d26243c5a1a347b95ed1b.webp",
+        "x48": "https://shikimori.io/uploads/poster/animes/235/mini_2x-89a1fafec77e6b67e516ab5a8789ff8b.webp",
+        "x24": "https://shikimori.io/uploads/poster/animes/235/mini-7e8a9e502a167ca5999e20b0a7205e9a.webp"
+      }
+    },
+    "kind": "tv",
+    "score": 8.18,
+    "status": "ongoing",
+    "episodes": 0,
+    "episodes_aired": 1199,
+    "aired_on": "1996-01-08",
+    "released_on": null
+  },
+  {
+    "next_episode": 5,
+    "next_episode_at": "2026-05-02T09:25:00Z",
+    "duration": 25,
+    "anime": {
+      "id": "60310",
+      "name": "Mairimashita! Iruma-kun 4th Season",
+      "russian": "Добро пожаловать в ад, Ирума! 4",
+      "image": {
+        "original": "https://shikimori.io/uploads/poster/animes/60310/24fc6b844b704d37184dae999a5aa660.jpeg",
+        "preview": "https://shikimori.io/uploads/poster/animes/60310/preview-e5ab6f67d2153332fa781d6824a30999.webp",
+        "x96": "https://shikimori.io/uploads/poster/animes/60310/main-423ac8db9fe6ee4fe3e424d57e04a298.webp",
+        "x48": "https://shikimori.io/uploads/poster/animes/60310/mini_2x-f847cad77d12783008a0a119161a591e.webp",
+        "x24": "https://shikimori.io/uploads/poster/animes/60310/mini-b1c4b00c7e3470cd90f319c52024725d.webp"
+      }
+    },
+    "kind": "tv",
+    "score": 8.04,
+    "status": "ongoing",
+    "episodes": 24,
+    "episodes_aired": 4,
+    "aired_on": "2026-04-04",
+    "released_on": null
+  },
+  {
+    "next_episode": 4,
+    "next_episode_at": "2026-05-02T12:30:00Z",
+    "duration": 23,
+    "anime": {
+      "id": "60444",
+      "name": "Yowayowa Sensei",
+      "russian": "Учитель Ёваёва",
+      "image": {
+        "original": "https://shikimori.io/uploads/poster/animes/60444/047f4e947d602397a0dc35387056fc4d.jpeg",
+        "preview": "https://shikimori.io/uploads/poster/animes/60444/preview-63ef4fc8f8b53488c0d291e350fbc673.webp",
+        "x96": "https://shikimori.io/uploads/poster/animes/60444/main-3fca54d56e657e21a37bff64521ec60b.webp",
+        "x48": "https://shikimori.io/uploads/poster/animes/60444/mini_2x-892b2bb219359a644a999a418f1b781d.webp",
+        "x24": "https://shikimori.io/uploads/poster/animes/60444/mini-61b7b93f94bf74513707e2d98d2d4f25.webp"
+      }
+    },
+    "kind": "tv",
+    "score": 6.55,
+    "status": "ongoing",
+    "episodes": 12,
+    "episodes_aired": 3,
+    "aired_on": "2026-04-11",
+    "released_on": null
+  },
+  {
+    "next_episode": 6,
+    "next_episode_at": "2026-05-02T13:00:00Z",
+    "duration": 23,
+    "anime": {
+      "id": "62825",
+      "name": "Saikyou no Shokugyou wa Yuusha demo Kenja demo Naku Kanteishi (Kari) Rashii desu yo?",
+      "russian": "Похоже, сильнейшая профессия — это не герой или мудрец, а (временный) инспектор?",
+      "image": {
+        "original": "https://shikimori.io/uploads/poster/animes/62825/efc99ef6106cd10d3472f339c9e74be5.jpeg",
+        "preview": "https://shikimori.io/uploads/poster/animes/62825/preview-254d4944ba92a67a066f3c22b1ed781d.webp",
+        "x96": "https://shikimori.io/uploads/poster/animes/62825/main-d3c332413d2c159153e681bc7dee212a.webp",
+        "x48": "https://shikimori.io/uploads/poster/animes/62825/mini_2x-fb0c03d4e7b23a5b050533e7aaf60462.webp",
+        "x24": "https://shikimori.io/uploads/poster/animes/62825/mini-124787de7de766ccb1f6d2943210109c.webp"
+      }
+    },
+    "kind": "tv",
+    "score": 6.3,
+    "status": "ongoing",
+    "episodes": 0,
+    "episodes_aired": 5,
+    "aired_on": "2026-04-04",
+    "released_on": null
+  }
+]
