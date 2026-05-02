@@ -2,6 +2,7 @@ package com.orinuno.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.orinuno.client.dto.KodikListRequest;
+import com.orinuno.client.dto.KodikReferenceRequest;
 import com.orinuno.client.dto.KodikSearchRequest;
 import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.client.dto.reference.KodikCountryDto;
@@ -76,6 +77,10 @@ public class KodikApiClient {
             log.info("Kodik API /list next page");
             response =
                     rateLimiter.wrapWithRateLimit(postForMapAbsoluteUrl(request.getNextPageUrl()));
+        } else if (request.getPrevPageUrl() != null && !request.getPrevPageUrl().isBlank()) {
+            log.info("Kodik API /list prev page");
+            response =
+                    rateLimiter.wrapWithRateLimit(postForMapAbsoluteUrl(request.getPrevPageUrl()));
         } else {
             MultiValueMap<String, String> params = buildListParams(request);
             log.info("Kodik API /list with {} params", params.size());
@@ -121,39 +126,91 @@ public class KodikApiClient {
     // ======================== REFERENCE ENDPOINTS ========================
 
     public Mono<Map<String, Object>> translationsRaw() {
+        return translationsRaw(null);
+    }
+
+    public Mono<Map<String, Object>> translationsRaw(KodikReferenceRequest request) {
         log.info("Kodik API /translations/v2");
         return rateLimiter.wrapWithRateLimit(
-                postForMap("/translations/v2", emptyParams(), KodikFunction.GET_INFO));
+                postForMap(
+                        "/translations/v2",
+                        buildReferenceParams(request, /* allowGenresType= */ false),
+                        KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> genresRaw() {
+        return genresRaw(null);
+    }
+
+    public Mono<Map<String, Object>> genresRaw(KodikReferenceRequest request) {
         log.info("Kodik API /genres");
         return rateLimiter.wrapWithRateLimit(
-                postForMap("/genres", emptyParams(), KodikFunction.GET_INFO));
+                postForMap(
+                        "/genres",
+                        buildReferenceParams(request, /* allowGenresType= */ true),
+                        KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> countriesRaw() {
+        return countriesRaw(null);
+    }
+
+    public Mono<Map<String, Object>> countriesRaw(KodikReferenceRequest request) {
         log.info("Kodik API /countries");
         return rateLimiter.wrapWithRateLimit(
-                postForMap("/countries", emptyParams(), KodikFunction.GET_INFO));
+                postForMap(
+                        "/countries",
+                        buildReferenceParams(request, /* allowGenresType= */ false),
+                        KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> yearsRaw() {
+        return yearsRaw(null);
+    }
+
+    public Mono<Map<String, Object>> yearsRaw(KodikReferenceRequest request) {
         log.info("Kodik API /years");
         return rateLimiter.wrapWithRateLimit(
-                postForMap("/years", emptyParams(), KodikFunction.GET_INFO));
+                postForMap(
+                        "/years",
+                        buildReferenceParams(request, /* allowGenresType= */ false),
+                        KodikFunction.GET_INFO));
     }
 
     public Mono<Map<String, Object>> qualitiesRaw() {
+        return qualitiesRaw(null);
+    }
+
+    public Mono<Map<String, Object>> qualitiesRaw(KodikReferenceRequest request) {
         log.info("Kodik API /qualities/v2");
         return rateLimiter.wrapWithRateLimit(
-                postForMap("/qualities/v2", emptyParams(), KodikFunction.GET_INFO));
+                postForMap(
+                        "/qualities/v2",
+                        buildReferenceParams(request, /* allowGenresType= */ false),
+                        KodikFunction.GET_INFO));
+    }
+
+    /** Package-private for direct unit-testing in {@code KodikApiClientParamWiringTest}. */
+    static MultiValueMap<String, String> buildReferenceParams(
+            KodikReferenceRequest request, boolean allowGenresType) {
+        if (request == null) return emptyParams();
+        MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
+        if (allowGenresType) {
+            addIfPresent(p, "genres_type", request.getGenresType());
+        }
+        addIfPresent(p, "types", request.getTypes());
+        return p;
     }
 
     // ============= REFERENCE ENDPOINTS (typed, drift-detected) ==============
 
     public Mono<KodikReferenceResponse<KodikTranslationDto>> translations() {
-        return translationsRaw()
+        return translations(null);
+    }
+
+    public Mono<KodikReferenceResponse<KodikTranslationDto>> translations(
+            KodikReferenceRequest request) {
+        return translationsRaw(request)
                 .map(
                         raw ->
                                 responseMapper.mapAndDetectChanges(
@@ -164,7 +221,11 @@ public class KodikApiClient {
     }
 
     public Mono<KodikReferenceResponse<KodikGenreDto>> genres() {
-        return genresRaw()
+        return genres(null);
+    }
+
+    public Mono<KodikReferenceResponse<KodikGenreDto>> genres(KodikReferenceRequest request) {
+        return genresRaw(request)
                 .map(
                         raw ->
                                 responseMapper.mapAndDetectChanges(
@@ -175,7 +236,11 @@ public class KodikApiClient {
     }
 
     public Mono<KodikReferenceResponse<KodikCountryDto>> countries() {
-        return countriesRaw()
+        return countries(null);
+    }
+
+    public Mono<KodikReferenceResponse<KodikCountryDto>> countries(KodikReferenceRequest request) {
+        return countriesRaw(request)
                 .map(
                         raw ->
                                 responseMapper.mapAndDetectChanges(
@@ -186,7 +251,11 @@ public class KodikApiClient {
     }
 
     public Mono<KodikReferenceResponse<KodikYearDto>> years() {
-        return yearsRaw()
+        return years(null);
+    }
+
+    public Mono<KodikReferenceResponse<KodikYearDto>> years(KodikReferenceRequest request) {
+        return yearsRaw(request)
                 .map(
                         raw ->
                                 responseMapper.mapAndDetectChanges(
@@ -197,7 +266,11 @@ public class KodikApiClient {
     }
 
     public Mono<KodikReferenceResponse<KodikQualityDto>> qualities() {
-        return qualitiesRaw()
+        return qualities(null);
+    }
+
+    public Mono<KodikReferenceResponse<KodikQualityDto>> qualities(KodikReferenceRequest request) {
+        return qualitiesRaw(request)
                 .map(
                         raw ->
                                 responseMapper.mapAndDetectChanges(
@@ -281,7 +354,7 @@ public class KodikApiClient {
                                 Map<String, Object>>() {});
     }
 
-    private MultiValueMap<String, String> emptyParams() {
+    private static MultiValueMap<String, String> emptyParams() {
         return new LinkedMultiValueMap<>();
     }
 
@@ -305,11 +378,17 @@ public class KodikApiClient {
         return !str.isBlank();
     }
 
-    private MultiValueMap<String, String> buildSearchParams(KodikSearchRequest r) {
+    /** Package-private for direct unit-testing in {@code KodikApiClientParamWiringTest}. */
+    static MultiValueMap<String, String> buildSearchParams(KodikSearchRequest r) {
         MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
-        p.add("with_seasons", "true");
-        p.add("with_episodes", "true");
-        p.add("with_material_data", "true");
+        // Defaults — caller can override by setting the corresponding fields on KodikSearchRequest.
+        // API-4: the previous implementation called p.add(...) unconditionally and then
+        // addIfPresent(...), which silently produced two values for the same key when the caller
+        // tried to set with_seasons=false. We now respect the caller's value if explicitly set.
+        addBooleanWithDefault(p, "with_seasons", r.getWithSeasons(), true);
+        addBooleanWithDefault(p, "with_episodes", r.getWithEpisodes(), true);
+        addBooleanWithDefault(p, "with_episodes_data", r.getWithEpisodesData(), false);
+        addBooleanWithDefault(p, "with_material_data", r.getWithMaterialData(), true);
 
         addIfPresent(p, "title", r.getTitle());
         addIfPresent(p, "title_orig", r.getTitleOrig());
@@ -373,9 +452,10 @@ public class KodikApiClient {
         return p;
     }
 
-    private MultiValueMap<String, String> buildListParams(KodikListRequest r) {
+    /** Package-private for direct unit-testing in {@code KodikApiClientParamWiringTest}. */
+    static MultiValueMap<String, String> buildListParams(KodikListRequest r) {
         MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
-        p.add("with_material_data", "true");
+        addBooleanWithDefault(p, "with_material_data", r.getWithMaterialData(), true);
 
         addIfPresent(p, "limit", r.getLimit());
         addIfPresent(p, "sort", r.getSort());
@@ -433,5 +513,14 @@ public class KodikApiClient {
         if (!str.isBlank()) {
             params.add(key, str);
         }
+    }
+
+    private static void addBooleanWithDefault(
+            MultiValueMap<String, String> params,
+            String key,
+            Boolean explicitValue,
+            boolean defaultValue) {
+        boolean v = explicitValue != null ? explicitValue : defaultValue;
+        params.add(key, Boolean.toString(v));
     }
 }

@@ -62,5 +62,18 @@ public class KodikListRequest {
     private String animeLicensedBy;
     private String sort;
     private String order;
+
+    /**
+     * Forward-pagination cursor returned by Kodik in the {@code next_page} field of a previous
+     * {@code /list} response. When set, all other fields are ignored — Kodik replays the original
+     * query.
+     */
     private String nextPageUrl;
+
+    /**
+     * Backward-pagination cursor returned by Kodik in the {@code prev_page} field. Mirror of {@link
+     * #nextPageUrl}; same semantics. Added in API-4 so callers can step back through paginated
+     * lists without rebuilding state.
+     */
+    private String prevPageUrl;
 }
