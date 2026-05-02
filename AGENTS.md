@@ -10,26 +10,36 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 
 ## Quick Reference
 
+> Multi-module reactor since PR3 (transparency roadmap). The Spring Boot
+> service lives under `orinuno-app/`; the first SDK pilot lives under
+> `kodik-sdk-drift/`. See `docs/adr/0001-kodik-sdk-extraction.md`.
+
 | Area | Path |
 |------|------|
-| Application entry | `src/main/java/com/orinuno/OrinunoApplication.java` |
-| Controllers | `src/main/java/com/orinuno/controller/` |
-| Services | `src/main/java/com/orinuno/service/` |
-| Repositories (MyBatis) | `src/main/java/com/orinuno/repository/` |
-| XML mappers | `src/main/resources/com/orinuno/db/mapper/` |
-| Liquibase migrations | `src/main/resources/com/orinuno/db/changelog/` |
-| Configuration | `src/main/java/com/orinuno/configuration/` |
-| DTOs | `src/main/java/com/orinuno/model/dto/` |
-| Entities | `src/main/java/com/orinuno/model/` |
-| Kodik API client | `src/main/java/com/orinuno/client/` |
-| Kodik token registry | `src/main/java/com/orinuno/token/` |
-| Mappers (entity↔dto) | `src/main/java/com/orinuno/mapper/` |
-| Tests | `src/test/java/com/orinuno/` |
-| Properties | `src/main/resources/application.yml` |
-| Test properties | `src/test/resources/application-test.yml` |
+| Application entry | `orinuno-app/src/main/java/com/orinuno/OrinunoApplication.java` |
+| Controllers | `orinuno-app/src/main/java/com/orinuno/controller/` |
+| Services | `orinuno-app/src/main/java/com/orinuno/service/` |
+| Repositories (MyBatis) | `orinuno-app/src/main/java/com/orinuno/repository/` |
+| XML mappers | `orinuno-app/src/main/resources/com/orinuno/db/mapper/` |
+| Liquibase migrations | `orinuno-app/src/main/resources/com/orinuno/db/changelog/` |
+| Configuration | `orinuno-app/src/main/java/com/orinuno/configuration/` |
+| DTOs | `orinuno-app/src/main/java/com/orinuno/model/dto/` |
+| Entities | `orinuno-app/src/main/java/com/orinuno/model/` |
+| Kodik API client | `orinuno-app/src/main/java/com/orinuno/client/` |
+| Kodik token registry | `orinuno-app/src/main/java/com/orinuno/token/` |
+| Mappers (entity↔dto) | `orinuno-app/src/main/java/com/orinuno/mapper/` |
+| Schema-drift SDK (extracted) | `kodik-sdk-drift/src/main/java/com/kodik/sdk/drift/` |
+| Tests (service) | `orinuno-app/src/test/java/com/orinuno/` |
+| Tests (drift SDK) | `kodik-sdk-drift/src/test/java/com/kodik/sdk/drift/` |
+| Properties | `orinuno-app/src/main/resources/application.yml` |
+| Test properties | `orinuno-app/src/test/resources/application-test.yml` |
+| Reactor pom | `pom.xml` |
+| Service module pom | `orinuno-app/pom.xml` |
+| SDK pilot module pom | `kodik-sdk-drift/pom.xml` |
 | Docker | `Dockerfile`, `docker-compose.yml` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Backlog & ideas | `BACKLOG.md` |
+| ADRs | `docs/adr/` |
 
 ## Architecture Overview
 
@@ -69,7 +79,7 @@ Kodik uses a custom obfuscation: ROT13 with shift +18 (mod 26) + URL-safe Base64
 
 - **Open-source standalone**: No dependencies on any private backend project. No company-specific references, tokens, or imports.
 - **Kodik API domain**: `kodik-api.com` (with hyphen). NOT `kodikapi.com`.
-- **Kodik tokens**: Managed by `KodikTokenRegistry` over `data/kodik_tokens.json` (gitignored). Tier model + `functions_availability` matrix mirror AnimeParsers' `kdk_tokns/tokens.json`. Full contract in `data/TOKENS.md`. Never commit real token values. First boot seeds from `KODIK_TOKEN` env, or scrapes `kodik-add.com/add-players.min.js` as a legacy fallback.
+- **Kodik tokens**: Managed by `KodikTokenRegistry` over `data/kodik_tokens.json` (gitignored). Tier model + `functions_availability` matrix mirror AnimeParsers' `kdk_tokns/tokens.json`. Full contract in `data/TOKENS.md`. Never commit real token values. First boot seeds from `KODIK_TOKEN` env, or scrapes `kodik-add.com/add-players.min.js` as a legacy fallback. **DEAD-tier is not terminal**: `validateAll()` re-probes dead entries every `orinuno.kodik.dead-revalidation-interval-minutes` (default 24h) and `markValid()` auto-promotes them back to `unstable` on first success — see BACKLOG `TD-TOKEN-1`.
 - **COALESCE upsert**: When upserting `kodik_episode_variant`, never overwrite a valid `mp4_link` with NULL. Use `COALESCE(VALUES(mp4_link), mp4_link)`.
 - **SQL injection protection**: `sortBy` and `order` parameters in `ContentController` are whitelisted. MyBatis `${...}` interpolation is used only for these validated fields.
 - **API key auth**: When `orinuno.security.api-key` is set, all `/api/v1/content`, `/api/v1/parse` (incl. `/parse/requests`), `/api/v1/export`, `/api/v1/download`, `/api/v1/kodik`, `/api/v1/calendar`, `/api/v1/embed` require `X-API-KEY` header.
@@ -80,18 +90,22 @@ Kodik uses a custom obfuscation: ROT13 with shift +18 (mod 26) + URL-safe Base64
 ## Development
 
 ```bash
-# Docker compose (MySQL + app)
+# Docker compose (MySQL + app) — Dockerfile builds the multi-module reactor
 cp .env.example .env   # set KODIK_TOKEN
 docker compose up -d
 
-# Manual
-mvn spring-boot:run
+# Manual run (spring-boot:run lives in the orinuno-app submodule)
+mvn -pl orinuno-app -am spring-boot:run
 
-# Tests
+# Tests (whole reactor)
 mvn test
 
+# Tests (single module)
+mvn -pl kodik-sdk-drift test
+mvn -pl orinuno-app test
+
 # Live integration test
-KODIK_TOKEN=xxx mvn test -Dtest=KodikLiveIntegrationTest
+KODIK_TOKEN=xxx mvn -pl orinuno-app test -Dtest=KodikLiveIntegrationTest
 ```
 
 ## Git

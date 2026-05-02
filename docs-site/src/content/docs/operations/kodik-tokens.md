@@ -75,7 +75,7 @@ orinuno:
 {
   "stable": [
     {
-      "value": "4492ae176f94d3103750b9443139fdc5",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "functions_availability": {
         "base_search": true,
         "base_search_by_id": true,

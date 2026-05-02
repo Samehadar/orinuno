@@ -695,10 +695,21 @@ onUnmounted(() => {
           class="neon-btn !bg-gradient-to-r !from-[var(--color-neon-green)] !to-[var(--color-neon-blue)]"
           :disabled="downloadingAll"
           @click="downloadAll"
+          :title="'Background download for every variant. Same backend strategy chain as the per-row Download button.'"
         >
           <span v-if="downloadingAll" class="inline-block animate-spin mr-1">⟳</span>
           {{ downloadingAll ? 'Downloading...' : 'Download all' }}
         </button>
+
+        <a
+          href="https://samehadar.github.io/orinuno/architecture/download-pathways/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-neon-blue)] underline decoration-dotted"
+          :title="'Decision table: Download vs Download & Play vs HLS vs Embed'"
+        >
+          What's the difference?
+        </a>
 
         <div class="ml-auto flex items-center gap-2">
           <span class="text-xs text-[var(--color-text-muted)]">Group by:</span>
@@ -896,6 +907,7 @@ onUnmounted(() => {
                               : 'text-[var(--color-neon-pink)]/70'"
                             :disabled="isDownloading(v.id) || autoPlayAfterDownload === v.id"
                             @click="handlePlay(v)"
+                            :title="'Same backend job as Download (background) — opens the player modal once COMPLETED.'"
                           >
                             <template v-if="autoPlayAfterDownload === v.id">
                               <span class="inline-block animate-spin">⟳</span> Downloading...
@@ -904,7 +916,7 @@ onUnmounted(() => {
                               ▶ Play
                             </template>
                             <template v-else>
-                              ▶ Download & Play
+                              ▶ Download &amp; Play
                             </template>
                           </button>
                           <button
@@ -921,15 +933,16 @@ onUnmounted(() => {
                             class="text-xs text-[var(--color-neon-green)] hover:underline disabled:opacity-40"
                             :disabled="downloadingAll"
                             @click="downloadSingleVariant(v)"
+                            :title="'Background download (saves locally). Same endpoint as Download &amp; Play — UI does not auto-open the player when complete.'"
                           >
-                            Download
+                            Download (background)
                           </button>
                           <button
                             v-if="v.kodikLink"
                             class="text-xs text-[var(--color-neon-orange)] hover:underline disabled:opacity-40"
                             :disabled="hlsLoading === v.id"
                             @click="copyHlsUrl(v)"
-                            :title="'Copy HLS m3u8 URL to clipboard'"
+                            :title="'Copy m3u8 URL for an external player (VLC/mpv/ffmpeg). No local download.'"
                           >
                             <span v-if="hlsLoading === v.id" class="inline-block animate-spin">⟳</span>
                             <span v-else>HLS</span>

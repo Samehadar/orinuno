@@ -3,26 +3,46 @@ title: Project Structure
 description: Map of the source tree — where each responsibility lives and where to look first when investigating a bug.
 ---
 
-Orinuno follows the standard Spring Boot layout with three package
-conventions: `controller`, `service`, `repository` for the core domain, and
-`client`, `mapper`, `model` for cross-cutting concerns.
+Orinuno is a multi-module Maven reactor (introduced in PR3 of the
+transparency roadmap). Two modules live side-by-side:
 
-## Source tree
+- `orinuno-app/` — the Spring Boot service: controllers, MyBatis,
+  Liquibase, the demo UI, all REST/HTTP surface.
+- `kodik-sdk-drift/` — the first piece of the future Kodik SDK: a
+  Spring-free, domain-neutral schema-drift detector. See
+  [`docs/adr/0001-kodik-sdk-extraction.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0001-kodik-sdk-extraction.md)
+  for the longer-term split plan.
 
 ```
-src/main/java/com/orinuno/
+.
+├── pom.xml                            # reactor parent (packaging=pom)
+├── kodik-sdk-drift/
+│   ├── pom.xml                        # Spring-free, jackson-annotations + lombok + slf4j
+│   └── src/{main,test}/java/com/kodik/sdk/drift/
+└── orinuno-app/
+    ├── pom.xml                        # Spring Boot parent
+    ├── spotbugs-exclude.xml
+    └── src/{main,test}/...
+```
+
+## Source tree (orinuno-app)
+
+```
+orinuno-app/src/main/java/com/orinuno/
 ├── client/                    # Kodik API client
 │   ├── KodikApiClient.java    # 7 endpoints, raw + typed responses
-│   ├── KodikResponseMapper.java  # Schema drift detection
+│   ├── KodikResponseMapper.java  # Schema drift detection (uses kodik-sdk-drift)
 │   ├── KodikApiRateLimiter.java  # Token-bucket rate limiter
 │   └── dto/                   # Request/Response DTOs
 ├── controller/                # REST controllers
 │   ├── ContentController.java
 │   ├── ParseController.java
+│   ├── ParseRequestController.java
 │   ├── ExportController.java
 │   ├── HlsController.java
 │   ├── DownloadController.java
 │   ├── StreamController.java
+│   ├── KodikEmbedController.java
 │   └── HealthController.java
 ├── service/                   # Business logic
 │   ├── ParserService.java     # Search, decode, TTL refresh
@@ -32,17 +52,31 @@ src/main/java/com/orinuno/
 │   ├── ProxyWebClientService.java  # Proxy-aware HTTP with fallback
 │   ├── ProxyProviderService.java   # Round-robin proxy pool
 │   ├── VideoDownloadService.java   # Orchestrates Playwright downloads
-│   └── PlaywrightVideoFetcher.java # Headless Chromium + HLS parallel
+│   ├── PlaywrightVideoFetcher.java # Headless Chromium + HLS parallel
+│   └── KodikEmbedService.java # /get-player iframe URL shortcut
 ├── model/                     # Entities + DTOs
 ├── mapper/                    # Entity ↔ DTO converters
 ├── repository/                # MyBatis mapper interfaces
 └── configuration/             # Spring configs, properties, filters
+                                # ParseInboundRateLimitFilter (Bucket4j)
+                                # ApiKeyAuthFilter
 ```
 
-## Resources
+## Source tree (kodik-sdk-drift)
 
 ```
-src/main/resources/
+kodik-sdk-drift/src/main/java/com/kodik/sdk/drift/
+├── DriftDetector.java
+├── DriftRecord.java
+├── DriftSamplingProperties.java
+├── DtoFieldExtractor.java
+└── ItemSamplingMode.java
+```
+
+## Resources (orinuno-app)
+
+```
+orinuno-app/src/main/resources/
 ├── application.yml
 └── com/orinuno/db/
     ├── mapper/                # MyBatis XML with resultMaps and SQL
@@ -54,11 +88,14 @@ src/main/resources/
 ## Tests
 
 ```
-src/test/java/com/orinuno/
+orinuno-app/src/test/java/com/orinuno/
 ├── *Test.java                          # unit tests
 ├── KodikLiveIntegrationTest.java       # live Kodik API, needs KODIK_TOKEN
 ├── KodikApiStabilityTest.java          # 37 schema-drift assertions
 └── VideoDownloadLiveIntegrationTest.java
+
+kodik-sdk-drift/src/test/java/com/kodik/sdk/drift/
+└── DriftDetectorTest.java              # generic drift detector tests
 ```
 
 ## Where to start when something breaks
