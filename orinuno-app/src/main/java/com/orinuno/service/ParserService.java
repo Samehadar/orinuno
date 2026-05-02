@@ -335,22 +335,34 @@ public class ParserService {
     /**
      * Like {@link #selectBestQuality(Map)} but returns the full entry so callers can record both
      * the quality bucket (key) and the URL (value). Used by Prometheus quality metric per ADR 0004.
+     *
+     * <p>DECODE-1+7.4 hardening: explicitly drops every non-numeric key BEFORE the {@code max}
+     * comparison. Previously the comparator caught {@link NumberFormatException} and returned 0 —
+     * which made stream {@code max} non-deterministic when {@code default} or any other string key
+     * appeared. The {@code VIDEO_SRC_PATTERN} regex already filters non-numeric keys upstream, but
+     * {@link KodikVideoDecoderService#parseVideoResponse} is not the only producer of this map (see
+     * {@link com.orinuno.service.PlaywrightVideoFetcher} fallback paths), so the defensive filter
+     * here is the second line of defence.
      */
     static Map.Entry<String, String> pickBestQualityEntry(Map<String, String> videoLinks) {
         if (videoLinks == null || videoLinks.isEmpty()) return null;
 
         return videoLinks.entrySet().stream()
                 .filter(e -> !e.getKey().startsWith("_"))
+                .filter(e -> isNumericQualityKey(e.getKey()))
                 .filter(e -> e.getValue() != null && e.getValue().startsWith("http"))
                 .max(
-                        (a, b) -> {
-                            try {
-                                return Integer.compare(
-                                        Integer.parseInt(a.getKey()), Integer.parseInt(b.getKey()));
-                            } catch (NumberFormatException e) {
-                                return 0;
-                            }
-                        })
+                        (a, b) ->
+                                Integer.compare(
+                                        Integer.parseInt(a.getKey()), Integer.parseInt(b.getKey())))
                 .orElse(null);
+    }
+
+    private static boolean isNumericQualityKey(String key) {
+        if (key == null || key.isEmpty()) return false;
+        for (int i = 0; i < key.length(); i++) {
+            if (!Character.isDigit(key.charAt(i))) return false;
+        }
+        return true;
     }
 }

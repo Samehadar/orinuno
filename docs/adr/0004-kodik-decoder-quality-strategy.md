@@ -52,6 +52,16 @@ Concretely:
 
 ## Verification
 
-- [`ParserServiceTest.selectBestQuality*`](../../orinuno-app/src/test/java/com/orinuno/service/ParserServiceTest.java) (existing 4 tests, lines ~115-160): assert max-numeric pick, sentinel-key skipping, null-on-empty, non-http defensive skip.
-- [`KodikDecoderRawProbeTest.qualityDistributionProbe`](../../orinuno-app/src/test/java/com/orinuno/service/KodikDecoderRawProbeTest.java) (new in this commit) — when `KODIK_TOKEN` is set, runs the same 10-title quality probe used to draft this ADR, fails the build (loud `System.err` warning, not assertion) when a `1080`/`2160` bucket appears so we re-evaluate this ADR.
-- The Prometheus counter is added in DECODE-6 (next phase).
+- [`ParserServiceTest.selectBestQuality*`](../../orinuno-app/src/test/java/com/orinuno/service/ParserServiceTest.java) — 8 tests (DECODE-1+7.4 added 3 more):
+  - max-numeric pick, sentinel-key skipping, null-on-empty, non-http defensive skip (existing);
+  - explicit `default`-key skip (Kodik's bandwidth-conservative default);
+  - deterministic null-return when no numeric key exists at all;
+  - forward-compatible "code already handles 1080/2160 if Kodik ever ships them".
+- [`KodikDecoderRawProbeTest.qualityDistributionMatchesAdr0004Snapshot`](../../orinuno-app/src/test/java/com/orinuno/service/KodikDecoderRawProbeTest.java) — when `KODIK_TOKEN` is set AND the request originates from a CIS IP, runs the 5-title quality probe used to draft this ADR. Loud `System.err` warning (not assertion) when a `1080`/`2160` bucket appears so we re-evaluate this ADR.
+- The Prometheus counter `orinuno.decoder.quality{quality=…}` was added in DECODE-6 and is recorded by `ParserService.decodeForVariant()` after `pickBestQualityEntry`. Verified by [`KodikDecoderMetricsTest.recordPickedQuality*`](../../orinuno-app/src/test/java/com/orinuno/service/metrics/KodikDecoderMetricsTest.java).
+
+## Implementation status
+
+- DECODE-1 ✓ — quality strategy frozen as ADR'd; max-numeric, no knob, no rewrite, no rename.
+- DECODE-7.4 ✓ — `default` is explicitly skipped (defensive filter in `pickBestQualityEntry`); never picked even if it leaks into the map from a non-regex producer (e.g. Playwright fallback).
+- DECODE-6 ✓ — Prometheus counter wired and verified by tests.

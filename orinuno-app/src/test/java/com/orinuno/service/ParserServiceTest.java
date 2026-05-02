@@ -167,6 +167,50 @@ class ParserServiceTest {
     }
 
     @Test
+    @DisplayName(
+            "selectBestQuality skips Kodik's 'default' key per ADR 0004"
+                    + " (DECODE-1 hardening: don't pick the bandwidth-conservative default)")
+    void selectBestQualityIgnoresDefaultKey() {
+        Map<String, String> videoLinks = new HashMap<>();
+        videoLinks.put("default", "https://cdn.example/360-default.mp4");
+        videoLinks.put("720", "https://cdn.example/720.mp4");
+
+        assertThat(ParserService.selectBestQuality(videoLinks))
+                .as(
+                        "ADR 0004: Kodik's 'default' field is always the conservative 360p"
+                                + " — we always pick the max numeric instead.")
+                .isEqualTo("https://cdn.example/720.mp4");
+    }
+
+    @Test
+    @DisplayName(
+            "selectBestQuality is deterministic when only non-numeric and sentinel keys appear"
+                    + " (DECODE-1 hardening: returns null instead of arbitrary string entry)")
+    void selectBestQualityReturnsNullWhenNoNumericKeys() {
+        Map<String, String> videoLinks = new HashMap<>();
+        videoLinks.put("default", "https://cdn.example/default.mp4");
+        videoLinks.put("auto", "https://cdn.example/auto.mp4");
+        videoLinks.put("_geo_blocked", "true");
+
+        assertThat(ParserService.selectBestQuality(videoLinks)).isNull();
+    }
+
+    @Test
+    @DisplayName(
+            "selectBestQuality picks max numeric even when ADR 0004 is violated (1080+ appears)"
+                    + " — counter alerts us, code keeps working")
+    void selectBestQualityHandlesFutureHigherQualities() {
+        Map<String, String> videoLinks = new HashMap<>();
+        videoLinks.put("720", "https://cdn.example/720.mp4");
+        videoLinks.put("1080", "https://cdn.example/1080.mp4");
+        videoLinks.put("2160", "https://cdn.example/2160.mp4");
+
+        assertThat(ParserService.selectBestQuality(videoLinks))
+                .as("If Kodik ever adds 1080+ buckets, our code is ready — picks max numeric.")
+                .isEqualTo("https://cdn.example/2160.mp4");
+    }
+
+    @Test
     @DisplayName("refreshExpiredLinks: caps repo batch by maintenance.maxBatchPerTick (TD-PR-5)")
     void refreshExpiredLinksHonoursMaxBatchPerTick() {
         OrinunoProperties props = new OrinunoProperties();
