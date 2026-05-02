@@ -58,7 +58,7 @@ public class ParseRequestService {
                 "📨 Submitted parse request id={} (hash={}, by={})",
                 entity.getId(),
                 hashed.hash(),
-                entity.getCreatedBy());
+                sanitizeForLog(entity.getCreatedBy()));
         return new SubmitResult(toView(entity), true);
     }
 
@@ -115,6 +115,13 @@ public class ParseRequestService {
         } catch (Exception e) {
             throw new IllegalStateException("Cannot serialize ParseRequestDto", e);
         }
+    }
+
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.replace('\n', '_').replace('\r', '_');
     }
 
     public record PageResult(List<ParseRequestDtoView> items, long total) {}
