@@ -13,6 +13,7 @@
         <result property="quality" column="quality"/>
         <result property="kodikLink" column="kodik_link"/>
         <result property="mp4Link" column="mp4_link"/>
+        <result property="decodeMethod" column="decode_method"/>
         <result property="mp4LinkDecodedAt" column="mp4_link_decoded_at"/>
         <result property="localFilepath" column="local_filepath"/>
         <result property="createdAt" column="created_at"/>
@@ -74,6 +75,14 @@
     <update id="updateMp4Link">
         UPDATE kodik_episode_variant
         SET mp4_link = #{mp4Link}, mp4_link_decoded_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateMp4LinkAndMethod">
+        UPDATE kodik_episode_variant
+        SET mp4_link = #{mp4Link},
+            decode_method = #{decodeMethod},
+            mp4_link_decoded_at = NOW()
         WHERE id = #{id}
     </update>
 

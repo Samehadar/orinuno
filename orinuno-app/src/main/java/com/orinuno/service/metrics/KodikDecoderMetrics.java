@@ -37,6 +37,7 @@ public class KodikDecoderMetrics {
     static final String QUALITY_METRIC = "orinuno.decoder.quality";
     static final String OUTCOME_METRIC = "orinuno.decoder.outcome";
     static final String UPSTREAM_ERROR_METRIC = "orinuno.decoder.upstream_error";
+    static final String METHOD_METRIC = "orinuno.decoder.method";
 
     /** Stable enum of decode paths. Add new values here, not via free-form strings. */
     public enum DecodePath {
@@ -144,6 +145,18 @@ public class KodikDecoderMetrics {
                         "Per-call decoder outcome (DECODE-7 not-found classification)",
                         "outcome",
                         outcome.tag())
+                .increment();
+    }
+
+    /**
+     * DECODE-8 — record which decoder produced a usable URL. {@code result=success|empty} so
+     * dashboards can tell "we tried sniff and it worked" from "we tried sniff and it gave up too".
+     */
+    public void recordDecodeMethod(String method, boolean success) {
+        counter(
+                        METHOD_METRIC,
+                        "Per-call decoder method outcome (DECODE-8: REGEX vs SNIFF fallback)",
+                        Tags.of("method", method, "result", success ? "success" : "empty"))
                 .increment();
     }
 

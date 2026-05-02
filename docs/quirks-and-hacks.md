@@ -404,3 +404,36 @@ The companion [`KodikDumpBootstrapService`](../orinuno-app/src/main/java/com/ori
 **Related**: BACKLOG.md → DUMP-2; admin endpoint to trigger bootstrap is intentionally NOT shipped in this commit (DUMP-2 ships the capability; the trigger is a follow-up).
 
 ---
+
+## 2026-05-02 — Decode pipeline is regex-first / Playwright-sniff fallback (DECODE-8) [decoder] [playwright] [resilience]
+
+**Symptom**: Every time Kodik ships a fresh player JS bundle that breaks the regex (`PLAYER_JS_PATTERN`, `VIDEO_INFO_POST_PATTERN`, etc.) the decoder silently emits `{}` for every variant until we ship a regex hot-fix. In the May 2026 incident the new `app.serial.*.js` rename took us roughly 6 hours to notice + patch; in the meantime ~3 600 episodes failed to decode and the retry-failed scheduler kept churning the same set without any new attempt strategy.
+
+**Root cause**: The regex/JS path is a fast happy path that depends on Kodik's player bundle staying shape-stable. Kodik has no obligation to preserve that shape and we have no way to subscribe to changes — it's a "wait until everything's broken, then patch" relationship.
+
+**Workaround** (DECODE-8): the decode call goes through [`KodikDecodeOrchestrator`](../orinuno-app/src/main/java/com/orinuno/service/decoder/KodikDecodeOrchestrator.java) which:
+
+1. Always tries the regex/JS [`KodikVideoDecoderService`](../orinuno-app/src/main/java/com/orinuno/service/KodikVideoDecoderService.java) first (cheap, ~few hundred ms, no Chromium tab).
+2. If the regex returns `Map.of()` OR errors OR completes empty, falls back to [`PlaywrightSniffDecoder`](../orinuno-app/src/main/java/com/orinuno/service/decoder/PlaywrightSniffDecoder.java) — opens the player in headless Chromium via the existing `PlaywrightVideoFetcher` and intercepts the CDN URL from the network.
+3. Records the chosen path in the `decode_method` column of `kodik_episode_variant` (`REGEX` / `SNIFF` / null = pre-DECODE-8 row) so we can SQL-trend "how often is regex breaking".
+4. Records the same on a Prometheus counter (`KodikDecoderMetrics#recordDecodeMethod`).
+
+The orchestrator NEVER errors out — both decoders return an empty bucket on failure so the caller in `ParserService.persistDecode()` can persist `null` mp4_link + bump retry counter without distinguishing "the URL fetch failed" from "the decoder is broken".
+
+**Sniff result shape**: Playwright captures whatever CDN URL the browser fetches, which is almost always the master HLS manifest. The sniff decoder tags it under quality key `"auto"` (intentionally NON-numeric) so `ParserService#pickBestQualityEntry` ignores it during the "best numeric quality" scan and we fall through to the "first non-empty bucket" branch.
+
+**Safety gates**:
+
+- `orinuno.decoder.sniff-fallback-enabled` (default `false`) — opt-in because Playwright is heavyweight (full Chromium + ~20 s per sniff) and may not be installed on every deployment.
+- `orinuno.playwright.enabled` (default `true` only when Playwright is wired) — independent gate; if Playwright failed to initialise the orchestrator silently skips the sniff branch.
+- `Mono.empty()` and `null` map from the regex decoder are both treated as "empty" by `defaultIfEmpty(Map.of())` + the explicit null-map filter — defensive against future regex refactors that might forget to emit a value.
+
+**Where in code**: [`KodikDecodeOrchestrator`](../orinuno-app/src/main/java/com/orinuno/service/decoder/KodikDecodeOrchestrator.java), [`PlaywrightSniffDecoder`](../orinuno-app/src/main/java/com/orinuno/service/decoder/PlaywrightSniffDecoder.java), [`DecodeAttemptResult`](../orinuno-app/src/main/java/com/orinuno/service/decoder/DecodeAttemptResult.java), [`DecodeMethod`](../orinuno-app/src/main/java/com/orinuno/service/decoder/DecodeMethod.java), [`ParserService#persistDecode`](../orinuno-app/src/main/java/com/orinuno/service/ParserService.java), Liquibase script `20260502040000_add_decode_method_to_episode_variant.sql`.
+
+**Verified by**: [`KodikDecodeOrchestratorTest`](../orinuno-app/src/test/java/com/orinuno/service/decoder/KodikDecodeOrchestratorTest.java) (8 tests — short-circuit on success, fallback on empty/error, sniff-disabled config gate, sniff-unavailable gate, defensive empty-Mono handling, metrics) and [`PlaywrightSniffDecoderTest`](../orinuno-app/src/test/java/com/orinuno/service/decoder/PlaywrightSniffDecoderTest.java) (6 tests — null fetcher, unavailable fetcher, error swallowing, blank-URL filter).
+
+**Discovered via**: BACKLOG → DECODE-8 + the May 2026 `app.serial.*.js` regex breakage post-mortem.
+
+**Related**: DECODE-7 (regex robustness), DECODE-2 (persistent path cache).
+
+---

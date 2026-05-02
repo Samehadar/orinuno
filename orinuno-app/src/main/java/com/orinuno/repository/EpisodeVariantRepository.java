@@ -23,6 +23,16 @@ public interface EpisodeVariantRepository {
 
     void updateMp4Link(@Param("id") Long id, @Param("mp4Link") String mp4Link);
 
+    /**
+     * DECODE-8 — set mp4_link AND record which decoder produced it. Used by the {@code
+     * KodikDecodeOrchestrator} so we can Prometheus-track the REGEX vs SNIFF ratio and backfill
+     * SNIFF rows once the regex layer is fixed.
+     */
+    void updateMp4LinkAndMethod(
+            @Param("id") Long id,
+            @Param("mp4Link") String mp4Link,
+            @Param("decodeMethod") String decodeMethod);
+
     void updateLocalFilepath(@Param("id") Long id, @Param("localFilepath") String localFilepath);
 
     List<KodikEpisodeVariant> findExpiredLinks(
