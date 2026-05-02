@@ -316,3 +316,29 @@ To rotate the pool, edit `DESKTOP_POOL` in `RotatingUserAgentProvider` and bump 
 **Related**: BACKLOG.md → UA-1.
 
 ---
+
+## 2026-05-02 — Kodik publishes huge raw dumps; we HEAD-poll, never auto-download [dumps] [scheduler]
+
+**Symptom**: A naïve "GET films.json on a schedule and reparse" loop will pull ~82 MB of JSON every poll. With three dumps (calendar 80 KB / serials 175 MB / films 82 MB) and an hourly cadence that's ~6 GB / day of egress for Kodik AND of inbound for orinuno — for data that almost never changes between polls.
+
+**Root cause**: `https://dumps.kodikres.com/{calendar,serials,films}.json` are full re-publications, not deltas. The bodies are large and there is no incremental endpoint.
+
+**Workaround**: DUMP-1 introduces `KodikDumpService` and `DumpScheduler` that:
+
+- Send `HEAD` requests by default — cheap, returns ETag / Last-Modified / Content-Length.
+- Persist per-dump state (`orinuno_dump_state` table) keyed by `dump_name` (UNIQUE).
+- Bump `last_changed_at` only when the headers actually differ from the last poll.
+- Track `consecutive_failures` so the `/api/v1/health/dumps` endpoint can degrade.
+- Default `orinuno.dumps.enabled=false` — opt-in. `download-body` is a separate flag (`orinuno.dumps.download-body`, also default `false`) reserved for DUMP-2's bootstrap path.
+
+We deliberately do NOT wire up the full body download in DUMP-1 — the persisted state alone is enough for "is the dump stale?" alerts and for downstream consumers that wake up on `lastChangedAt` advances.
+
+**Where in code**: [`KodikDumpService`](../orinuno-app/src/main/java/com/orinuno/service/dumps/KodikDumpService.java), [`DumpScheduler`](../orinuno-app/src/main/java/com/orinuno/service/dumps/DumpScheduler.java), [`HealthController#dumpsHealth`](../orinuno-app/src/main/java/com/orinuno/controller/HealthController.java), Liquibase changeset `20260502010000_create_orinuno_dump_state.sql`.
+
+**Verified by**: [`KodikDumpServiceTest`](../orinuno-app/src/test/java/com/orinuno/service/dumps/KodikDumpServiceTest.java) (URL building, disabled-config short-circuit, persist-failure consecutive-failures bump, snapshot delegation, value-object shape).
+
+**Discovered via**: orinuno-radar `dumps.yml` audit + DUMP-1 implementation pass.
+
+**Related**: BACKLOG.md → DUMP-1, DUMP-2, DUMP-3; orinuno-radar `tracking/dumps.yml`.
+
+---

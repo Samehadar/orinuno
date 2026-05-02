@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.DumpStateRepository">
+
+    <resultMap id="dumpStateResultMap" type="com.orinuno.model.OrinunoDumpState">
+        <id property="id" column="id"/>
+        <result property="dumpName" column="dump_name"/>
+        <result property="dumpUrl" column="dump_url"/>
+        <result property="lastCheckedAt" column="last_checked_at"/>
+        <result property="lastChangedAt" column="last_changed_at"/>
+        <result property="lastStatus" column="last_status"/>
+        <result property="lastErrorMessage" column="last_error_message"/>
+        <result property="etag" column="etag"/>
+        <result property="lastModifiedHeader" column="last_modified_header"/>
+        <result property="contentLength" column="content_length"/>
+        <result property="consecutiveFailures" column="consecutive_failures"/>
+    </resultMap>
+
+    <insert id="upsertCheckResult">
+        INSERT INTO orinuno_dump_state (
+            dump_name, dump_url,
+            last_checked_at, last_changed_at,
+            last_status, last_error_message,
+            etag, last_modified_header, content_length,
+            consecutive_failures
+        ) VALUES (
+            #{dumpName}, #{dumpUrl},
+            #{lastCheckedAt}, #{lastChangedAt},
+            #{lastStatus}, #{lastErrorMessage},
+            #{etag}, #{lastModifiedHeader}, #{contentLength},
+            #{consecutiveFailures}
+        )
+        ON DUPLICATE KEY UPDATE
+            dump_url             = VALUES(dump_url),
+            last_checked_at      = VALUES(last_checked_at),
+            last_changed_at      = COALESCE(VALUES(last_changed_at), last_changed_at),
+            last_status          = VALUES(last_status),
+            last_error_message   = VALUES(last_error_message),
+            etag                 = COALESCE(VALUES(etag), etag),
+            last_modified_header = COALESCE(VALUES(last_modified_header), last_modified_header),
+            content_length       = COALESCE(VALUES(content_length), content_length),
+            consecutive_failures = VALUES(consecutive_failures)
+    </insert>
+
+    <select id="findByName" resultMap="dumpStateResultMap">
+        SELECT * FROM orinuno_dump_state WHERE dump_name = #{dumpName}
+    </select>
+
+    <select id="findAll" resultMap="dumpStateResultMap">
+        SELECT * FROM orinuno_dump_state ORDER BY dump_name
+    </select>
+
+</mapper>

@@ -3,10 +3,12 @@ package com.orinuno.controller;
 import com.kodik.sdk.drift.DriftRecord;
 import com.orinuno.client.KodikResponseMapper;
 import com.orinuno.model.KodikProxy;
+import com.orinuno.model.OrinunoDumpState;
 import com.orinuno.model.ParseRequestStatus;
 import com.orinuno.repository.ParseRequestRepository;
 import com.orinuno.service.DecoderHealthTracker;
 import com.orinuno.service.ProxyProviderService;
+import com.orinuno.service.dumps.KodikDumpService;
 import com.orinuno.token.KodikTokenEntry;
 import com.orinuno.token.KodikTokenRegistry;
 import com.orinuno.token.KodikTokenTier;
@@ -35,6 +37,7 @@ public class HealthController {
     private final KodikResponseMapper kodikResponseMapper;
     private final KodikTokenRegistry kodikTokenRegistry;
     private final ParseRequestRepository parseRequestRepository;
+    private final KodikDumpService kodikDumpService;
 
     @GetMapping
     @Operation(summary = "General health check")
@@ -119,6 +122,56 @@ public class HealthController {
         result.put("counts", counts);
         result.put("tiers", details);
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/dumps")
+    @Operation(
+            summary = "Kodik public dump endpoints (DUMP-1)",
+            description =
+                    "Returns the latest known state for every tracked Kodik dump"
+                            + " (calendar.json / serials.json / films.json). When"
+                            + " orinuno.dumps.enabled=false the snapshot is empty.")
+    public ResponseEntity<Map<String, Object>> dumpsHealth() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        List<OrinunoDumpState> snapshot = kodikDumpService.snapshot();
+        long stale =
+                snapshot.stream()
+                        .filter(
+                                s ->
+                                        s.getConsecutiveFailures() != null
+                                                && s.getConsecutiveFailures() > 0)
+                        .count();
+        body.put("status", stale > 0 ? "DEGRADED" : "OK");
+        body.put("trackedDumps", snapshot.size());
+        body.put("dumpsWithFailures", stale);
+        body.put(
+                "dumps",
+                snapshot.stream()
+                        .map(
+                                s -> {
+                                    Map<String, Object> e = new LinkedHashMap<>();
+                                    e.put("name", s.getDumpName());
+                                    e.put("url", s.getDumpUrl());
+                                    e.put(
+                                            "lastCheckedAt",
+                                            s.getLastCheckedAt() == null
+                                                    ? null
+                                                    : s.getLastCheckedAt().toString());
+                                    e.put(
+                                            "lastChangedAt",
+                                            s.getLastChangedAt() == null
+                                                    ? null
+                                                    : s.getLastChangedAt().toString());
+                                    e.put("lastStatus", s.getLastStatus());
+                                    e.put("lastErrorMessage", s.getLastErrorMessage());
+                                    e.put("etag", s.getEtag());
+                                    e.put("lastModifiedHeader", s.getLastModifiedHeader());
+                                    e.put("contentLength", s.getContentLength());
+                                    e.put("consecutiveFailures", s.getConsecutiveFailures());
+                                    return e;
+                                })
+                        .toList());
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/proxy")
