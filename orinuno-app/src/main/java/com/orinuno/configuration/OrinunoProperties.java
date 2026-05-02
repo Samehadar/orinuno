@@ -125,6 +125,54 @@ public class OrinunoProperties {
         private int navigationTimeoutMs = 15000;
         private int videoWaitMs = 30000;
         private int hlsConcurrency = 16;
+        private HlsProperties hls = new HlsProperties();
+    }
+
+    /**
+     * DOWNLOAD-PARALLEL — knobs for the HLS segment fetch + ffmpeg remux pipeline. Defaults
+     * preserve legacy behaviour: master-playlist resolution stays on (cheap, fixes silently broken
+     * downloads); 5xx/429 retries are conservative (4 attempts); ffmpeg stays in single-input mode
+     * (concat-demuxer is opt-in for very large playlists where the giant intermediate {@code .ts}
+     * is a problem).
+     */
+    @Data
+    public static class HlsProperties {
+        /**
+         * Max recursion depth when resolving an HLS master playlist down to a media playlist. Kodik
+         * typically only nests once but a malicious / misconfigured CDN could loop us forever; cap
+         * defensively.
+         */
+        private int masterResolutionMaxDepth = 3;
+
+        /** Max attempts per segment when the upstream returns a retriable HTTP status or IO. */
+        private int segmentRetryMaxAttempts = 4;
+
+        /** Base sleep (ms) between retries; scales linearly with attempt index. */
+        private long segmentRetryBaseDelayMs = 250;
+
+        /**
+         * When {@code true}, abort the download if any segment ends up empty (HTTP non-2xx that
+         * exhausted retries, IO that exhausted retries, etc.). Default {@code false} preserves
+         * legacy behaviour where holes are silently skipped — historically this was deliberate
+         * because Kodik's CDN flaps occasionally and a 99.x % file is usually playable. Flip to
+         * {@code true} when you want hard failures (e.g. for archival downloads).
+         */
+        private boolean failOnMissingSegment = false;
+
+        /**
+         * ffmpeg remux mode. {@code single-input} concatenates segments to one big {@code .ts} and
+         * runs {@code ffmpeg -i big.ts -c copy out.mp4} (legacy / default — usually optimal because
+         * Kodik playlists are small). {@code concat-demuxer} keeps segments separate, writes a
+         * {@code concat.txt} manifest, and runs {@code ffmpeg -f concat -safe 0 -i concat.txt -c
+         * copy out.mp4} — useful for very large playlists where the giant intermediate {@code .ts}
+         * exhausts disk.
+         */
+        private FfmpegMode ffmpegMode = FfmpegMode.SINGLE_INPUT;
+
+        public enum FfmpegMode {
+            SINGLE_INPUT,
+            CONCAT_DEMUXER
+        }
     }
 
     @Data
