@@ -342,3 +342,27 @@ We deliberately do NOT wire up the full body download in DUMP-1 — the persiste
 **Related**: BACKLOG.md → DUMP-1, DUMP-2, DUMP-3; orinuno-radar `tracking/dumps.yml`.
 
 ---
+
+## 2026-05-02 — Bootstrapping from a 175 MB dump must stream, not load [dumps] [memory]
+
+**Symptom**: `ObjectMapper.readValue(stream, new TypeReference<List<Result>>(){})` on `serials.json` allocates ~700 MB of heap (`List<Result>` × 50k entries × Lombok-generated objects). The JVM either OOMs or pauses for 30+ seconds in GC.
+
+**Root cause**: The dump is published as a single top-level JSON array (`[ {...}, {...}, ... ]`). DOM-style parsing materialises the entire array.
+
+**Workaround**: DUMP-2 introduces [`KodikDumpStreamingReader`](../orinuno-app/src/main/java/com/orinuno/service/dumps/KodikDumpStreamingReader.java) which uses Jackson's pull-parser (`JsonFactory.createParser` + `parser.nextToken()` + `OBJECT_MAPPER.readValue(parser, Result.class)`) to walk the array one element at a time. Resident memory is bounded by the largest single entry (~10 KB worst case for serials with rich `material_data` blobs).
+
+The companion [`KodikDumpBootstrapService`](../orinuno-app/src/main/java/com/orinuno/service/dumps/KodikDumpBootstrapService.java) wires the reader to the existing `EntityFactory` + `ContentService` upsert path, so the bootstrap path inherits the production idempotency rules (kinopoisk-id-keyed lookup, COALESCE upsert that never overwrites a valid mp4_link).
+
+**Safety gate**: bootstrap is gated behind two flags — `orinuno.dumps.enabled` (top-level) AND `orinuno.dumps.download-body` (specifically permits multi-GB GETs). Both default to `false`. Operators flip both, run the bootstrap, then flip both back.
+
+**Per-element failures are absorbed**: a single malformed entry (Kodik occasionally publishes shapes the SDK doesn't model) is logged + counted in the `skipped` field of the `BootstrapResult` but does NOT abort the stream. Ingesting 99.9% of the catalogue beats failing on the 0.1% edge case.
+
+**Where in code**: [`KodikDumpStreamingReader`](../orinuno-app/src/main/java/com/orinuno/service/dumps/KodikDumpStreamingReader.java), [`KodikDumpBootstrapService`](../orinuno-app/src/main/java/com/orinuno/service/dumps/KodikDumpBootstrapService.java).
+
+**Verified by**: [`KodikDumpStreamingReaderTest`](../orinuno-app/src/test/java/com/orinuno/service/dumps/KodikDumpStreamingReaderTest.java) (4 tests), [`KodikDumpBootstrapServiceTest`](../orinuno-app/src/test/java/com/orinuno/service/dumps/KodikDumpBootstrapServiceTest.java) (5 tests including the "consumer-throws-mid-stream" regression).
+
+**Discovered via**: DUMP-2 implementation pass + `films.json` shape probe.
+
+**Related**: BACKLOG.md → DUMP-2; admin endpoint to trigger bootstrap is intentionally NOT shipped in this commit (DUMP-2 ships the capability; the trigger is a follow-up).
+
+---
