@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.KodikContentEnrichmentRepository">
+
+    <resultMap id="enrichmentResultMap" type="com.orinuno.model.KodikContentEnrichment">
+        <id property="id" column="id"/>
+        <result property="contentId" column="content_id"/>
+        <result property="source" column="source"/>
+        <result property="externalId" column="external_id"/>
+        <result property="titleNative" column="title_native"/>
+        <result property="titleEnglish" column="title_english"/>
+        <result property="titleRussian" column="title_russian"/>
+        <result property="description" column="description"/>
+        <result property="score" column="score"/>
+        <result property="rawPayload" column="raw_payload"/>
+        <result property="fetchedAt" column="fetched_at"/>
+        <result property="lastRefreshedAt" column="last_refreshed_at"/>
+    </resultMap>
+
+    <select id="findByContentAndSource" resultMap="enrichmentResultMap">
+        SELECT * FROM kodik_content_enrichment
+        WHERE content_id = #{contentId} AND source = #{source}
+    </select>
+
+    <select id="findByContent" resultMap="enrichmentResultMap">
+        SELECT * FROM kodik_content_enrichment
+        WHERE content_id = #{contentId}
+        ORDER BY source
+    </select>
+
+    <select id="findContentIdsNeedingRefresh" resultType="long">
+        SELECT c.id FROM kodik_content c
+        LEFT JOIN kodik_content_enrichment e
+               ON e.content_id = c.id AND e.source = #{source}
+        WHERE e.id IS NULL
+           OR e.last_refreshed_at &lt; #{olderThan}
+        ORDER BY c.id
+        LIMIT #{limit}
+    </select>
+
+    <insert id="upsert" parameterType="com.orinuno.model.KodikContentEnrichment">
+        INSERT INTO kodik_content_enrichment (
+            content_id, source, external_id,
+            title_native, title_english, title_russian,
+            description, score, raw_payload,
+            fetched_at, last_refreshed_at
+        ) VALUES (
+            #{row.contentId}, #{row.source}, #{row.externalId},
+            #{row.titleNative}, #{row.titleEnglish}, #{row.titleRussian},
+            #{row.description}, #{row.score}, #{row.rawPayload},
+            #{row.fetchedAt}, #{row.lastRefreshedAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            external_id        = VALUES(external_id),
+            title_native       = VALUES(title_native),
+            title_english      = VALUES(title_english),
+            title_russian      = VALUES(title_russian),
+            description        = VALUES(description),
+            score              = VALUES(score),
+            raw_payload        = VALUES(raw_payload),
+            fetched_at         = COALESCE(fetched_at, VALUES(fetched_at)),
+            last_refreshed_at  = VALUES(last_refreshed_at)
+    </insert>
+
+</mapper>
