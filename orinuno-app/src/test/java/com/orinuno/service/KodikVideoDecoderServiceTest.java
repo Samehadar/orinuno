@@ -142,7 +142,7 @@ class KodikVideoDecoderServiceTest {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(false);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null, null);
 
         String json =
                 "{\"links\":{\"720\":[{\"src\":\"https://cdn.example/720.mp4:hls:manifest.m3u8\"}]}}";
@@ -161,7 +161,7 @@ class KodikVideoDecoderServiceTest {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(true);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null, null);
 
         String json =
                 "{\"links\":{\"720\":[{\"src\":\"https://p78.kodik.info/s/m/abc/tok:exp/720.mp4:hls:manifest.m3u8\"}]}}";
@@ -177,7 +177,7 @@ class KodikVideoDecoderServiceTest {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(true);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null, null);
 
         String json =
                 "{\"links\":{\"720\":[{\"src\":\"https://geo.example/manifest.m3u8\"}],"
@@ -193,7 +193,7 @@ class KodikVideoDecoderServiceTest {
     void parseVideoResponseHandlesEmptyInput() {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null, null, null);
 
         Map<String, String> result = svc.parseVideoResponse("{}");
 
