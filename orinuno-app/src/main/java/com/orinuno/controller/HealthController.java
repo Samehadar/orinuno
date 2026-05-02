@@ -8,6 +8,7 @@ import com.orinuno.model.ParseRequestStatus;
 import com.orinuno.repository.ParseRequestRepository;
 import com.orinuno.service.DecoderHealthTracker;
 import com.orinuno.service.ProxyProviderService;
+import com.orinuno.service.decoder.DecoderPathCache;
 import com.orinuno.service.dumps.KodikDumpService;
 import com.orinuno.token.KodikTokenEntry;
 import com.orinuno.token.KodikTokenRegistry;
@@ -38,6 +39,7 @@ public class HealthController {
     private final KodikTokenRegistry kodikTokenRegistry;
     private final ParseRequestRepository parseRequestRepository;
     private final KodikDumpService kodikDumpService;
+    private final DecoderPathCache decoderPathCache;
 
     @GetMapping
     @Operation(summary = "General health check")
@@ -171,6 +173,22 @@ public class HealthController {
                                     return e;
                                 })
                         .toList());
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/decoder/path-cache")
+    @Operation(
+            summary = "Per-netloc decoder path cache (DECODE-2)",
+            description =
+                    "Returns the in-memory snapshot of the persistent video-info POST path cache."
+                            + " Hydrated from kodik_decoder_path_cache on startup; updated on every"
+                            + " successful decode that resolves a fresh netloc.")
+    public ResponseEntity<Map<String, Object>> decoderPathCacheHealth() {
+        Map<String, String> snapshot = decoderPathCache.snapshot();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "OK");
+        body.put("knownNetlocs", snapshot.size());
+        body.put("cache", snapshot);
         return ResponseEntity.ok(body);
     }
 

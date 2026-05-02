@@ -232,13 +232,31 @@ Quality distribution observed in 10 titles (Naruto, FMA, AoT, OP, Steins;Gate, N
 
 **Workaround**: cache is now `ConcurrentMap<String, String>` keyed by netloc (lower-cased host of the iframe URL). Entries appear lazily on first successful POST per netloc; reads fall through to the default fallback path `/ftor` when the netloc is new.
 
-**Where in code**: [`KodikVideoDecoderService.cachedVideoInfoPathByNetloc`](../orinuno-app/src/main/java/com/orinuno/service/KodikVideoDecoderService.java) and `cacheVideoInfoPath(netloc, path)` / `resolveVideoInfoPath(netloc, playerJs)` helpers.
+**Where in code**: [`DecoderPathCache`](../orinuno-app/src/main/java/com/orinuno/service/decoder/DecoderPathCache.java) — wired into [`KodikVideoDecoderService.resolveVideoInfoPath()`](../orinuno-app/src/main/java/com/orinuno/service/KodikVideoDecoderService.java).
 
-**Verified by**: [`KodikVideoDecoderRegexTest`](../orinuno-app/src/test/java/com/orinuno/service/KodikVideoDecoderRegexTest.java) regression suite and `KodikVideoDecoderCacheTest` (added with DECODE-7).
+**Verified by**: [`KodikVideoDecoderRegexTest`](../orinuno-app/src/test/java/com/orinuno/service/KodikVideoDecoderRegexTest.java) regression suite and `KodikVideoDecoderCacheTest` (per-netloc invariants), `DecoderPathCacheTest` (DECODE-2 hydration + persistence).
 
-**Discovered via**: DECODE-7 robustness pass.
+**Discovered via**: DECODE-7 robustness pass; persistence layer added in DECODE-2.
 
-**Related**: BACKLOG.md → DECODE-7, DECODE-2 (persistent per-netloc cache).
+**Related**: BACKLOG.md → DECODE-7, DECODE-2.
+
+---
+
+## 2026-05-02 — Decoder path cache survives JVM restarts via `kodik_decoder_path_cache` [decoder] [persistence] [scheduler]
+
+**Symptom**: Every restart of orinuno re-paid the brute-force discovery cost for every Kodik netloc (parse player JS, fall back to `/ftor`/`/kor`/`/gvi`/`/seria` chain). On a fleet of decoders this multiplied the load against Kodik on every deploy and added a multi-second cold-decode latency for every distinct netloc.
+
+**Root cause**: Until DECODE-2 the per-netloc cache from DECODE-7 was a JVM-local `ConcurrentHashMap`. JVM-local caches are great for raw speed but lose all state across restarts.
+
+**Workaround** (DECODE-2): a Spring bean [`DecoderPathCache`](../orinuno-app/src/main/java/com/orinuno/service/decoder/DecoderPathCache.java) wraps the in-memory map AND an optional MyBatis repository. On `@PostConstruct` it hydrates the in-memory map from `kodik_decoder_path_cache`; on every `put` it fires off a non-blocking `Schedulers.boundedElastic()` upsert. DB failures (no MySQL, transient outage, schema mismatch) are absorbed with a warning — the in-memory map remains the source of truth so the decoder never blocks on the DB. Visible at `GET /api/v1/health/decoder/path-cache`.
+
+**Where in code**: [`DecoderPathCache`](../orinuno-app/src/main/java/com/orinuno/service/decoder/DecoderPathCache.java), [`KodikDecoderPathCacheRepository`](../orinuno-app/src/main/java/com/orinuno/repository/KodikDecoderPathCacheRepository.java), Liquibase script `20260502020000_create_kodik_decoder_path_cache.sql`.
+
+**Verified by**: [`DecoderPathCacheTest`](../orinuno-app/src/test/java/com/orinuno/service/decoder/DecoderPathCacheTest.java) — covers hydration, async persistence, and absorption of DB failures.
+
+**Discovered via**: BACKLOG → DECODE-2.
+
+**Related**: DECODE-7 (in-memory per-netloc cache).
 
 ---
 

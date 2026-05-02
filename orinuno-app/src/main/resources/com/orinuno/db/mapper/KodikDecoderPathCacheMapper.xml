@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.KodikDecoderPathCacheRepository">
+
+    <resultMap id="entryResultMap" type="com.orinuno.model.KodikDecoderPathCacheEntry">
+        <id property="netloc" column="netloc"/>
+        <result property="videoInfoPath" column="video_info_path"/>
+        <result property="hitCount" column="hit_count"/>
+        <result property="firstSeenAt" column="first_seen_at"/>
+        <result property="lastSeenAt" column="last_seen_at"/>
+    </resultMap>
+
+    <insert id="upsertCachedPath">
+        INSERT INTO kodik_decoder_path_cache (
+            netloc, video_info_path, hit_count, first_seen_at, last_seen_at
+        ) VALUES (
+            #{netloc}, #{videoInfoPath}, 1, #{now}, #{now}
+        )
+        ON DUPLICATE KEY UPDATE
+            video_info_path = VALUES(video_info_path),
+            hit_count       = hit_count + 1,
+            last_seen_at    = VALUES(last_seen_at)
+    </insert>
+
+    <select id="findByNetloc" resultMap="entryResultMap">
+        SELECT * FROM kodik_decoder_path_cache WHERE netloc = #{netloc}
+    </select>
+
+    <select id="findAll" resultMap="entryResultMap">
+        SELECT * FROM kodik_decoder_path_cache ORDER BY netloc
+    </select>
+
+</mapper>

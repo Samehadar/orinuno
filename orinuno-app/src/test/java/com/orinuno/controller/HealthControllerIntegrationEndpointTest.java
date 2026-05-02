@@ -36,6 +36,7 @@ class HealthControllerIntegrationEndpointTest {
     @Mock private KodikTokenRegistry kodikTokenRegistry;
     @Mock private ParseRequestRepository parseRequestRepository;
     @Mock private com.orinuno.service.dumps.KodikDumpService kodikDumpService;
+    @Mock private com.orinuno.service.decoder.DecoderPathCache decoderPathCache;
 
     private DecoderHealthTracker decoderHealthTracker;
     private WebTestClient client;
@@ -50,7 +51,8 @@ class HealthControllerIntegrationEndpointTest {
                         kodikResponseMapper,
                         kodikTokenRegistry,
                         parseRequestRepository,
-                        kodikDumpService);
+                        kodikDumpService,
+                        decoderPathCache);
         client = WebTestClient.bindToController(controller).build();
 
         lenient().when(kodikResponseMapper.getDetectedDrifts()).thenReturn(Map.of());

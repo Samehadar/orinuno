@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.service.decoder.DecoderPathCache;
 import com.orinuno.service.metrics.KodikDecoderMetrics;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -11,8 +12,6 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -60,24 +59,6 @@ public class KodikVideoDecoderService {
 
     private static final AtomicInteger cachedShift = new AtomicInteger(18);
 
-    /**
-     * Per-netloc cache of the discovered video-info POST path.
-     *
-     * <p>DECODE-7 (per-netloc cache): the previous {@code AtomicReference<String>} was a single
-     * global cache, which caused the path to flap between netlocs whenever orinuno decoded iframes
-     * from {@code kodikplayer.com}, {@code kodik.cc}, {@code kodikv.cc}, or any other netloc that
-     * uses a different player JS distribution and possibly a different POST path. Today both {@code
-     * kodikplayer.com} and {@code kodik.cc} resolve to {@code /ftor}, but Kodik has form for
-     * differentiating them (see docs/quirks-and-hacks.md, "Player JS file naming is now
-     * type-dependent" entry — analogous risk).
-     *
-     * <p>Keyed by the host (no protocol, no port) of the iframe URL, lower-cased. We intentionally
-     * do NOT eagerly populate it from {@link #KNOWN_VIDEO_INFO_PATHS}; entries appear lazily on
-     * first successful POST per netloc.
-     */
-    private static final ConcurrentMap<String, String> cachedVideoInfoPathByNetloc =
-            new ConcurrentHashMap<>();
-
     private static final String[] KNOWN_VIDEO_INFO_PATHS = {"/ftor", "/kor", "/gvi", "/seria"};
 
     private final WebClient kodikPlayerWebClient;
@@ -87,6 +68,7 @@ public class KodikVideoDecoderService {
     private final OrinunoProperties properties;
     private final KodikDecoderMetrics decoderMetrics;
     private final RotatingUserAgentProvider userAgentProvider;
+    private final DecoderPathCache decoderPathCache;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -203,18 +185,25 @@ public class KodikVideoDecoderService {
             }
         }
 
-        String cached = cachedVideoInfoPathByNetloc.get(netlocKey(netloc));
-        if (cached != null) {
-            log.info("Using cached video-info path for netloc {}: {}", netloc, cached);
-            return cached;
-        }
-
-        log.warn(
-                "Video-info path not found in player JS for netloc {}, using default fallback:"
-                        + " {}",
-                netloc,
-                KNOWN_VIDEO_INFO_PATHS[0]);
-        return KNOWN_VIDEO_INFO_PATHS[0];
+        return decoderPathCache
+                .get(netloc)
+                .map(
+                        cached -> {
+                            log.info(
+                                    "Using cached video-info path for netloc {}: {}",
+                                    netloc,
+                                    cached);
+                            return cached;
+                        })
+                .orElseGet(
+                        () -> {
+                            log.warn(
+                                    "Video-info path not found in player JS for netloc {}, using"
+                                            + " default fallback: {}",
+                                    netloc,
+                                    KNOWN_VIDEO_INFO_PATHS[0]);
+                            return KNOWN_VIDEO_INFO_PATHS[0];
+                        });
     }
 
     private Mono<Map<String, String>> tryFallbackPaths(
@@ -261,25 +250,13 @@ public class KodikVideoDecoderService {
         return chain;
     }
 
-    private static void cacheVideoInfoPath(String netloc, String path) {
-        if (netloc == null || netloc.isBlank() || path == null || !path.startsWith("/")) {
-            return;
-        }
-        cachedVideoInfoPathByNetloc.put(netlocKey(netloc), path);
+    private void cacheVideoInfoPath(String netloc, String path) {
+        decoderPathCache.put(netloc, path);
     }
 
-    private static String netlocKey(String netloc) {
-        return netloc == null ? "_unknown" : netloc.toLowerCase();
-    }
-
-    /** Visible for testing. */
-    static java.util.Map<String, String> snapshotVideoInfoPathCache() {
-        return java.util.Map.copyOf(cachedVideoInfoPathByNetloc);
-    }
-
-    /** Visible for testing. */
-    static void clearVideoInfoPathCache() {
-        cachedVideoInfoPathByNetloc.clear();
+    /** Visible for tests + the health endpoint. */
+    public Map<String, String> snapshotVideoInfoPathCache() {
+        return decoderPathCache.snapshot();
     }
 
     private Mono<String> loadPlayerJs(String url) {
