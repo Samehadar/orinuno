@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.KodikCalendarStateRepository">
+
+    <resultMap id="stateResultMap" type="com.orinuno.model.KodikCalendarState">
+        <id property="shikimoriId" column="shikimori_id"/>
+        <result property="nextEpisode" column="next_episode"/>
+        <result property="nextEpisodeAt" column="next_episode_at"/>
+        <result property="episodesAired" column="episodes_aired"/>
+        <result property="episodesTotal" column="episodes_total"/>
+        <result property="status" column="status"/>
+        <result property="score" column="score"/>
+        <result property="kind" column="kind"/>
+        <result property="airedOn" column="aired_on"/>
+        <result property="releasedOn" column="released_on"/>
+        <result property="firstSeenAt" column="first_seen_at"/>
+        <result property="lastSeenAt" column="last_seen_at"/>
+    </resultMap>
+
+    <select id="findByShikimoriId" resultMap="stateResultMap">
+        SELECT * FROM kodik_calendar_state WHERE shikimori_id = #{shikimoriId}
+    </select>
+
+    <select id="findAll" resultMap="stateResultMap">
+        SELECT * FROM kodik_calendar_state ORDER BY shikimori_id
+    </select>
+
+    <select id="findByShikimoriIds" resultMap="stateResultMap">
+        SELECT * FROM kodik_calendar_state
+        WHERE shikimori_id IN
+        <foreach collection="shikimoriIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <insert id="upsert" parameterType="com.orinuno.model.KodikCalendarState">
+        INSERT INTO kodik_calendar_state (
+            shikimori_id,
+            next_episode, next_episode_at,
+            episodes_aired, episodes_total,
+            status, score, kind,
+            aired_on, released_on,
+            first_seen_at, last_seen_at
+        ) VALUES (
+            #{state.shikimoriId},
+            #{state.nextEpisode}, #{state.nextEpisodeAt},
+            #{state.episodesAired}, #{state.episodesTotal},
+            #{state.status}, #{state.score}, #{state.kind},
+            #{state.airedOn}, #{state.releasedOn},
+            #{state.firstSeenAt}, #{state.lastSeenAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            next_episode    = VALUES(next_episode),
+            next_episode_at = VALUES(next_episode_at),
+            episodes_aired  = VALUES(episodes_aired),
+            episodes_total  = VALUES(episodes_total),
+            status          = VALUES(status),
+            score           = VALUES(score),
+            kind            = VALUES(kind),
+            aired_on        = VALUES(aired_on),
+            released_on     = VALUES(released_on),
+            first_seen_at   = COALESCE(first_seen_at, VALUES(first_seen_at)),
+            last_seen_at    = VALUES(last_seen_at)
+    </insert>
+
+</mapper>

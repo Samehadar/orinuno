@@ -11,6 +11,7 @@ import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
 import com.orinuno.client.dto.calendar.KodikCalendarImageDto;
 import com.orinuno.model.dto.CalendarResponse;
 import com.orinuno.model.dto.CalendarResponse.EnrichedCalendarEntryDto;
+import com.orinuno.repository.KodikCalendarOutboxRepository;
 import com.orinuno.service.calendar.CalendarFilter;
 import com.orinuno.service.calendar.KodikCalendarService;
 import java.time.Instant;
@@ -28,12 +29,13 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 class KodikCalendarControllerTest {
 
     @Mock private KodikCalendarService service;
+    @Mock private KodikCalendarOutboxRepository outboxRepository;
 
     private WebTestClient client;
 
     @BeforeEach
     void setUp() {
-        KodikCalendarController controller = new KodikCalendarController(service);
+        KodikCalendarController controller = new KodikCalendarController(service, outboxRepository);
         client = WebTestClient.bindToController(controller).build();
     }
 
