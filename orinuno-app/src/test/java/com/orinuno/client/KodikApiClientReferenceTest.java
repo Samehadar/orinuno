@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.orinuno.client.dto.KodikReferenceRequest;
 import com.orinuno.client.dto.reference.KodikCountryDto;
 import com.orinuno.client.dto.reference.KodikGenreDto;
 import com.orinuno.client.dto.reference.KodikQualityDto;
@@ -203,6 +204,27 @@ class KodikApiClientReferenceTest {
                                         .extracting(KodikQualityDto::title)
                                         .containsExactly("HD 720", "Full HD 1080"))
                 .verifyComplete();
+    }
+
+    @Test
+    @DisplayName(
+            "API-4: typed overloads accept KodikReferenceRequest — see"
+                    + " KodikApiClientParamWiringTest for body wiring")
+    void typedOverloadsAcceptKodikReferenceRequest() {
+        WebClient webClient =
+                stubWebClient(
+                        (m, u) ->
+                                respond(
+                                        HttpStatus.OK,
+                                        "{\"time\":\"1ms\",\"total\":0,\"results\":[]}"));
+        KodikApiClient client = buildClient(webClient);
+        KodikReferenceRequest req = KodikReferenceRequest.builder().genresType("anime").build();
+
+        StepVerifier.create(client.genres(req)).expectNextCount(1).verifyComplete();
+        StepVerifier.create(client.translations(req)).expectNextCount(1).verifyComplete();
+        StepVerifier.create(client.countries(req)).expectNextCount(1).verifyComplete();
+        StepVerifier.create(client.years(req)).expectNextCount(1).verifyComplete();
+        StepVerifier.create(client.qualities(req)).expectNextCount(1).verifyComplete();
     }
 
     @Test
