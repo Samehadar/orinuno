@@ -13,6 +13,7 @@ import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
 import com.orinuno.service.metrics.KodikCdnHostMetrics;
+import com.orinuno.service.metrics.KodikDecoderMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.HashMap;
 import java.util.List;
@@ -37,12 +38,15 @@ class ParserServiceTest {
 
     private ParserService parserService;
     private KodikCdnHostMetrics kodikCdnHostMetrics;
+    private KodikDecoderMetrics decoderMetrics;
 
     @BeforeEach
     void setUp() {
         OrinunoProperties properties = new OrinunoProperties();
         properties.getKodik().setRequestDelayMs(0);
-        kodikCdnHostMetrics = new KodikCdnHostMetrics(new SimpleMeterRegistry());
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        kodikCdnHostMetrics = new KodikCdnHostMetrics(registry);
+        decoderMetrics = new KodikDecoderMetrics(registry);
         parserService =
                 new ParserService(
                         kodikApiClient,
@@ -50,7 +54,8 @@ class ParserServiceTest {
                         decoderService,
                         episodeVariantRepository,
                         properties,
-                        kodikCdnHostMetrics);
+                        kodikCdnHostMetrics,
+                        decoderMetrics);
     }
 
     @Test
@@ -176,7 +181,8 @@ class ParserServiceTest {
                         decoderService,
                         episodeVariantRepository,
                         props,
-                        kodikCdnHostMetrics);
+                        kodikCdnHostMetrics,
+                        decoderMetrics);
 
         when(episodeVariantRepository.findExpiredLinks(anyInt(), anyInt())).thenReturn(List.of());
 
@@ -200,7 +206,8 @@ class ParserServiceTest {
                         decoderService,
                         episodeVariantRepository,
                         props,
-                        kodikCdnHostMetrics);
+                        kodikCdnHostMetrics,
+                        decoderMetrics);
 
         when(episodeVariantRepository.findFailedDecode(anyInt())).thenReturn(List.of());
 
@@ -225,7 +232,8 @@ class ParserServiceTest {
                         decoderService,
                         episodeVariantRepository,
                         props,
-                        kodikCdnHostMetrics);
+                        kodikCdnHostMetrics,
+                        decoderMetrics);
 
         List<KodikEpisodeVariant> expired =
                 IntStream.range(0, 2)
