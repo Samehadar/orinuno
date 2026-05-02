@@ -1,5 +1,6 @@
 package com.orinuno.token;
 
+import com.orinuno.client.http.RotatingUserAgentProvider;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -26,10 +27,13 @@ public class KodikTokenAutoDiscovery {
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
 
     private final WebClient webClient;
+    private final RotatingUserAgentProvider userAgentProvider;
     private final AtomicReference<Long> lastRunEpochSecond = new AtomicReference<>(0L);
 
-    public KodikTokenAutoDiscovery(WebClient.Builder builder) {
+    public KodikTokenAutoDiscovery(
+            WebClient.Builder builder, RotatingUserAgentProvider userAgentProvider) {
         this.webClient = builder.build();
+        this.userAgentProvider = userAgentProvider;
     }
 
     /**
@@ -42,11 +46,7 @@ public class KodikTokenAutoDiscovery {
                     webClient
                             .get()
                             .uri(SCRIPT_URL)
-                            .header(
-                                    "User-Agent",
-                                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                                            + " (KHTML, like Gecko) Chrome/135.0.0.0"
-                                            + " Safari/537.36")
+                            .header("User-Agent", userAgentProvider.randomDesktop())
                             .retrieve()
                             .bodyToMono(String.class)
                             .block(TIMEOUT);

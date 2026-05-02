@@ -2,6 +2,7 @@ package com.orinuno.service;
 
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -36,6 +37,7 @@ import reactor.core.scheduler.Schedulers;
 public class PlaywrightVideoFetcher {
 
     private final OrinunoProperties properties;
+    private final RotatingUserAgentProvider userAgentProvider;
 
     private Playwright playwright;
     private Browser browser;
@@ -50,8 +52,10 @@ public class PlaywrightVideoFetcher {
         CLOSED
     }
 
-    public PlaywrightVideoFetcher(OrinunoProperties properties) {
+    public PlaywrightVideoFetcher(
+            OrinunoProperties properties, RotatingUserAgentProvider userAgentProvider) {
         this.properties = properties;
+        this.userAgentProvider = userAgentProvider;
     }
 
     @PostConstruct
@@ -116,10 +120,7 @@ public class PlaywrightVideoFetcher {
         BrowserContext context =
                 browser.newContext(
                         new Browser.NewContextOptions()
-                                .setUserAgent(
-                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                                                + " AppleWebKit/537.36 (KHTML, like Gecko)"
-                                                + " Chrome/135.0.0.0 Safari/537.36")
+                                .setUserAgent(userAgentProvider.stableDesktop())
                                 .setViewportSize(1280, 720)
                                 .setLocale("en-US")
                                 .setTimezoneId("Europe/London"));
@@ -633,9 +634,8 @@ public class PlaywrightVideoFetcher {
                                                             .uri(URI.create(segUrl))
                                                             .header(
                                                                     "User-Agent",
-                                                                    "Mozilla/5.0 (Windows NT 10.0;"
-                                                                            + " Win64; x64)"
-                                                                            + " AppleWebKit/537.36")
+                                                                    userAgentProvider
+                                                                            .stableDesktop())
                                                             .header("Referer", manifestUrl)
                                                             .timeout(Duration.ofSeconds(45))
                                                             .GET()
