@@ -55,6 +55,10 @@
         {
             "name": "Calendar",
             "description": "Public Kodik calendar dump (premiere schedule)"
+        },
+        {
+            "name": "Embed",
+            "description": "Resolve a Kodik player iframe URL by external id (shikimori, kinopoisk, imdb, mdl, kodik, worldart_animation, worldart_cinema). Lightweight, no DB write."
         }
     ],
     "paths": {

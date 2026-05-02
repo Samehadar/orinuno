@@ -43,6 +43,7 @@ public class ApiKeyAuthFilter implements WebFilter {
                 || path.startsWith("/api/v1/content")
                 || path.startsWith("/api/v1/download")
                 || path.startsWith("/api/v1/kodik")
-                || path.startsWith("/api/v1/calendar");
+                || path.startsWith("/api/v1/calendar")
+                || path.startsWith("/api/v1/embed");
     }
 }
