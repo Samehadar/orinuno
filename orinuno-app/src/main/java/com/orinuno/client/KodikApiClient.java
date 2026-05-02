@@ -11,6 +11,10 @@ import com.orinuno.client.dto.reference.KodikQualityDto;
 import com.orinuno.client.dto.reference.KodikReferenceResponse;
 import com.orinuno.client.dto.reference.KodikTranslationDto;
 import com.orinuno.client.dto.reference.KodikYearDto;
+import com.orinuno.client.exception.KodikApiException;
+import com.orinuno.client.exception.KodikApiResponseErrorMapper;
+import com.orinuno.client.exception.KodikRateLimitedException;
+import com.orinuno.client.exception.KodikUpstreamException;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.token.KodikFunction;
 import com.orinuno.token.KodikTokenException;
@@ -306,6 +310,32 @@ public class KodikApiClient {
                 .post()
                 .uri(uriBuilder -> uriBuilder.path(path).queryParams(params).build())
                 .retrieve()
+                .onStatus(
+                        status -> status.value() == 429,
+                        resp ->
+                                Mono.just(
+                                        new KodikRateLimitedException(
+                                                parseRetryAfter(
+                                                        resp
+                                                                .headers()
+                                                                .header("Retry-After")
+                                                                .stream()
+                                                                .findFirst()
+                                                                .orElse(null)))))
+                .onStatus(
+                        status -> status.is5xxServerError(),
+                        resp ->
+                                resp.bodyToMono(String.class)
+                                        .defaultIfEmpty("")
+                                        .map(
+                                                body ->
+                                                        new KodikUpstreamException(
+                                                                resp.statusCode().value(),
+                                                                body.substring(
+                                                                        0,
+                                                                        Math.min(
+                                                                                200,
+                                                                                body.length())))))
                 .bodyToMono(
                         new org.springframework.core.ParameterizedTypeReference<
                                 Map<String, Object>>() {})
@@ -340,8 +370,24 @@ public class KodikApiClient {
                                 return executeWithTokenFailover(
                                         path, paramsWithoutToken, function, attempt + 1);
                             }
+                            // API-5: classify other application-level errors into typed
+                            // KodikApiException so callers don't have to grep error strings.
+                            KodikApiException typed =
+                                    KodikApiResponseErrorMapper.mapIfError(response);
+                            if (typed != null) {
+                                return Mono.error(typed);
+                            }
                             return Mono.just(response);
                         });
+    }
+
+    private static Long parseRetryAfter(String header) {
+        if (header == null || header.isBlank()) return null;
+        try {
+            return Long.parseLong(header.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private Mono<Map<String, Object>> postForMapAbsoluteUrl(String absoluteUrl) {
