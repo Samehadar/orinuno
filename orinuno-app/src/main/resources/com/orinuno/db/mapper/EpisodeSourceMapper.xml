@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.EpisodeSourceRepository">
+
+    <resultMap id="sourceResultMap" type="com.orinuno.model.EpisodeSource">
+        <id property="id" column="id"/>
+        <result property="contentId" column="content_id"/>
+        <result property="season" column="season"/>
+        <result property="episode" column="episode"/>
+        <result property="translatorId" column="translator_id"/>
+        <result property="translatorName" column="translator_name"/>
+        <result property="provider" column="provider"/>
+        <result property="sourceUrl" column="source_url"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="discoveredAt" column="discovered_at"/>
+        <result property="lastSeenAt" column="last_seen_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="sourceResultMap">
+        SELECT * FROM episode_source WHERE id = #{id}
+    </select>
+
+    <select id="findByContent" resultMap="sourceResultMap">
+        SELECT * FROM episode_source WHERE content_id = #{contentId} ORDER BY season, episode, provider
+    </select>
+
+    <select id="findByEpisode" resultMap="sourceResultMap">
+        SELECT * FROM episode_source
+        WHERE content_id = #{contentId}
+          AND season = #{season}
+          AND episode = #{episode}
+        ORDER BY provider
+    </select>
+
+    <select id="findByUniqueKey" resultMap="sourceResultMap">
+        SELECT * FROM episode_source
+        WHERE content_id = #{contentId}
+          AND season = #{season}
+          AND episode = #{episode}
+          AND <choose>
+            <when test="translatorId == null">translator_id IS NULL</when>
+            <otherwise>translator_id = #{translatorId}</otherwise>
+        </choose>
+          AND provider = #{provider}
+        LIMIT 1
+    </select>
+
+    <insert id="upsert" parameterType="com.orinuno.model.EpisodeSource" useGeneratedKeys="true" keyProperty="source.id">
+        INSERT INTO episode_source (
+            content_id, season, episode,
+            translator_id, translator_name, provider,
+            source_url, source_type,
+            discovered_at, last_seen_at
+        ) VALUES (
+            #{source.contentId}, #{source.season}, #{source.episode},
+            #{source.translatorId}, #{source.translatorName}, #{source.provider},
+            #{source.sourceUrl}, #{source.sourceType},
+            #{source.discoveredAt}, #{source.lastSeenAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            id              = LAST_INSERT_ID(id),
+            translator_name = VALUES(translator_name),
+            source_url      = VALUES(source_url),
+            source_type     = VALUES(source_type),
+            discovered_at   = COALESCE(discovered_at, VALUES(discovered_at)),
+            last_seen_at    = VALUES(last_seen_at)
+    </insert>
+
+</mapper>

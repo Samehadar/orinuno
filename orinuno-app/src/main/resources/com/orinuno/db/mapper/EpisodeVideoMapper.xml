@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.EpisodeVideoRepository">
+
+    <resultMap id="videoResultMap" type="com.orinuno.model.EpisodeVideo">
+        <id property="id" column="id"/>
+        <result property="sourceId" column="source_id"/>
+        <result property="quality" column="quality"/>
+        <result property="videoUrl" column="video_url"/>
+        <result property="videoFormat" column="video_format"/>
+        <result property="decodedAt" column="decoded_at"/>
+        <result property="decodeMethod" column="decode_method"/>
+        <result property="decodeFailedCount" column="decode_failed_count"/>
+        <result property="decodeLastError" column="decode_last_error"/>
+        <result property="ttlSeconds" column="ttl_seconds"/>
+    </resultMap>
+
+    <select id="findById" resultMap="videoResultMap">
+        SELECT * FROM episode_video WHERE id = #{id}
+    </select>
+
+    <select id="findBySource" resultMap="videoResultMap">
+        SELECT * FROM episode_video WHERE source_id = #{sourceId} ORDER BY quality
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM episode_video
+    </select>
+
+    <insert id="upsertDecoded" parameterType="com.orinuno.model.EpisodeVideo">
+        INSERT INTO episode_video (
+            source_id, quality,
+            video_url, video_format,
+            decoded_at, decode_method,
+            decode_failed_count, decode_last_error,
+            ttl_seconds
+        ) VALUES (
+            #{video.sourceId}, #{video.quality},
+            #{video.videoUrl}, #{video.videoFormat},
+            #{video.decodedAt}, #{video.decodeMethod},
+            COALESCE(#{video.decodeFailedCount}, 0), #{video.decodeLastError},
+            #{video.ttlSeconds}
+        )
+        ON DUPLICATE KEY UPDATE
+            video_url           = COALESCE(VALUES(video_url), video_url),
+            video_format        = COALESCE(VALUES(video_format), video_format),
+            decoded_at          = COALESCE(VALUES(decoded_at), decoded_at),
+            decode_method       = COALESCE(VALUES(decode_method), decode_method),
+            decode_failed_count = 0,
+            decode_last_error   = NULL,
+            ttl_seconds         = COALESCE(VALUES(ttl_seconds), ttl_seconds)
+    </insert>
+
+    <update id="recordFailure">
+        INSERT INTO episode_video (source_id, quality, decoded_at, decode_failed_count, decode_last_error)
+        VALUES (#{sourceId}, #{quality}, #{now}, 1, #{error})
+        ON DUPLICATE KEY UPDATE
+            decode_failed_count = decode_failed_count + 1,
+            decode_last_error   = #{error}
+    </update>
+
+</mapper>
