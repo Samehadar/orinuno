@@ -56,6 +56,46 @@ class KodikVideoDecoderServiceTest {
     }
 
     @Test
+    @DisplayName(
+            "DECODE-6: short-circuit fires for any URL-shaped input (http://, https://, //)"
+                    + " — not just manifest.m3u8 substring")
+    void decodeVideoUrlShortCircuitsAllUrlShapes() {
+        assertThat(KodikVideoDecoderService.decodeVideoUrl("https://cdn.kodik.cc/v/abc/720.mp4"))
+                .as("https:// should short-circuit, not be ROT-decoded")
+                .isEqualTo("https://cdn.kodik.cc/v/abc/720.mp4");
+
+        assertThat(KodikVideoDecoderService.decodeVideoUrl("http://cdn.kodik.cc/v/abc/720.mp4"))
+                .isEqualTo("http://cdn.kodik.cc/v/abc/720.mp4");
+
+        assertThat(KodikVideoDecoderService.decodeVideoUrl("//cdn.kodik.cc/v/abc/720.mp4"))
+                .as("// should normalize to https:// per normalizeDecodedUrl")
+                .isEqualTo("https://cdn.kodik.cc/v/abc/720.mp4");
+
+        assertThat(KodikVideoDecoderService.decodeVideoUrl(""))
+                .as("blank input must not crash")
+                .isEqualTo("");
+    }
+
+    @Test
+    @DisplayName(
+            "DECODE-6: decodeVideoUrlWithProvenance reports correct path enum for short-circuit"
+                    + " HTTP, m3u8 substring, cached shift, brute-force")
+    void decodeVideoUrlWithProvenanceReportsCorrectPath() {
+        assertThat(
+                        KodikVideoDecoderService.decodeVideoUrlWithProvenance(
+                                        "https://example.com/720.mp4")
+                                .path())
+                .isEqualTo(
+                        com.orinuno.service.metrics.KodikDecoderMetrics.DecodePath
+                                .SHORT_CIRCUIT_HTTP);
+
+        assertThat(KodikVideoDecoderService.decodeVideoUrlWithProvenance("").path())
+                .isEqualTo(
+                        com.orinuno.service.metrics.KodikDecoderMetrics.DecodePath
+                                .FALLBACK_NO_SHIFT_WORKED);
+    }
+
+    @Test
     @DisplayName("decodeVideoUrl should handle // prefix")
     void decodeVideoUrlShouldNormalizeDoubleSlashPrefix() {
         // Create an encoded URL that decodes to "//example.com/video.mp4"
@@ -102,7 +142,7 @@ class KodikVideoDecoderServiceTest {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(false);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null);
 
         String json =
                 "{\"links\":{\"720\":[{\"src\":\"https://cdn.example/720.mp4:hls:manifest.m3u8\"}]}}";
@@ -121,7 +161,7 @@ class KodikVideoDecoderServiceTest {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(true);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null);
 
         String json =
                 "{\"links\":{\"720\":[{\"src\":\"https://p78.kodik.info/s/m/abc/tok:exp/720.mp4:hls:manifest.m3u8\"}]}}";
@@ -137,7 +177,7 @@ class KodikVideoDecoderServiceTest {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         when(geoDetector.isCdnGeoBlocked(anyString())).thenReturn(true);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null);
 
         String json =
                 "{\"links\":{\"720\":[{\"src\":\"https://geo.example/manifest.m3u8\"}],"
@@ -153,7 +193,7 @@ class KodikVideoDecoderServiceTest {
     void parseVideoResponseHandlesEmptyInput() {
         GeoBlockDetector geoDetector = mock(GeoBlockDetector.class);
         KodikVideoDecoderService svc =
-                new KodikVideoDecoderService(null, null, null, geoDetector, null);
+                new KodikVideoDecoderService(null, null, null, geoDetector, null, null);
 
         Map<String, String> result = svc.parseVideoResponse("{}");
 

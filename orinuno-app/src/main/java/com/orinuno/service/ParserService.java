@@ -11,6 +11,7 @@ import com.orinuno.model.ParseRequestPhase;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
 import com.orinuno.service.metrics.KodikCdnHostMetrics;
+import com.orinuno.service.metrics.KodikDecoderMetrics;
 import com.orinuno.service.requestlog.ProgressReporter;
 import java.time.Duration;
 import java.util.List;
@@ -34,6 +35,7 @@ public class ParserService {
     private final EpisodeVariantRepository episodeVariantRepository;
     private final OrinunoProperties properties;
     private final KodikCdnHostMetrics kodikCdnHostMetrics;
+    private final KodikDecoderMetrics decoderMetrics;
 
     public Mono<List<KodikContent>> search(ParseRequestDto request) {
         return searchInternal(request, ProgressReporter.NOOP);
@@ -298,15 +300,20 @@ public class ParserService {
                                                         variant.getId())))
                 .doOnSuccess(
                         videoLinks -> {
-                            String bestLink = selectBestQuality(videoLinks);
-                            if (bestLink != null) {
+                            Map.Entry<String, String> best = pickBestQualityEntry(videoLinks);
+                            if (best != null) {
+                                String bestLink = best.getValue();
                                 episodeVariantRepository.updateMp4Link(variant.getId(), bestLink);
                                 kodikCdnHostMetrics.recordDecodedUrl(bestLink);
+                                if (decoderMetrics != null) {
+                                    decoderMetrics.recordPickedQuality(best.getKey());
+                                }
                                 log.info(
-                                        "✅ Decoded variant id={}: {} qualities, best={}",
+                                        "✅ Decoded variant id={}: {} qualities, best={} ({}p)",
                                         variant.getId(),
                                         videoLinks.size(),
-                                        bestLink.substring(0, Math.min(60, bestLink.length())));
+                                        bestLink.substring(0, Math.min(60, bestLink.length())),
+                                        best.getKey());
                             }
                         })
                 .doOnError(
@@ -321,6 +328,15 @@ public class ParserService {
     }
 
     static String selectBestQuality(Map<String, String> videoLinks) {
+        Map.Entry<String, String> entry = pickBestQualityEntry(videoLinks);
+        return entry == null ? null : entry.getValue();
+    }
+
+    /**
+     * Like {@link #selectBestQuality(Map)} but returns the full entry so callers can record both
+     * the quality bucket (key) and the URL (value). Used by Prometheus quality metric per ADR 0004.
+     */
+    static Map.Entry<String, String> pickBestQualityEntry(Map<String, String> videoLinks) {
         if (videoLinks == null || videoLinks.isEmpty()) return null;
 
         return videoLinks.entrySet().stream()
@@ -335,7 +351,6 @@ public class ParserService {
                                 return 0;
                             }
                         })
-                .map(Map.Entry::getValue)
                 .orElse(null);
     }
 }

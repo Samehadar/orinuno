@@ -3,6 +3,7 @@ package com.orinuno.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.service.metrics.KodikDecoderMetrics;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -64,6 +65,7 @@ public class KodikVideoDecoderService {
     private final DecoderHealthTracker healthTracker;
     private final GeoBlockDetector geoBlockDetector;
     private final OrinunoProperties properties;
+    private final KodikDecoderMetrics decoderMetrics;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -290,13 +292,17 @@ public class KodikVideoDecoderService {
         while (matcher.find()) {
             String quality = matcher.group(1);
             String encodedSrc = matcher.group(2);
-            String decodedUrl = decodeVideoUrl(encodedSrc);
+            DecodeOutcome outcome = decodeVideoUrlWithProvenance(encodedSrc);
+            if (decoderMetrics != null) {
+                decoderMetrics.recordDecodePath(outcome.path());
+                decoderMetrics.recordShiftHit(outcome.shiftUsed());
+            }
 
-            if (geoBlockDetector.isCdnGeoBlocked(decodedUrl)) {
+            if (geoBlockDetector.isCdnGeoBlocked(outcome.url())) {
                 geoBlocked = true;
             }
 
-            videoLinks.put(quality, decodedUrl);
+            videoLinks.put(quality, outcome.url());
         }
 
         if (geoBlocked) {
@@ -311,14 +317,44 @@ public class KodikVideoDecoderService {
         return videoLinks;
     }
 
-    static String decodeVideoUrl(String encoded) {
+    /**
+     * Decodes a single Kodik video src and reports which decode path was taken.
+     *
+     * <p>Hardened short-circuit (DECODE-6): the previous implementation only checked for the
+     * substring {@code "manifest.m3u8"} which missed several cases of "Kodik handed us a
+     * pre-decoded URL" (e.g. when an upstream caching layer normalised the response). We now detect
+     * any input that already starts with {@code http://}, {@code https://}, or {@code //} — those
+     * are URL-shaped and must NOT be ROT-decoded. The original {@code manifest.m3u8} substring
+     * check is subsumed by the URL-prefix check (a real Kodik m3u8 URL always has the scheme
+     * prefix).
+     *
+     * <p>The returned {@link DecodeOutcome} also tells the caller which shift was used, so
+     * Prometheus metrics can track ROT cipher rotations separately from short-circuit hits.
+     */
+    static DecodeOutcome decodeVideoUrlWithProvenance(String encoded) {
+        if (encoded == null || encoded.isBlank()) {
+            return new DecodeOutcome(
+                    "", KodikDecoderMetrics.DecodePath.FALLBACK_NO_SHIFT_WORKED, -1);
+        }
+        if (looksLikePlainUrl(encoded)) {
+            return new DecodeOutcome(
+                    normalizeDecodedUrl(encoded),
+                    KodikDecoderMetrics.DecodePath.SHORT_CIRCUIT_HTTP,
+                    -1);
+        }
         if (encoded.contains("manifest.m3u8")) {
-            return normalizeDecodedUrl(encoded);
+            return new DecodeOutcome(
+                    normalizeDecodedUrl(encoded),
+                    KodikDecoderMetrics.DecodePath.SHORT_CIRCUIT_M3U8,
+                    -1);
         }
 
         int currentShift = cachedShift.get();
         String result = tryDecodeWithShift(encoded, currentShift);
-        if (result != null) return result;
+        if (result != null) {
+            return new DecodeOutcome(
+                    result, KodikDecoderMetrics.DecodePath.CACHED_SHIFT_HIT, currentShift);
+        }
 
         for (int shift = 0; shift < 26; shift++) {
             if (shift == currentShift) continue;
@@ -326,14 +362,30 @@ public class KodikVideoDecoderService {
             if (result != null) {
                 log.info("ROT cipher shift changed: {} -> {}", currentShift, shift);
                 cachedShift.set(shift);
-                return result;
+                return new DecodeOutcome(
+                        result, KodikDecoderMetrics.DecodePath.BRUTE_FORCE_NEW_SHIFT, shift);
             }
         }
 
         log.warn("Brute-force decode failed for all 26 shifts, using shift={}", currentShift);
         String fallback = decodeUrlSafeBase64(rotWithShift(encoded, currentShift));
-        return normalizeDecodedUrl(fallback);
+        return new DecodeOutcome(
+                normalizeDecodedUrl(fallback),
+                KodikDecoderMetrics.DecodePath.FALLBACK_NO_SHIFT_WORKED,
+                currentShift);
     }
+
+    /** Backward-compatible wrapper for tests and callers that don't care about provenance. */
+    static String decodeVideoUrl(String encoded) {
+        return decodeVideoUrlWithProvenance(encoded).url();
+    }
+
+    private static boolean looksLikePlainUrl(String s) {
+        return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("//");
+    }
+
+    /** Outcome of a single src decode — value object used to drive metrics + DI of the URL. */
+    public record DecodeOutcome(String url, KodikDecoderMetrics.DecodePath path, int shiftUsed) {}
 
     private static String tryDecodeWithShift(String encoded, int shift) {
         try {

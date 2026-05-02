@@ -66,6 +66,7 @@ class DecoderMaintenanceSchedulerTest {
         Mockito.when(episodeVariantRepository.findFailedDecode(Mockito.anyInt()))
                 .thenReturn(List.of());
 
+        SimpleMeterRegistry sharedRegistry = new SimpleMeterRegistry();
         ParserService parser =
                 new ParserService(
                         kodikApiClient,
@@ -73,7 +74,8 @@ class DecoderMaintenanceSchedulerTest {
                         decoderService,
                         episodeVariantRepository,
                         props,
-                        new KodikCdnHostMetrics(new SimpleMeterRegistry()));
+                        new KodikCdnHostMetrics(sharedRegistry),
+                        new com.orinuno.service.metrics.KodikDecoderMetrics(sharedRegistry));
 
         scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(2);
