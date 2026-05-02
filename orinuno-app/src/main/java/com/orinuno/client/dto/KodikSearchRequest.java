@@ -75,4 +75,54 @@ public class KodikSearchRequest {
     private String animeLicensedBy;
     private String sort;
     private String order;
+
+    /**
+     * Custom Lombok builder extension (API-7) — adds fluent type-shortcut methods that compile to
+     * the correct comma-separated {@code types} param without callers having to remember the
+     * literal API strings.
+     *
+     * <p>Lombok still generates setters for every other field; only methods explicitly declared
+     * here override Lombok's defaults.
+     */
+    public static class KodikSearchRequestBuilder {
+
+        /**
+         * Backward-compatible String setter — Lombok skips its own {@code types(String)} once any
+         * {@code types(...)} method exists in this inner class, so we restore it explicitly.
+         */
+        public KodikSearchRequestBuilder types(String types) {
+            this.types = types;
+            return this;
+        }
+
+        /** Filter by an explicit set of types. */
+        public KodikSearchRequestBuilder types(KodikType... types) {
+            this.types = KodikType.csv(types);
+            return this;
+        }
+
+        /** Filter by both anime kinds (serial + movie). */
+        public KodikSearchRequestBuilder anime() {
+            this.types = KodikType.csv(KodikType.ANIME_KINDS);
+            return this;
+        }
+
+        /** Filter by all serial kinds (anime + foreign + russian). */
+        public KodikSearchRequestBuilder serials() {
+            this.types = KodikType.csv(KodikType.SERIAL_KINDS);
+            return this;
+        }
+
+        /** Filter by all non-anime feature-length kinds + anime movies. */
+        public KodikSearchRequestBuilder movies() {
+            this.types = KodikType.csv(KodikType.MOVIE_KINDS);
+            return this;
+        }
+
+        /** Filter by all cartoon kinds (russian + foreign + soviet). */
+        public KodikSearchRequestBuilder cartoons() {
+            this.types = KodikType.csv(KodikType.CARTOON_KINDS);
+            return this;
+        }
+    }
 }

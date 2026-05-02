@@ -41,4 +41,26 @@ public class KodikReferenceRequest {
      * left null</b> — empty / blank values are rejected with HTTP 500.
      */
     private String types;
+
+    /** Custom Lombok builder extension (API-7) — fluent type-shortcut methods. */
+    public static class KodikReferenceRequestBuilder {
+
+        /** Backward-compatible String setter — see KodikSearchRequest comment. */
+        public KodikReferenceRequestBuilder types(String types) {
+            this.types = types;
+            return this;
+        }
+
+        /** Set a single type (the most common case for reference endpoints). */
+        public KodikReferenceRequestBuilder type(KodikType type) {
+            this.types = type == null ? null : type.apiValue();
+            return this;
+        }
+
+        /** Set multiple types comma-joined. */
+        public KodikReferenceRequestBuilder types(KodikType... types) {
+            this.types = KodikType.csv(types);
+            return this;
+        }
+    }
 }
