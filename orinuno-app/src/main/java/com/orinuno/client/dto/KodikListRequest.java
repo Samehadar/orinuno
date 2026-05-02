@@ -76,4 +76,42 @@ public class KodikListRequest {
      * lists without rebuilding state.
      */
     private String prevPageUrl;
+
+    /**
+     * Custom Lombok builder extension (API-7) — adds fluent type-shortcut methods. See
+     * KodikSearchRequest's analogous extension for context.
+     */
+    public static class KodikListRequestBuilder {
+
+        /** Backward-compatible String setter — see KodikSearchRequest comment. */
+        public KodikListRequestBuilder types(String types) {
+            this.types = types;
+            return this;
+        }
+
+        public KodikListRequestBuilder types(KodikType... types) {
+            this.types = KodikType.csv(types);
+            return this;
+        }
+
+        public KodikListRequestBuilder anime() {
+            this.types = KodikType.csv(KodikType.ANIME_KINDS);
+            return this;
+        }
+
+        public KodikListRequestBuilder serials() {
+            this.types = KodikType.csv(KodikType.SERIAL_KINDS);
+            return this;
+        }
+
+        public KodikListRequestBuilder movies() {
+            this.types = KodikType.csv(KodikType.MOVIE_KINDS);
+            return this;
+        }
+
+        public KodikListRequestBuilder cartoons() {
+            this.types = KodikType.csv(KodikType.CARTOON_KINDS);
+            return this;
+        }
+    }
 }

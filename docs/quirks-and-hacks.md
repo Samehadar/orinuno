@@ -266,3 +266,29 @@ Separately, the search/list API has its own `types` filter taxonomy (`russian-mo
 **Related**: ADR 0002 (HTTP method probe), kodik-api Rust enum coverage IDEA-RUST-1.
 
 ---
+
+## 2026-05-02 — `types` literals are hyphenated; only 9 values exist [api] [dto]
+
+**Symptom**: A typo in the `types` query/form param (e.g. `anime_serial` with underscore, `animeserial`, `film`, `movie`) returns HTTP 500 `{"error":"Неправильный тип"}` from Kodik. There is no warning — the entire request is rejected.
+
+**Root cause**: Kodik enforces a closed enum of nine types: `anime-serial`, `anime-movie`, `foreign-serial`, `foreign-movie`, `russian-serial`, `russian-movie`, `russian-cartoon`, `foreign-cartoon`, `soviet-cartoon`. They are all hyphenated, never underscored, and `film` / `movie` are not aliases.
+
+**Workaround**: API-7 introduces [`KodikType`](../orinuno-app/src/main/java/com/orinuno/client/dto/KodikType.java) enum and fluent builder shortcuts on `KodikSearchRequest` / `KodikListRequest` / `KodikReferenceRequest`:
+
+```java
+KodikSearchRequest req = KodikSearchRequest.builder().anime().title("Naruto").build();
+KodikListRequest lr = KodikListRequest.builder().movies().limit(50).build();
+KodikReferenceRequest rr = KodikReferenceRequest.builder().type(KodikType.ANIME_SERIAL).build();
+```
+
+The String-typed `.types("...")` setter is preserved for backward compatibility, but the enum path is recommended — it makes typos a compile-time error.
+
+**Where in code**: [`KodikType`](../orinuno-app/src/main/java/com/orinuno/client/dto/KodikType.java); custom Lombok builder extensions inside `KodikSearchRequest`, `KodikListRequest`, `KodikReferenceRequest`.
+
+**Verified by**: [`KodikTypeTest`](../orinuno-app/src/test/java/com/orinuno/client/dto/KodikTypeTest.java), [`KodikRequestBuilderShortcutsTest`](../orinuno-app/src/test/java/com/orinuno/client/dto/KodikRequestBuilderShortcutsTest.java).
+
+**Discovered via**: API-3 / API-7 implementation passes.
+
+**Related**: BACKLOG.md → API-7.
+
+---
