@@ -110,6 +110,22 @@ orinuno:
     cache-ttl-seconds: ${ORINUNO_CALENDAR_CACHE_TTL_SECONDS:300}
     request-timeout-seconds: ${ORINUNO_CALENDAR_REQUEST_TIMEOUT_SECONDS:10}
     max-response-bytes: ${ORINUNO_CALENDAR_MAX_RESPONSE_BYTES:4194304}
+  dumps:
+    enabled: ${ORINUNO_DUMPS_ENABLED:false}
+    base-url: ${ORINUNO_DUMPS_BASE_URL:https://dumps.kodikres.com}
+    poll-interval-minutes: ${ORINUNO_DUMPS_POLL_INTERVAL_MINUTES:60}
+    initial-delay-seconds: ${ORINUNO_DUMPS_INITIAL_DELAY_SECONDS:30}
+    request-timeout-seconds: ${ORINUNO_DUMPS_REQUEST_TIMEOUT_SECONDS:30}
+    download-body: ${ORINUNO_DUMPS_DOWNLOAD_BODY:false}
+    calendar:
+      enabled: ${ORINUNO_DUMPS_CALENDAR_ENABLED:true}
+      path: ${ORINUNO_DUMPS_CALENDAR_PATH:calendar.json}
+    serials:
+      enabled: ${ORINUNO_DUMPS_SERIALS_ENABLED:true}
+      path: ${ORINUNO_DUMPS_SERIALS_PATH:serials.json}
+    films:
+      enabled: ${ORINUNO_DUMPS_FILMS_ENABLED:true}
+      path: ${ORINUNO_DUMPS_FILMS_PATH:films.json}
 
 ---
 spring.config.activate.on-profile: local

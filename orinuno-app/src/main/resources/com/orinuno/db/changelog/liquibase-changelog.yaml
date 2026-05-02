@@ -15,3 +15,5 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260425010000_cleanup_invalid_mp4_link.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260426010000_create_orinuno_parse_request.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260502010000_create_orinuno_dump_state.sql

@@ -85,6 +85,7 @@ public class OrinunoProperties {
     private CacheProperties cache = new CacheProperties();
     private DriftSamplingProperties drift = new DriftSamplingProperties();
     private CalendarProperties calendar = new CalendarProperties();
+    private DumpsProperties dumps = new DumpsProperties();
 
     @Data
     public static class SecurityProperties {
@@ -153,5 +154,39 @@ public class OrinunoProperties {
         private long cacheTtlSeconds = 300;
         private long requestTimeoutSeconds = 10;
         private long maxResponseBytes = 4L * 1024 * 1024;
+    }
+
+    /**
+     * Public Kodik dump endpoints (DUMP-1). The dumps live at {@code
+     * https://dumps.kodikres.com/{calendar,serials,films}.json}. We track them with HEAD-only
+     * requests by default — the bodies are large (~80 KB / ~175 MB / ~82 MB) and we only need to
+     * know "did the dump change" + the rolling timestamp ("when did we last see Kodik publish a
+     * fresh dump?"). DUMP-2 will add opt-in body downloads for bootstrap; until then, {@code
+     * downloadBody} stays {@code false}.
+     *
+     * <p>Set {@code enabled=false} to disable the watcher entirely (e.g. in CI, where we don't want
+     * to hit Kodik on every test run). The default polling cadence (1 hour) is intentionally
+     * conservative: dumps are refreshed by Kodik less often than that, and HEAD-only adds zero
+     * meaningful load to their CDN.
+     */
+    @Data
+    public static class DumpsProperties {
+        private boolean enabled = false;
+        private String baseUrl = "https://dumps.kodikres.com";
+        private long pollIntervalMinutes = 60;
+        private long initialDelaySeconds = 30;
+        private long requestTimeoutSeconds = 30;
+        private boolean downloadBody = false;
+        private DumpEntry calendar = new DumpEntry(true, "calendar.json");
+        private DumpEntry serials = new DumpEntry(true, "serials.json");
+        private DumpEntry films = new DumpEntry(true, "films.json");
+
+        @Data
+        @lombok.NoArgsConstructor
+        @lombok.AllArgsConstructor
+        public static class DumpEntry {
+            private boolean enabled;
+            private String path;
+        }
     }
 }
