@@ -84,7 +84,11 @@ export default defineConfig({
         },
         {
           label: 'API',
-          items: [{ slug: 'api/overview' }, ...openAPISidebarGroups],
+          items: [
+            { slug: 'api/overview' },
+            { slug: 'api/embed' },
+            ...openAPISidebarGroups,
+          ],
         },
         {
           label: 'Operations',

@@ -71,6 +71,32 @@ class ApiKeyAuthFilterTest {
     }
 
     @Test
+    @DisplayName("/api/v1/embed/* requires X-API-KEY")
+    void embedPathRequiresAuth() {
+        MockServerWebExchange exchange =
+                MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/embed/shikimori/20"));
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(chainInvoked).isFalse();
+    }
+
+    @Test
+    @DisplayName("/api/v1/embed/* passes with correct key")
+    void embedPathPassesWithKey() {
+        MockServerWebExchange exchange =
+                MockServerWebExchange.from(
+                        MockServerHttpRequest.get("/api/v1/embed/shikimori/20")
+                                .header("X-API-KEY", "secret"));
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(chainInvoked).isTrue();
+        assertThat(exchange.getResponse().getStatusCode()).isNotEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     @DisplayName("public path bypasses auth")
     void publicPathBypassesAuth() {
         MockServerWebExchange exchange =

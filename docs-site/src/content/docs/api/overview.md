@@ -21,7 +21,8 @@ Authentication is **optional** and off by default.
 - When `orinuno.security.api-key` is empty, every endpoint is open.
 - When set, `ApiKeyAuthFilter` requires the `X-API-KEY` header on every
   request to `/api/v1/content`, `/api/v1/parse`, `/api/v1/export`,
-  `/api/v1/hls`, `/api/v1/download`, and `/api/v1/stream`.
+  `/api/v1/hls`, `/api/v1/download`, `/api/v1/stream`, `/api/v1/kodik`,
+  `/api/v1/calendar`, and `/api/v1/embed`.
 - `/api/v1/health/*` is always open.
 - `/swagger-ui.html` and `/v3/api-docs` are not protected by the API key —
   protect them at a reverse proxy if you deploy publicly.
