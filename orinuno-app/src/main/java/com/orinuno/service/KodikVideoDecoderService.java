@@ -10,6 +10,8 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -56,8 +58,25 @@ public class KodikVideoDecoderService {
             Pattern.compile("\"([0-9]+)p?\":\\[\\{\"src\":\"([^\"]+)");
 
     private static final AtomicInteger cachedShift = new AtomicInteger(18);
-    private static final java.util.concurrent.atomic.AtomicReference<String> cachedVideoInfoPath =
-            new java.util.concurrent.atomic.AtomicReference<>(null);
+
+    /**
+     * Per-netloc cache of the discovered video-info POST path.
+     *
+     * <p>DECODE-7 (per-netloc cache): the previous {@code AtomicReference<String>} was a single
+     * global cache, which caused the path to flap between netlocs whenever orinuno decoded iframes
+     * from {@code kodikplayer.com}, {@code kodik.cc}, {@code kodikv.cc}, or any other netloc that
+     * uses a different player JS distribution and possibly a different POST path. Today both {@code
+     * kodikplayer.com} and {@code kodik.cc} resolve to {@code /ftor}, but Kodik has form for
+     * differentiating them (see docs/quirks-and-hacks.md, "Player JS file naming is now
+     * type-dependent" entry — analogous risk).
+     *
+     * <p>Keyed by the host (no protocol, no port) of the iframe URL, lower-cased. We intentionally
+     * do NOT eagerly populate it from {@link #KNOWN_VIDEO_INFO_PATHS}; entries appear lazily on
+     * first successful POST per netloc.
+     */
+    private static final ConcurrentMap<String, String> cachedVideoInfoPathByNetloc =
+            new ConcurrentHashMap<>();
+
     private static final String[] KNOWN_VIDEO_INFO_PATHS = {"/ftor", "/kor", "/gvi", "/seria"};
 
     private final WebClient kodikPlayerWebClient;
@@ -81,11 +100,24 @@ public class KodikVideoDecoderService {
                 .doOnSuccess(
                         result -> {
                             healthTracker.recordSuccess();
+                            if (decoderMetrics != null) {
+                                decoderMetrics.recordOutcome(
+                                        result.isEmpty()
+                                                ? com.orinuno.service.metrics.KodikDecoderMetrics
+                                                        .DecodeOutcome.EMPTY_LINKS
+                                                : com.orinuno.service.metrics.KodikDecoderMetrics
+                                                        .DecodeOutcome.SUCCESS);
+                            }
                             log.info("✅ Decode complete: {} qualities found", result.size());
                         })
                 .doOnError(
                         error -> {
                             healthTracker.recordFailure("unknown", error.getMessage());
+                            if (decoderMetrics != null) {
+                                decoderMetrics.recordOutcome(
+                                        com.orinuno.service.metrics.KodikDecoderMetrics
+                                                .DecodeOutcome.UPSTREAM_ERROR);
+                            }
                             log.error("❌ Decode failed for {}: {}", kodikLink, error.getMessage());
                         })
                 .timeout(Duration.ofSeconds(properties.getDecoder().getTimeoutSeconds()));
@@ -133,7 +165,7 @@ public class KodikVideoDecoderService {
                 .flatMap(
                         playerJs -> {
                             log.debug("[Step 5/8] Extracting POST URL from player JS");
-                            String videoInfoPath = resolveVideoInfoPath(playerJs);
+                            String videoInfoPath = resolveVideoInfoPath(domain, playerJs);
                             String postUrl = String.format("https://%s%s", domain, videoInfoPath);
                             log.debug("[Step 6/8] Sending POST to: {}", postUrl);
 
@@ -149,19 +181,19 @@ public class KodikVideoDecoderService {
                                                             id,
                                                             videoInfoPath);
                                                 }
-                                                cachedVideoInfoPath.set(videoInfoPath);
+                                                cacheVideoInfoPath(domain, videoInfoPath);
                                                 return Mono.just(result);
                                             });
                         });
     }
 
-    private String resolveVideoInfoPath(String playerJs) {
+    private String resolveVideoInfoPath(String netloc, String playerJs) {
         String encodedPostPath = extractMatch(POST_URL_PATTERN, playerJs);
         if (encodedPostPath != null) {
             try {
                 String decoded = decodeBase64Standard(encodedPostPath);
                 if (decoded.startsWith("/")) {
-                    cachedVideoInfoPath.set(decoded);
+                    cacheVideoInfoPath(netloc, decoded);
                     return decoded;
                 }
             } catch (Exception e) {
@@ -169,13 +201,17 @@ public class KodikVideoDecoderService {
             }
         }
 
-        String cached = cachedVideoInfoPath.get();
+        String cached = cachedVideoInfoPathByNetloc.get(netlocKey(netloc));
         if (cached != null) {
-            log.info("Using cached video-info path: {}", cached);
+            log.info("Using cached video-info path for netloc {}: {}", netloc, cached);
             return cached;
         }
 
-        log.warn("Video-info path not found in player JS, using default fallback: /ftor");
+        log.warn(
+                "Video-info path not found in player JS for netloc {}, using default fallback:"
+                        + " {}",
+                netloc,
+                KNOWN_VIDEO_INFO_PATHS[0]);
         return KNOWN_VIDEO_INFO_PATHS[0];
     }
 
@@ -200,9 +236,11 @@ public class KodikVideoDecoderService {
                                         .map(
                                                 result -> {
                                                     if (!result.isEmpty()) {
-                                                        cachedVideoInfoPath.set(path);
+                                                        cacheVideoInfoPath(domain, path);
                                                         log.info(
-                                                                "Fallback path succeeded: {}",
+                                                                "Fallback path succeeded for"
+                                                                        + " netloc {}: {}",
+                                                                domain,
                                                                 path);
                                                     }
                                                     return result;
@@ -219,6 +257,27 @@ public class KodikVideoDecoderService {
         }
 
         return chain;
+    }
+
+    private static void cacheVideoInfoPath(String netloc, String path) {
+        if (netloc == null || netloc.isBlank() || path == null || !path.startsWith("/")) {
+            return;
+        }
+        cachedVideoInfoPathByNetloc.put(netlocKey(netloc), path);
+    }
+
+    private static String netlocKey(String netloc) {
+        return netloc == null ? "_unknown" : netloc.toLowerCase();
+    }
+
+    /** Visible for testing. */
+    static java.util.Map<String, String> snapshotVideoInfoPathCache() {
+        return java.util.Map.copyOf(cachedVideoInfoPathByNetloc);
+    }
+
+    /** Visible for testing. */
+    static void clearVideoInfoPathCache() {
+        cachedVideoInfoPathByNetloc.clear();
     }
 
     private Mono<String> loadPlayerJs(String url) {
@@ -277,10 +336,52 @@ public class KodikVideoDecoderService {
                                         .header("X-Requested-With", "XMLHttpRequest")
                                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                                         .body(BodyInserters.fromFormData(formData))
-                                        .retrieve()
-                                        .bodyToMono(String.class))
+                                        .exchangeToMono(this::handleVideoResponse))
                 .map(this::parseVideoResponse)
                 .doOnError(e -> healthTracker.recordFailure("step6_post_request", e.getMessage()));
+    }
+
+    /**
+     * DECODE-7 (500-handling): consume the response body even on 4xx/5xx so we can classify Kodik's
+     * Russian-language error message into a small enum (see {@link
+     * com.orinuno.service.metrics.KodikDecoderMetrics.UpstreamErrorClass}). Successful (2xx)
+     * responses are returned unchanged. Errors are logged and propagated as a typed runtime
+     * exception so the surrounding retry/onErrorResume chain still gets the chance to fall back to
+     * other video-info paths.
+     */
+    private Mono<String> handleVideoResponse(
+            org.springframework.web.reactive.function.client.ClientResponse response) {
+        int status = response.statusCode().value();
+        if (response.statusCode().is2xxSuccessful()) {
+            return response.bodyToMono(String.class);
+        }
+        return response.bodyToMono(String.class)
+                .defaultIfEmpty("")
+                .flatMap(
+                        body -> {
+                            com.orinuno.service.metrics.KodikDecoderMetrics.UpstreamErrorClass cls =
+                                    KodikUpstreamErrorClassifier.classifyForDecoder(status, body);
+                            if (decoderMetrics != null) {
+                                decoderMetrics.recordUpstreamError(status, cls);
+                            }
+                            String preview =
+                                    body == null
+                                            ? "(empty)"
+                                            : body.substring(0, Math.min(200, body.length()));
+                            log.warn(
+                                    "Kodik decoder upstream error: status={} class={} body~={}",
+                                    status,
+                                    cls.tag(),
+                                    preview);
+                            return Mono.error(
+                                    new RuntimeException(
+                                            "Kodik upstream error "
+                                                    + status
+                                                    + " ["
+                                                    + cls.tag()
+                                                    + "]: "
+                                                    + preview));
+                        });
     }
 
     Map<String, String> parseVideoResponse(String responseJson) {
@@ -310,6 +411,10 @@ public class KodikVideoDecoderService {
                     "[Step 8/8] All {} decoded URLs are geo-blocked (kodik edge proxy detected),"
                             + " returning empty result",
                     videoLinks.size());
+            if (decoderMetrics != null) {
+                decoderMetrics.recordOutcome(
+                        com.orinuno.service.metrics.KodikDecoderMetrics.DecodeOutcome.GEO_BLOCKED);
+            }
             return new HashMap<>();
         }
 

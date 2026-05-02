@@ -224,6 +224,24 @@ Quality distribution observed in 10 titles (Naruto, FMA, AoT, OP, Steins;Gate, N
 
 ---
 
+## 2026-05-02 — Decoder video-info path is netloc-dependent (per-netloc cache) [decoder] [cache]
+
+**Symptom**: Before DECODE-7, a single global `cachedVideoInfoPath` AtomicReference held the last successful POST path. If iframes from different netlocs (e.g. `kodikplayer.com`, `kodik.cc`, `kodikv.cc`) ever resolved to different paths, the cache would flap on every alternation, causing 50% of decodes to fall back to brute-force retries.
+
+**Root cause**: Kodik runs multiple distribution netlocs and is free to ship slightly different player JS bundles to each. Today both `kodikplayer.com` and `kodik.cc` resolve to `/ftor`, but the cache was a single slot for all netlocs — risk of a silent regression any day Kodik rebalances its CDN.
+
+**Workaround**: cache is now `ConcurrentMap<String, String>` keyed by netloc (lower-cased host of the iframe URL). Entries appear lazily on first successful POST per netloc; reads fall through to the default fallback path `/ftor` when the netloc is new.
+
+**Where in code**: [`KodikVideoDecoderService.cachedVideoInfoPathByNetloc`](../orinuno-app/src/main/java/com/orinuno/service/KodikVideoDecoderService.java) and `cacheVideoInfoPath(netloc, path)` / `resolveVideoInfoPath(netloc, playerJs)` helpers.
+
+**Verified by**: [`KodikVideoDecoderRegexTest`](../orinuno-app/src/test/java/com/orinuno/service/KodikVideoDecoderRegexTest.java) regression suite and `KodikVideoDecoderCacheTest` (added with DECODE-7).
+
+**Discovered via**: DECODE-7 robustness pass.
+
+**Related**: BACKLOG.md → DECODE-7, DECODE-2 (persistent per-netloc cache).
+
+---
+
 ## 2026-05-02 — `vInfo.type` enum is `video` or `seria` (NOT `movie`/`film`) [decoder] [api]
 
 **Symptom**: New code that constructs an iframe URL by hand or pattern-matches on the type field thinks "movie" or "film" are valid values; debugging logs miss matches.
