@@ -78,7 +78,8 @@ class DecoderMaintenanceSchedulerTest {
                         episodeVariantRepository,
                         props,
                         new KodikCdnHostMetrics(sharedRegistry),
-                        new com.orinuno.service.metrics.KodikDecoderMetrics(sharedRegistry));
+                        new com.orinuno.service.metrics.KodikDecoderMetrics(sharedRegistry),
+                        null);
 
         scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(2);

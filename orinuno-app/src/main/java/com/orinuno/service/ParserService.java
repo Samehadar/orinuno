@@ -39,6 +39,7 @@ public class ParserService {
     private final OrinunoProperties properties;
     private final KodikCdnHostMetrics kodikCdnHostMetrics;
     private final KodikDecoderMetrics decoderMetrics;
+    private final KodikEpisodeDualWriteService episodeDualWriter;
 
     public Mono<List<KodikContent>> search(ParseRequestDto request) {
         return searchInternal(request, ProgressReporter.NOOP);
@@ -336,6 +337,9 @@ public class ParserService {
         }
         episodeVariantRepository.updateMp4LinkAndMethod(
                 variant.getId(), bestLink, result.method().name());
+        if (episodeDualWriter != null) {
+            episodeDualWriter.mirrorDecode(variant, result, pickedQuality, bestLink);
+        }
         kodikCdnHostMetrics.recordDecodedUrl(bestLink);
         if (decoderMetrics != null) {
             decoderMetrics.recordPickedQuality(pickedQuality);
