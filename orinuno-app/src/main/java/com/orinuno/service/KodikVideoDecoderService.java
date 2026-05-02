@@ -31,8 +31,24 @@ public class KodikVideoDecoderService {
     private static final Pattern TYPE_PATTERN = Pattern.compile("vInfo\\.type = '([^']+)'");
     private static final Pattern HASH_PATTERN = Pattern.compile("vInfo\\.hash = '([^']+)'");
     private static final Pattern ID_PATTERN = Pattern.compile("vInfo\\.id = '([^']+)'");
+
+    /**
+     * Matches the player JavaScript file referenced inside the iframe HTML.
+     *
+     * <p>Kodik changed the naming scheme around 2026-05: in addition to the legacy {@code
+     * app.player_<variant>.<sha>.js} (e.g. {@code app.player_single.<sha>.js} for movies), serial
+     * iframes now reference {@code app.serial.<sha>.js}. The original regex {@code
+     * app\.player_[^.]+\.js} did NOT match the serial naming, silently breaking decode for every
+     * serial since the change. See docs/quirks-and-hacks.md "Player JS file naming is now
+     * type-dependent" entry.
+     *
+     * <p>The regex now accepts any {@code app.<word>.<...>.js} under {@code /assets/js/} so future
+     * naming variants (e.g. {@code app.player.*}, {@code app.player_inline.*}) keep working without
+     * another emergency patch.
+     */
     private static final Pattern PLAYER_JS_PATTERN =
-            Pattern.compile("src=\"/(assets/js/app\\.player_[^\"]+\\.js)\"");
+            Pattern.compile("src=\"/(assets/js/app\\.[a-zA-Z0-9_]+\\.[A-Za-z0-9]+\\.js)\"");
+
     private static final Pattern POST_URL_PATTERN =
             Pattern.compile("type:\"POST\",url:atob\\(\"([^\"]+)\"\\)");
     private static final Pattern VIDEO_SRC_PATTERN =
