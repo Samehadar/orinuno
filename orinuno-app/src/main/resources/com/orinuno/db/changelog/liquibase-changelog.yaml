@@ -19,3 +19,7 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260502010000_create_orinuno_dump_state.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260502020000_create_kodik_decoder_path_cache.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260502030000_create_kodik_calendar_state.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260502030100_create_kodik_calendar_outbox.sql

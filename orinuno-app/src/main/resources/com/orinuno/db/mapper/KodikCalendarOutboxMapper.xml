@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.KodikCalendarOutboxRepository">
+
+    <resultMap id="eventResultMap" type="com.orinuno.model.KodikCalendarOutboxEvent">
+        <id property="id" column="id"/>
+        <result property="shikimoriId" column="shikimori_id"/>
+        <result property="changeType" column="change_type"/>
+        <result property="oldValue" column="old_value"/>
+        <result property="newValue" column="new_value"/>
+        <result property="detectedAt" column="detected_at"/>
+        <result property="consumerId" column="consumer_id"/>
+        <result property="consumedAt" column="consumed_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.orinuno.model.KodikCalendarOutboxEvent"
+            useGeneratedKeys="true" keyProperty="event.id">
+        INSERT INTO kodik_calendar_outbox (
+            shikimori_id, change_type, old_value, new_value, detected_at,
+            consumer_id, consumed_at
+        ) VALUES (
+            #{event.shikimoriId}, #{event.changeType}, #{event.oldValue}, #{event.newValue},
+            #{event.detectedAt}, #{event.consumerId}, #{event.consumedAt}
+        )
+    </insert>
+
+    <select id="findSince" resultMap="eventResultMap">
+        SELECT * FROM kodik_calendar_outbox
+        WHERE detected_at &gt; #{since}
+        ORDER BY detected_at ASC, id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findByShikimoriId" resultMap="eventResultMap">
+        SELECT * FROM kodik_calendar_outbox
+        WHERE shikimori_id = #{shikimoriId}
+        ORDER BY detected_at ASC, id ASC
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM kodik_calendar_outbox
+    </select>
+
+</mapper>

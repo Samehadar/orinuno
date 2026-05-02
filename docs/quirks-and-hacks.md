@@ -242,6 +242,26 @@ Quality distribution observed in 10 titles (Naruto, FMA, AoT, OP, Steins;Gate, N
 
 ---
 
+## 2026-05-02 — Calendar deltas are watched + persisted as an outbox, not polled [calendar] [scheduler] [outbox]
+
+**Symptom**: Until CAL-6 the `/api/v1/calendar` endpoint was query-only — every call returned a fresh snapshot of Kodik's `dumps.kodikres.com/calendar.json`, but nobody noticed when an anime's `next_episode` advanced, when `status` flipped from `ongoing` → `released`, or when `score` changed. Consumers that wanted to react to those changes had to download the full ~few-MB dump and diff it themselves on every poll cycle.
+
+**Root cause**: Kodik refreshes the calendar dump every few minutes; the dump is the only authoritative signal for "this episode just dropped" / "this anime is now finished". There's no event stream from Kodik.
+
+**Workaround** (CAL-6): a `CalendarDeltaWatcher` Spring bean runs on a 5-minute schedule (default; configurable via `orinuno.calendar.delta-watcher.poll-interval-minutes`). On every cycle it (1) does a conditional GET via `KodikCalendarHttpClient` (cheap when no upstream change), (2) bulk-loads the matching `kodik_calendar_state` rows for every Shikimori id in the fetch, (3) computes deltas in memory, (4) writes one row per delta to `kodik_calendar_outbox` and upserts the state row. Idempotent: re-running the same fetch produces zero new events.
+
+The watcher is **disabled by default** so deployments without the CAL-6 Liquibase migration stay green; flip `orinuno.calendar.delta-watcher.enabled=true` after migration. Outbox is exposed at `GET /api/v1/calendar/outbox?since=…&limit=…` (default since=epoch, limit=200, max=1000).
+
+**Where in code**: [`CalendarDeltaWatcher`](../orinuno-app/src/main/java/com/orinuno/service/calendar/CalendarDeltaWatcher.java), [`CalendarDeltaScheduler`](../orinuno-app/src/main/java/com/orinuno/service/calendar/CalendarDeltaScheduler.java), Liquibase scripts `20260502030000_create_kodik_calendar_state.sql` + `20260502030100_create_kodik_calendar_outbox.sql`, `KodikCalendarController#outbox`.
+
+**Verified by**: [`CalendarDeltaWatcherTest`](../orinuno-app/src/test/java/com/orinuno/service/calendar/CalendarDeltaWatcherTest.java) — 13 tests covering NEW_ANIME / NEXT_EPISODE_ADVANCED / EPISODES_AIRED_INCREASED / STATUS_CHANGED / SCORE_CHANGED / RELEASED_ON_SET, idempotency on re-run, score rounding, and missing-anime-id absorption.
+
+**Discovered via**: BACKLOG → CAL-6.
+
+**Related**: DUMP-1 (calendar dump HEAD-poll), Calendar service (cached query layer).
+
+---
+
 ## 2026-05-02 — Decoder path cache survives JVM restarts via `kodik_decoder_path_cache` [decoder] [persistence] [scheduler]
 
 **Symptom**: Every restart of orinuno re-paid the brute-force discovery cost for every Kodik netloc (parse player JS, fall back to `/ftor`/`/kor`/`/gvi`/`/seria` chain). On a fleet of decoders this multiplied the load against Kodik on every deploy and added a multi-second cold-decode latency for every distinct netloc.

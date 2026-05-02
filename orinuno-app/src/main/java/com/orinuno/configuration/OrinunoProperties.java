@@ -154,6 +154,19 @@ public class OrinunoProperties {
         private long cacheTtlSeconds = 300;
         private long requestTimeoutSeconds = 10;
         private long maxResponseBytes = 4L * 1024 * 1024;
+        private DeltaWatcherProperties deltaWatcher = new DeltaWatcherProperties();
+
+        /**
+         * CAL-6 — diff every Kodik calendar fetch against the previously persisted state and emit
+         * one outbox event per detected delta. Disabled by default so existing deployments without
+         * the new tables stay green; flip {@code enabled} after applying the Liquibase migration.
+         */
+        @Data
+        public static class DeltaWatcherProperties {
+            private boolean enabled = false;
+            private long pollIntervalMinutes = 5;
+            private long initialDelaySeconds = 60;
+        }
     }
 
     /**

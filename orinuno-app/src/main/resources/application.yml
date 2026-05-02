@@ -110,6 +110,10 @@ orinuno:
     cache-ttl-seconds: ${ORINUNO_CALENDAR_CACHE_TTL_SECONDS:300}
     request-timeout-seconds: ${ORINUNO_CALENDAR_REQUEST_TIMEOUT_SECONDS:10}
     max-response-bytes: ${ORINUNO_CALENDAR_MAX_RESPONSE_BYTES:4194304}
+    delta-watcher:
+      enabled: ${ORINUNO_CALENDAR_DELTA_WATCHER_ENABLED:false}
+      poll-interval-minutes: ${ORINUNO_CALENDAR_DELTA_WATCHER_INTERVAL_MIN:5}
+      initial-delay-seconds: ${ORINUNO_CALENDAR_DELTA_WATCHER_INITIAL_DELAY_S:60}
   dumps:
     enabled: ${ORINUNO_DUMPS_ENABLED:false}
     base-url: ${ORINUNO_DUMPS_BASE_URL:https://dumps.kodikres.com}
