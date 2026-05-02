@@ -6,9 +6,62 @@ description: Run Orinuno locally in under five minutes with Docker Compose, or b
 The fastest way to run Orinuno is the bundled Docker Compose stack. A manual
 setup is documented below for contributors who need to rebuild on every change.
 
+## Step 0 — Kodik token bootstrap (mandatory)
+
+Orinuno cannot make a single Kodik API call without a token. Both
+docker-compose and manual runs need this seeded **before** start; otherwise
+every parse / embed / decode endpoint returns `503` with
+`error: registry empty`.
+
+Two ways to seed:
+
+1. **Environment variable (recommended for first run)** — set `KODIK_TOKEN`
+   to a known-good value. The first boot copies it into the registry under
+   `data/kodik_tokens.json` (tier `stable`) and probes its capabilities
+   against `/list`, `/search`, `/get-player`.
+
+   ```sh
+   export KODIK_TOKEN=your_kodik_api_token
+   ```
+
+2. **Direct edit of `data/kodik_tokens.json`** — for ops / token rotation.
+   The file is gitignored. Minimal shape (mirrors AnimeParsers' format —
+   see [`data/TOKENS.md`](https://github.com/Samehadar/orinuno/blob/master/data/TOKENS.md)):
+
+   ```json
+   {
+     "stable": [
+       {
+         "value": "<token>",
+         "lastChecked": null,
+         "note": "manually seeded",
+         "functionsAvailability": {}
+       }
+     ],
+     "unstable": [],
+     "legacy": [],
+     "dead": []
+   }
+   ```
+
+After boot, verify with:
+
+```sh
+curl -sS http://localhost:8085/api/v1/health/tokens | jq '.liveCount'
+# expect: > 0
+```
+
+If you want one call that also covers schema-drift and queue-depth, use the
+[integration health endpoint](/orinuno/operations/parser-kodik-integration/#1-pre-flight-checklist):
+
+```sh
+curl -sS http://localhost:8085/api/v1/health/integration | jq
+# expect: "status": "READY"
+```
+
 ## Docker Compose (recommended)
 
-Requires Docker with Compose v2 and a Kodik API token.
+Requires Docker with Compose v2 and a Kodik API token (see Step 0).
 
 ```sh
 git clone https://github.com/Samehadar/orinuno.git
@@ -37,7 +90,8 @@ export DB_NAME=orinuno
 export DB_USERNAME=root
 export DB_PASSWORD=root
 
-mvn spring-boot:run
+# Multi-module reactor (PR3): the Spring Boot app lives in the orinuno-app submodule.
+mvn -pl orinuno-app -am spring-boot:run
 ```
 
 The service starts on port `8080`. Swagger UI is at

@@ -77,6 +77,7 @@ export default defineConfig({
             { slug: 'architecture/video-decoding' },
             { slug: 'architecture/hls-manifest' },
             { slug: 'architecture/video-download' },
+            { slug: 'architecture/download-pathways' },
             { slug: 'architecture/schema-drift' },
             { slug: 'architecture/parse-requests' },
             { slug: 'architecture/database' },
@@ -93,6 +94,7 @@ export default defineConfig({
         {
           label: 'Operations',
           items: [
+            { slug: 'operations/parser-kodik-integration' },
             { slug: 'operations/proxy-pool' },
             { slug: 'operations/kodik-tokens' },
             { slug: 'operations/ttl-refresh' },

@@ -60,6 +60,13 @@ compatibility with future AnimeParsers additions.
    contains `{"error": "Отсутствует или неверный токен"}`, the current token is marked
    invalid for that function and the call is retried with the next eligible token (up to
    `token-failover-max-attempts`). When all functions die, the entry is moved to `dead`.
+5. **DEAD-tier recovery.** `validateAll()` also re-probes entries currently in `dead`,
+   but only those whose `last_checked` is older than
+   `orinuno.kodik.dead-revalidation-interval-minutes` (default `1440` = 24h). This
+   defends against the historical failure mode where a single transient `ConnectException`
+   during `validate-on-startup` would silently kill a perfectly valid token. As soon as
+   any probe succeeds, `markValid()` revives the entry into the `unstable` tier, where
+   subsequent runtime traffic decides whether to promote it further or push it back.
 
 ## File format
 
@@ -67,7 +74,7 @@ compatibility with future AnimeParsers additions.
 {
   "stable": [
     {
-      "value": "4492ae176f94d3103750b9443139fdc5",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "functions_availability": {
         "base_search": true,
         "base_search_by_id": true,
