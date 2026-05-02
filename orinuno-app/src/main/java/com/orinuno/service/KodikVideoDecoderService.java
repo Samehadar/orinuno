@@ -217,6 +217,14 @@ public class KodikVideoDecoderService {
                         e -> healthTracker.recordFailure("step4_load_player_js", e.getMessage()));
     }
 
+    /**
+     * Sends the decoder POST that returns the encoded video links map.
+     *
+     * <p>Body MUST be {@code application/x-www-form-urlencoded} with string-typed booleans (literal
+     * {@code "true"} / {@code "false"}). Sending a JSON body returns HTTP 500 with the misleading
+     * error "Отсутствует или неверный токен" — see ADR 0003
+     * (docs/adr/0003-kodik-decoder-post-body-format.md) and docs/quirks-and-hacks.md.
+     */
     private Mono<Map<String, String>> sendVideoRequest(
             String postUrl, String urlParamsJson, String type, String hash, String id) {
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
