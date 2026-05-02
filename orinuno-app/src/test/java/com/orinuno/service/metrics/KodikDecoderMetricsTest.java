@@ -65,6 +65,60 @@ class KodikDecoderMetricsTest {
     }
 
     @Test
+    @DisplayName("recordOutcome tags by outcome enum (DECODE-7)")
+    void recordOutcomeTagsByEnum() {
+        metrics.recordOutcome(KodikDecoderMetrics.DecodeOutcome.SUCCESS);
+        metrics.recordOutcome(KodikDecoderMetrics.DecodeOutcome.SUCCESS);
+        metrics.recordOutcome(KodikDecoderMetrics.DecodeOutcome.GEO_BLOCKED);
+        metrics.recordOutcome(KodikDecoderMetrics.DecodeOutcome.EMPTY_LINKS);
+        metrics.recordOutcome(KodikDecoderMetrics.DecodeOutcome.UPSTREAM_ERROR);
+
+        assertThat(counterValue("orinuno.decoder.outcome", "outcome", "success")).isEqualTo(2.0);
+        assertThat(counterValue("orinuno.decoder.outcome", "outcome", "geo_blocked"))
+                .isEqualTo(1.0);
+        assertThat(counterValue("orinuno.decoder.outcome", "outcome", "empty_links"))
+                .isEqualTo(1.0);
+        assertThat(counterValue("orinuno.decoder.outcome", "outcome", "upstream_error"))
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName(
+            "recordUpstreamError tags by HTTP status AND error class — independent counters per"
+                    + " (status, class) pair (DECODE-7)")
+    void recordUpstreamErrorTagsByStatusAndClass() {
+        metrics.recordUpstreamError(
+                500, KodikDecoderMetrics.UpstreamErrorClass.SIGNED_PARAMS_STALE);
+        metrics.recordUpstreamError(
+                500, KodikDecoderMetrics.UpstreamErrorClass.SIGNED_PARAMS_STALE);
+        metrics.recordUpstreamError(500, KodikDecoderMetrics.UpstreamErrorClass.OTHER);
+        metrics.recordUpstreamError(404, KodikDecoderMetrics.UpstreamErrorClass.OTHER);
+        metrics.recordUpstreamError(429, KodikDecoderMetrics.UpstreamErrorClass.TOKEN_INVALID);
+
+        assertThat(
+                        registry.find("orinuno.decoder.upstream_error")
+                                .tag("status", "500")
+                                .tag("class", "signed_params_stale")
+                                .counter()
+                                .count())
+                .isEqualTo(2.0);
+        assertThat(
+                        registry.find("orinuno.decoder.upstream_error")
+                                .tag("status", "500")
+                                .tag("class", "other")
+                                .counter()
+                                .count())
+                .isEqualTo(1.0);
+        assertThat(
+                        registry.find("orinuno.decoder.upstream_error")
+                                .tag("status", "404")
+                                .tag("class", "other")
+                                .counter()
+                                .count())
+                .isEqualTo(1.0);
+    }
+
+    @Test
     @DisplayName("counter cardinality stays bounded — same tag value reuses the same counter")
     void counterReusedForSameTagValue() {
         for (int i = 0; i < 100; i++) {
