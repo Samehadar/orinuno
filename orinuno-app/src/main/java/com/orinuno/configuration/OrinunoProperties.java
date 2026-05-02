@@ -65,6 +65,14 @@ public class OrinunoProperties {
         private long refreshIntervalMs = 3600000;
         private int refreshBatchSize = 50;
         private MaintenanceProperties maintenance = new MaintenanceProperties();
+
+        /**
+         * DECODE-8 — when {@code true} AND Playwright is wired up, the orchestrator falls back to a
+         * Playwright network-sniff decoder when the regex/JS path returns empty. Disabled by
+         * default because Playwright is heavyweight (full Chromium); enable when you've observed
+         * regex breakage in production and need a stop-gap.
+         */
+        private boolean sniffFallbackEnabled = false;
     }
 
     /**

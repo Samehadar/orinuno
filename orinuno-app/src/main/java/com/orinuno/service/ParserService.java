@@ -10,6 +10,8 @@ import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.model.ParseRequestPhase;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
+import com.orinuno.service.decoder.DecodeAttemptResult;
+import com.orinuno.service.decoder.KodikDecodeOrchestrator;
 import com.orinuno.service.metrics.KodikCdnHostMetrics;
 import com.orinuno.service.metrics.KodikDecoderMetrics;
 import com.orinuno.service.requestlog.ProgressReporter;
@@ -32,6 +34,7 @@ public class ParserService {
     private final KodikApiClient kodikApiClient;
     private final ContentService contentService;
     private final KodikVideoDecoderService decoderService;
+    private final KodikDecodeOrchestrator decodeOrchestrator;
     private final EpisodeVariantRepository episodeVariantRepository;
     private final OrinunoProperties properties;
     private final KodikCdnHostMetrics kodikCdnHostMetrics;
@@ -279,7 +282,9 @@ public class ParserService {
                 .then();
     }
 
-    /** PF-I4: decode with retry backoff. */
+    /**
+     * PF-I4: decode with retry backoff. DECODE-8: routes through {@link KodikDecodeOrchestrator}.
+     */
     private Mono<Void> decodeVariant(KodikEpisodeVariant variant) {
         if (variant.getKodikLink() == null) {
             log.warn("⚠️ Variant id={} has no kodik_link, skipping decode", variant.getId());
@@ -288,7 +293,7 @@ public class ParserService {
 
         int maxRetries = properties.getDecoder().getMaxRetries();
 
-        return decoderService
+        return decodeOrchestrator
                 .decode(variant.getKodikLink())
                 .retryWhen(
                         Retry.backoff(maxRetries, Duration.ofSeconds(2))
@@ -298,24 +303,7 @@ public class ParserService {
                                                         "🔁 Retry #{} for variant id={}",
                                                         signal.totalRetries() + 1,
                                                         variant.getId())))
-                .doOnSuccess(
-                        videoLinks -> {
-                            Map.Entry<String, String> best = pickBestQualityEntry(videoLinks);
-                            if (best != null) {
-                                String bestLink = best.getValue();
-                                episodeVariantRepository.updateMp4Link(variant.getId(), bestLink);
-                                kodikCdnHostMetrics.recordDecodedUrl(bestLink);
-                                if (decoderMetrics != null) {
-                                    decoderMetrics.recordPickedQuality(best.getKey());
-                                }
-                                log.info(
-                                        "✅ Decoded variant id={}: {} qualities, best={} ({}p)",
-                                        variant.getId(),
-                                        videoLinks.size(),
-                                        bestLink.substring(0, Math.min(60, bestLink.length())),
-                                        best.getKey());
-                            }
-                        })
+                .doOnSuccess(result -> persistDecode(variant, result))
                 .doOnError(
                         e ->
                                 log.error(
@@ -325,6 +313,52 @@ public class ParserService {
                                         e.getMessage()))
                 .onErrorResume(e -> Mono.empty())
                 .then();
+    }
+
+    private void persistDecode(KodikEpisodeVariant variant, DecodeAttemptResult result) {
+        if (result == null || result.isEmpty()) {
+            return;
+        }
+        Map<String, String> videoLinks = result.qualities();
+        Map.Entry<String, String> best = pickBestQualityEntry(videoLinks);
+        String bestLink;
+        String pickedQuality;
+        if (best != null) {
+            bestLink = best.getValue();
+            pickedQuality = best.getKey();
+        } else {
+            Map.Entry<String, String> any = firstHttpEntry(videoLinks);
+            if (any == null) {
+                return;
+            }
+            bestLink = any.getValue();
+            pickedQuality = any.getKey();
+        }
+        episodeVariantRepository.updateMp4LinkAndMethod(
+                variant.getId(), bestLink, result.method().name());
+        kodikCdnHostMetrics.recordDecodedUrl(bestLink);
+        if (decoderMetrics != null) {
+            decoderMetrics.recordPickedQuality(pickedQuality);
+        }
+        log.info(
+                "✅ Decoded variant id={} via {}: {} qualities, picked={} ({}p)",
+                variant.getId(),
+                result.method().name(),
+                videoLinks.size(),
+                bestLink.substring(0, Math.min(60, bestLink.length())),
+                pickedQuality);
+    }
+
+    private static Map.Entry<String, String> firstHttpEntry(Map<String, String> videoLinks) {
+        if (videoLinks == null || videoLinks.isEmpty()) {
+            return null;
+        }
+        for (Map.Entry<String, String> e : videoLinks.entrySet()) {
+            if (e.getValue() != null && e.getValue().startsWith("http")) {
+                return e;
+            }
+        }
+        return null;
     }
 
     static String selectBestQuality(Map<String, String> videoLinks) {

@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import com.orinuno.client.KodikApiClient;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.repository.EpisodeVariantRepository;
+import com.orinuno.service.decoder.KodikDecodeOrchestrator;
 import com.orinuno.service.metrics.KodikCdnHostMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
@@ -29,6 +30,7 @@ class DecoderMaintenanceSchedulerTest {
     @Mock private KodikApiClient kodikApiClient;
     @Mock private ContentService contentService;
     @Mock private KodikVideoDecoderService decoderService;
+    @Mock private KodikDecodeOrchestrator decodeOrchestrator;
     @Mock private EpisodeVariantRepository episodeVariantRepository;
 
     private ThreadPoolTaskScheduler scheduler;
@@ -72,6 +74,7 @@ class DecoderMaintenanceSchedulerTest {
                         kodikApiClient,
                         contentService,
                         decoderService,
+                        decodeOrchestrator,
                         episodeVariantRepository,
                         props,
                         new KodikCdnHostMetrics(sharedRegistry),

@@ -23,3 +23,5 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260502030000_create_kodik_calendar_state.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260502030100_create_kodik_calendar_outbox.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260502040000_add_decode_method_to_episode_variant.sql

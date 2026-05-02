@@ -22,6 +22,7 @@ public class KodikEpisodeVariant {
     private String quality;
     private String kodikLink;
     private String mp4Link;
+    private String decodeMethod;
     private LocalDateTime mp4LinkDecodedAt;
     private String localFilepath;
     private LocalDateTime createdAt;

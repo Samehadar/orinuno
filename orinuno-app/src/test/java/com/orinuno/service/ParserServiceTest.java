@@ -12,6 +12,7 @@ import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
+import com.orinuno.service.decoder.KodikDecodeOrchestrator;
 import com.orinuno.service.metrics.KodikCdnHostMetrics;
 import com.orinuno.service.metrics.KodikDecoderMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -34,6 +35,7 @@ class ParserServiceTest {
     @Mock private KodikApiClient kodikApiClient;
     @Mock private ContentService contentService;
     @Mock private KodikVideoDecoderService decoderService;
+    @Mock private KodikDecodeOrchestrator decodeOrchestrator;
     @Mock private EpisodeVariantRepository episodeVariantRepository;
 
     private ParserService parserService;
@@ -52,6 +54,7 @@ class ParserServiceTest {
                         kodikApiClient,
                         contentService,
                         decoderService,
+                        decodeOrchestrator,
                         episodeVariantRepository,
                         properties,
                         kodikCdnHostMetrics,
@@ -223,6 +226,7 @@ class ParserServiceTest {
                         kodikApiClient,
                         contentService,
                         decoderService,
+                        decodeOrchestrator,
                         episodeVariantRepository,
                         props,
                         kodikCdnHostMetrics,
@@ -234,6 +238,7 @@ class ParserServiceTest {
 
         verify(episodeVariantRepository).findExpiredLinks(props.getDecoder().getLinkTtlHours(), 3);
         verifyNoInteractions(decoderService);
+        verifyNoInteractions(decodeOrchestrator);
     }
 
     @Test
@@ -248,6 +253,7 @@ class ParserServiceTest {
                         kodikApiClient,
                         contentService,
                         decoderService,
+                        decodeOrchestrator,
                         episodeVariantRepository,
                         props,
                         kodikCdnHostMetrics,
@@ -274,6 +280,7 @@ class ParserServiceTest {
                         kodikApiClient,
                         contentService,
                         decoderService,
+                        decodeOrchestrator,
                         episodeVariantRepository,
                         props,
                         kodikCdnHostMetrics,
@@ -289,7 +296,7 @@ class ParserServiceTest {
                                                 .build())
                         .toList();
         when(episodeVariantRepository.findExpiredLinks(anyInt(), anyInt())).thenReturn(expired);
-        when(decoderService.decode(any())).thenReturn(Mono.never());
+        when(decodeOrchestrator.decode(any())).thenReturn(Mono.never());
 
         long start = System.currentTimeMillis();
         bounded.refreshExpiredLinks();
