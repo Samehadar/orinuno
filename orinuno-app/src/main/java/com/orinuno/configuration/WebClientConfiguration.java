@@ -1,5 +1,6 @@
 package com.orinuno.configuration;
 
+import com.orinuno.client.http.RotatingUserAgentProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,10 +11,6 @@ import reactor.netty.http.client.HttpClient;
 
 @Configuration
 public class WebClientConfiguration {
-
-    private static final String CHROME_UA =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
-                    + " Chrome/135.0.0.0 Safari/537.36";
 
     @Bean
     public WebClient kodikApiWebClient(
@@ -40,13 +37,13 @@ public class WebClientConfiguration {
     }
 
     @Bean
-    public WebClient kodikCdnWebClient() {
+    public WebClient kodikCdnWebClient(RotatingUserAgentProvider userAgentProvider) {
         HttpClient httpClient = HttpClient.create().followRedirect(false);
 
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .defaultHeader("Referer", "https://kodikplayer.com/")
-                .defaultHeader("User-Agent", CHROME_UA)
+                .defaultHeader("User-Agent", userAgentProvider.stableDesktop())
                 .build();
     }
 }

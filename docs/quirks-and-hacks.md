@@ -292,3 +292,27 @@ The String-typed `.types("...")` setter is preserved for backward compatibility,
 **Related**: BACKLOG.md → API-7.
 
 ---
+
+## 2026-05-02 — User-Agent strings live in one place [http] [stealth]
+
+**Symptom**: Before UA-1, the same desktop User-Agent literal lived in five files (decoder service, CDN WebClient bean, token auto-discovery, Playwright stealth context, Playwright HLS segment fetch). Bumping Chrome's major version meant a five-file PR; introducing a Firefox tier required auditing every site; and the segment-fetch UA had silently drifted to a shorter/older variant than the rest.
+
+**Root cause**: Plain copy-paste over time. There was no single owner for "what UA do we send to Kodik?" so whoever added the next caller pasted whatever string was nearby.
+
+**Workaround**: [`RotatingUserAgentProvider`](../orinuno-app/src/main/java/com/orinuno/client/http/RotatingUserAgentProvider.java) is the single source of truth. It exposes:
+
+- `randomDesktop()` — per-request rotation across the canonical pool (5 modern Chrome / Firefox strings on Win / macOS / Linux). Used by the decoder for iframe + player JS + POST and by token auto-discovery.
+- `stableDesktop()` — sticky per-process pick, used where session affinity matters (Playwright contexts, the CDN WebClient bean, HLS segment fetcher).
+- `orinunoBot(suffix)` — honest "I am orinuno" UA for endpoints operated by Kodik for legitimate consumers (currently the calendar dump).
+
+To rotate the pool, edit `DESKTOP_POOL` in `RotatingUserAgentProvider` and bump the comment date — that's the single audit point.
+
+**Where in code**: [`RotatingUserAgentProvider`](../orinuno-app/src/main/java/com/orinuno/client/http/RotatingUserAgentProvider.java) and its callers (`KodikVideoDecoderService`, `KodikTokenAutoDiscovery`, `WebClientConfiguration#kodikCdnWebClient`, `PlaywrightVideoFetcher`, `KodikCalendarHttpClient`).
+
+**Verified by**: [`RotatingUserAgentProviderTest`](../orinuno-app/src/test/java/com/orinuno/client/http/RotatingUserAgentProviderTest.java).
+
+**Discovered via**: UA-1 audit pass.
+
+**Related**: BACKLOG.md → UA-1.
+
+---

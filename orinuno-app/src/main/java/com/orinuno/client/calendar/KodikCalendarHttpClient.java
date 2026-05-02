@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kodik.sdk.drift.DriftDetector;
 import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
+import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.metrics.KodikCalendarMetrics;
 import io.netty.channel.ChannelOption;
@@ -42,7 +43,7 @@ public class KodikCalendarHttpClient {
             new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> RAW_LIST_TYPE =
             new TypeReference<>() {};
-    private static final String UA = "orinuno/1.0 (+https://github.com/orinuno) calendar-watcher";
+    private static final String UA = RotatingUserAgentProvider.orinunoBot("calendar-watcher");
 
     private final OrinunoProperties properties;
     private final ObjectMapper objectMapper;

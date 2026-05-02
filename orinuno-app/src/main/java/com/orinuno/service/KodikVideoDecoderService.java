@@ -2,6 +2,7 @@ package com.orinuno.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.metrics.KodikDecoderMetrics;
 import java.net.URI;
@@ -85,6 +86,7 @@ public class KodikVideoDecoderService {
     private final GeoBlockDetector geoBlockDetector;
     private final OrinunoProperties properties;
     private final KodikDecoderMetrics decoderMetrics;
+    private final RotatingUserAgentProvider userAgentProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -566,17 +568,11 @@ public class KodikVideoDecoderService {
         return matcher.find() ? matcher.group(1) : null;
     }
 
-    private static String randomUserAgent() {
-        String[] agents = {
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
-                    + " Chrome/135.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
-                    + " Chrome/135.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)"
-                    + " Chrome/135.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0"
-        };
-        return agents[(int) (Math.random() * agents.length)];
+    /**
+     * Per-request UA. Delegates to {@link RotatingUserAgentProvider} (UA-1) so the literal pool
+     * lives in a single audit point.
+     */
+    private String randomUserAgent() {
+        return userAgentProvider.randomDesktop();
     }
 }

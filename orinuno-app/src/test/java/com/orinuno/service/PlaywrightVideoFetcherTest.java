@@ -2,6 +2,7 @@ package com.orinuno.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
@@ -16,7 +17,7 @@ class PlaywrightVideoFetcherTest {
         var props = new OrinunoProperties();
         props.getPlaywright().setEnabled(false);
 
-        var fetcher = new PlaywrightVideoFetcher(props);
+        var fetcher = new PlaywrightVideoFetcher(props, new RotatingUserAgentProvider());
         fetcher.init();
 
         assertThat(fetcher.isAvailable()).isFalse();
@@ -30,7 +31,7 @@ class PlaywrightVideoFetcherTest {
         var props = new OrinunoProperties();
         props.getPlaywright().setEnabled(false);
 
-        var fetcher = new PlaywrightVideoFetcher(props);
+        var fetcher = new PlaywrightVideoFetcher(props, new RotatingUserAgentProvider());
         fetcher.init();
 
         Path target = tempDir.resolve("test.mp4");
@@ -52,7 +53,7 @@ class PlaywrightVideoFetcherTest {
         var props = new OrinunoProperties();
         props.getPlaywright().setEnabled(false);
 
-        var fetcher = new PlaywrightVideoFetcher(props);
+        var fetcher = new PlaywrightVideoFetcher(props, new RotatingUserAgentProvider());
         fetcher.init();
 
         var result = fetcher.interceptVideoUrl("//kodikplayer.com/seria/123");
