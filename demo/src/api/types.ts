@@ -230,3 +230,38 @@ export interface CalendarFilter {
   enrich?: boolean
 }
 
+export type ProviderName = 'KODIK' | 'SIBNET' | 'ANIBOOM' | 'JUTSU'
+
+export interface RankedSourceCandidate {
+  provider: ProviderName | string
+  translatorId: string | null
+  translatorName: string | null
+  quality: string | null
+  videoUrl: string | null
+  videoFormat: string | null
+  decodedAt: string | null
+  decodeMethod: string | null
+  decodeFailedCount: number | null
+  score: number
+}
+
+export interface RankedSourcesResponse {
+  contentId: number
+  season: number
+  episode: number
+  count: number
+  candidates: RankedSourceCandidate[]
+}
+
+export interface ProviderDecodeRequest {
+  provider: 'SIBNET' | 'ANIBOOM' | 'JUTSU'
+  url: string
+}
+
+export interface ProviderDecodeResult {
+  success: boolean
+  qualities: Record<string, string>
+  format: string | null
+  errorCode: string | null
+}
+
