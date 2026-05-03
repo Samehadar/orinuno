@@ -38,11 +38,15 @@ public class ProvidersController {
 
     @PostMapping("/decode")
     @Operation(
-            summary = "Decode a single provider URL ad-hoc",
+            deprecated = true,
+            summary = "[Deprecated] use POST /api/v1/sources/{provider}/decode",
             description =
-                    "Routes the supplied URL to the matching provider decoder (Sibnet, Aniboom,"
-                        + " JutSu). Stateless: no DB write, no caching. Use for demo / debugging —"
-                        + " production decode goes through the orchestrator.")
+                    "Legacy decoder dispatch kept only for backwards compatibility. The canonical"
+                        + " path is POST /api/v1/sources/{provider}/decode where {provider} is one"
+                        + " of kodik / sibnet / aniboom / jutsu and the request body is just"
+                        + " {\"url\": \"...\"}. This endpoint will be removed after consumers"
+                        + " migrate.")
+    @Deprecated
     public Mono<ResponseEntity<ProviderDecodeResult>> decode(
             @Valid @RequestBody ProviderDecodeRequest request) {
         String provider = request.provider().trim().toUpperCase();

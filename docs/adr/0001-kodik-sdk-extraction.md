@@ -161,3 +161,13 @@ harder. The pilot establishes the pattern early when the cost is small.
 
 Adopt the target shape. Implement **only the drift pilot** in PR3.
 Track follow-ups in BACKLOG.md as IDEA-SDK-2/3/4.
+
+## Follow-ups
+
+- **2026-05-03** — Step 2 of the API/module split landed `jutsu-sdk` as a
+  second standalone SDK module, following the same `kodik-sdk-drift`
+  template (no Spring Boot, no auto-configuration, manual `@Configuration`
+  wiring in `orinuno-app`). See [ADR 0012](0012-jutsu-sdk-extraction.md)
+  for the full extraction record. Steps 3 & 4 (`sibnet-sdk` +
+  `aniboom-sdk`, then `kodik-sdk` merging with `kodik-sdk-drift`) follow
+  the same template.

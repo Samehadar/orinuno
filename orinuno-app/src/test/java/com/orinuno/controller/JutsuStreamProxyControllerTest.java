@@ -4,8 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
-import com.orinuno.service.provider.jutsu.JutsuRateLimiter;
-import com.orinuno.service.provider.jutsu.JutsuSessionManager;
+import com.orinuno.jutsu.JutsuConfig;
+import com.orinuno.jutsu.auth.JutsuSessionManager;
+import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.URI;
 import java.util.ArrayList;
@@ -61,11 +62,19 @@ class JutsuStreamProxyControllerTest {
 
     private JutsuStreamProxyController buildController(StubExchange stub) {
         WebClient.Builder builder = WebClient.builder().exchangeFunction(stub);
-        JutsuRateLimiter rateLimiter = new JutsuRateLimiter(props, registry);
+        // Build the SDK config from OrinunoProperties exactly the way JutsuSdkConfiguration
+        // does, so the test exercises the same wiring path production uses.
+        OrinunoProperties.JutsuProperties jp = props.getProviders().getJutsu();
+        JutsuConfig config =
+                JutsuConfig.builder()
+                        .baseUrl(jp.getBaseUrl())
+                        .credentials(jp.getUsername(), jp.getPassword())
+                        .userAgent(new RotatingUserAgentProvider().stableDesktop())
+                        .rateLimitRps(jp.getRateLimitRps())
+                        .build();
+        JutsuRateLimiter rateLimiter = new JutsuRateLimiter(config::rateLimitRps, registry);
         JutsuSessionManager sessionManager =
-                new JutsuSessionManager(
-                        props, new RotatingUserAgentProvider(), rateLimiter, registry, builder);
-        sessionManager.init();
+                new JutsuSessionManager(config, rateLimiter, builder, registry);
         return new JutsuStreamProxyController(
                 rateLimiter, sessionManager, new RotatingUserAgentProvider(), builder, registry);
     }
@@ -75,17 +84,20 @@ class JutsuStreamProxyControllerTest {
     }
 
     /**
-     * Build a {@code /api/v1/providers/jutsu/stream?url=...} URI through Spring's {@link
-     * UriBuilder} so the framework percent-encodes the upstream URL the same way a real browser
-     * would. Hand-rolled {@code "%3A%2F%2F"} concatenation tripped over WebTestClient's URI
-     * template handling and produced misleading 403s on unrelated assertions.
+     * Build a {@code /api/v1/sources/jutsu/stream?url=...} URI through Spring's {@link UriBuilder}
+     * so the framework percent-encodes the upstream URL the same way a real browser would.
+     * Hand-rolled {@code "%3A%2F%2F"} concatenation tripped over WebTestClient's URI template
+     * handling and produced misleading 403s on unrelated assertions. The {@code path} parameter
+     * lets a single test exercise either the canonical or the deprecated alias.
      */
+    private static java.util.function.Function<UriBuilder, URI> streamUri(
+            String path, String upstreamUrl) {
+        return uriBuilder -> uriBuilder.path(path).queryParam("url", upstreamUrl).build();
+    }
+
+    /** Default helper — exercises the canonical path. */
     private static java.util.function.Function<UriBuilder, URI> streamUri(String upstreamUrl) {
-        return uriBuilder ->
-                uriBuilder
-                        .path("/api/v1/providers/jutsu/stream")
-                        .queryParam("url", upstreamUrl)
-                        .build();
+        return streamUri("/api/v1/sources/jutsu/stream", upstreamUrl);
     }
 
     @Test
@@ -250,7 +262,7 @@ class JutsuStreamProxyControllerTest {
                 .uri(
                         uriBuilder ->
                                 uriBuilder
-                                        .path("/api/v1/providers/jutsu/stream")
+                                        .path("/api/v1/sources/jutsu/stream")
                                         .queryParam("url", "https://r1.yandexwebcache.org/a.mp4")
                                         .queryParam("filename", "one-punch-man-s01e11-1080p.mp4")
                                         .build())
@@ -307,6 +319,30 @@ class JutsuStreamProxyControllerTest {
         assertThat(header).contains("filename*=UTF-8''");
         // Encoded "Ванпанчмен" in UTF-8 percent-encoding starts with %D0%92...
         assertThat(header).contains("%D0%92");
+    }
+
+    @Test
+    void deprecatedLegacyPathStillStreamsTheSameWayAsCanonical() {
+        // Step 1 of the API split keeps /api/v1/providers/jutsu/stream working as a deprecation
+        // alias so existing frontends don't break in-flight. Both paths must hit the same handler.
+        ClientResponse upstream =
+                ClientResponse.create(HttpStatus.OK)
+                        .header(HttpHeaders.CONTENT_TYPE, "video/mp4")
+                        .body("body")
+                        .build();
+        StubExchange stub = new StubExchange(List.of(upstream));
+        JutsuStreamProxyController controller = buildController(stub);
+        bind(controller)
+                .get()
+                .uri(streamUri("/api/v1/providers/jutsu/stream", "https://r1.yandexwebcache.org/a"))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals(HttpHeaders.CONTENT_TYPE, "video/mp4");
+        assertThat(stub.requests).hasSize(1);
+        assertThat(stub.requests.get(0).url())
+                .isEqualTo(URI.create("https://r1.yandexwebcache.org/a"));
     }
 
     @Test

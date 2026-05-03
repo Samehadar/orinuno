@@ -1,12 +1,12 @@
-package com.orinuno.service.provider.jutsu;
+package com.orinuno.jutsu.parser;
 
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * PLAYER-4 (ADR 0009) — pure URL-shape parser for JutSu (jut.su). The episode page URL contains the
- * anime slug + episode marker.
+ * Pure URL-shape parser for JutSu (jut.su). The episode page URL contains the anime slug + episode
+ * marker.
  */
 public final class JutsuSourceParser {
 

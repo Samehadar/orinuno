@@ -20,6 +20,7 @@ import type {
   RankedSourcesResponse,
   ReferenceResponse,
   SchemaDriftHealth,
+  SourcesCapabilitiesResponse,
 } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
@@ -169,12 +170,19 @@ export const api = {
   ) {
     const qs = prefer ? `?prefer=${encodeURIComponent(prefer)}` : ''
     return get<RankedSourcesResponse>(
-      `/api/v1/sources/${contentId}/${season}/${episode}${qs}`,
+      `/api/v1/anime/${contentId}/episodes/${season}/${episode}/sources${qs}`,
     )
   },
 
   decodeProviderUrl(req: ProviderDecodeRequest) {
-    return post<ProviderDecodeResult>('/api/v1/providers/decode', req)
+    const provider = req.provider.toLowerCase()
+    return post<ProviderDecodeResult>(`/api/v1/sources/${provider}/decode`, {
+      url: req.url,
+    })
+  },
+
+  getSourcesCapabilities() {
+    return get<SourcesCapabilitiesResponse>('/api/v1/sources')
   },
 
   getCalendar(filter: CalendarFilter = {}) {

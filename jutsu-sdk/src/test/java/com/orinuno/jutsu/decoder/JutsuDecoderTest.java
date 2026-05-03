@@ -1,12 +1,14 @@
-package com.orinuno.service.provider.jutsu;
+package com.orinuno.jutsu.decoder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.orinuno.service.provider.ProviderDecodeResult;
-import com.orinuno.service.provider.jutsu.JutsuSourceParser.JutsuEpisodeRef;
+import com.orinuno.jutsu.JutsuDecodeResult;
+import com.orinuno.jutsu.JutsuErrorCodes;
+import com.orinuno.jutsu.parser.JutsuSourceParser;
+import com.orinuno.jutsu.parser.JutsuSourceParser.JutsuEpisodeRef;
 import org.junit.jupiter.api.Test;
 
-class JutsuDecoderServiceTest {
+class JutsuDecoderTest {
 
     @Test
     void extractsTwoQualitiesFromTypicalPage() {
@@ -14,7 +16,7 @@ class JutsuDecoderServiceTest {
                 "<video><source src=\"https://video.jut.su/dn/720.mp4\" type=\"video/mp4\""
                         + " label=\"720p\"><source src=\"https://video.jut.su/dn/1080.mp4\""
                         + " type=\"video/mp4\" label=\"1080p\"></video>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
         assertThat(r.success()).isTrue();
         assertThat(r.qualities())
                 .containsEntry("720", "https://video.jut.su/dn/720.mp4")
@@ -27,7 +29,7 @@ class JutsuDecoderServiceTest {
         String html =
                 "<video><source src=\"https://video.jut.su/dn/720.mp4\""
                         + " type=\"video/mp4\"></video>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
         assertThat(r.qualities()).containsEntry("720", "https://video.jut.su/dn/720.mp4");
     }
 
@@ -48,7 +50,7 @@ class JutsuDecoderServiceTest {
                     + " selected=\"true\"/><source"
                     + " src=\"https://r420501.yandexwebcache.org/dead-dead-demons/4.360.edd99115c1bf662e.mp4?derou=3829047&hash=JKL\""
                     + " type=\"video/mp4\" lang=\"ru\" label=\"360p\" res=\"360\"/></video>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
         assertThat(r.success()).isTrue();
         assertThat(r.qualities())
                 .containsKeys("1080", "720", "480", "360")
@@ -64,7 +66,7 @@ class JutsuDecoderServiceTest {
         String html =
                 "<source src=\"https://x/y/4.1080.deadbeef.mp4\""
                         + " type=\"video/mp4\" label=\"HD\" res=\"1080\"/>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
         assertThat(r.qualities()).containsKey("1080");
     }
 
@@ -73,29 +75,29 @@ class JutsuDecoderServiceTest {
         String html =
                 "<source label=\"720p\" type=\"video/mp4\""
                         + " src=\"https://x/y/4.720.aaa.mp4\" res=\"720\" lang=\"ru\"/>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
         assertThat(r.qualities()).containsEntry("720", "https://x/y/4.720.aaa.mp4");
     }
 
     @Test
     void nonMp4SourceIsIgnored() {
-        // <source> tags for poster images / .vtt subtitles / .webm fallbacks must not pollute the
-        // quality map. Regex-level filter at the URL-attribute level guarantees this.
+        // <source> tags for poster images / .vtt subtitles / .webm fallbacks must not pollute
+        // the quality map. Regex-level filter at the URL-attribute level guarantees this.
         String html =
                 "<video><source src=\"https://x/y/cover.png\" type=\"image/png\"/>"
                         + "<source src=\"https://x/y/720.mp4\" type=\"video/mp4\""
                         + " label=\"720p\"/></video>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
         assertThat(r.qualities()).containsKeys("720").hasSize(1);
     }
 
     @Test
     void tabNeedPlusOverlayIsPremiumRequired() {
-        ProviderDecodeResult r =
-                JutsuDecoderService.extractFromHtml(
+        JutsuDecodeResult r =
+                JutsuDecoder.extractFromHtml(
                         "<div class=\"top_player_line\"><div class=\"tab_need_plus\">"
                                 + "<a href=\"/plus/\">Jutsu+</a></div></div>");
-        assertThat(r.errorCode()).isEqualTo("JUTSU_PREMIUM_REQUIRED");
+        assertThat(r.errorCode()).isEqualTo(JutsuErrorCodes.JUTSU_PREMIUM_REQUIRED);
     }
 
     @Test
@@ -105,8 +107,8 @@ class JutsuDecoderServiceTest {
         String html =
                 "<video><source src=\"https://gen.jut.su/templates/school/images/pixel.png?720\""
                         + " type=\"video/mp4\" label=\"720p\"></video>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
-        assertThat(r.errorCode()).isEqualTo("JUTSU_PREMIUM_REQUIRED");
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
+        assertThat(r.errorCode()).isEqualTo(JutsuErrorCodes.JUTSU_PREMIUM_REQUIRED);
     }
 
     @Test
@@ -124,54 +126,52 @@ class JutsuDecoderServiceTest {
                     + " type=\"video/mp4\" label=\"1080p\"/><source"
                     + " src=\"https://gen.jut.su/templates/school/images/pixel.png?720\""
                     + " type=\"video/mp4\" label=\"720p\"/></video></div></body></html>";
-        ProviderDecodeResult r = JutsuDecoderService.extractFromHtml(html);
-        assertThat(r.errorCode()).isEqualTo("JUTSU_PREMIUM_REQUIRED");
+        JutsuDecodeResult r = JutsuDecoder.extractFromHtml(html);
+        assertThat(r.errorCode()).isEqualTo(JutsuErrorCodes.JUTSU_PREMIUM_REQUIRED);
     }
 
     @Test
     void cloudflareChallengeIsTransient() {
-        ProviderDecodeResult r =
-                JutsuDecoderService.extractFromHtml(
+        JutsuDecodeResult r =
+                JutsuDecoder.extractFromHtml(
                         "<html><body>Just a moment...<div"
                                 + " id=\"cf-browser-verification\"/></body></html>");
-        assertThat(r.errorCode()).isEqualTo("JUTSU_CLOUDFLARE_BLOCKED");
+        assertThat(r.errorCode()).isEqualTo(JutsuErrorCodes.JUTSU_CLOUDFLARE_BLOCKED);
     }
 
     @Test
     void htmlWithoutPlayerBlockIsPlayerMissing() {
         // Bot-detection mode: page returns minimal HTML without the <video> player block.
         // Distinguishes "real upstream change" from "we're being filtered for missing cookies".
-        ProviderDecodeResult r =
-                JutsuDecoderService.extractFromHtml(
+        JutsuDecodeResult r =
+                JutsuDecoder.extractFromHtml(
                         "<html><body><nav>links</nav><footer>x</footer></body></html>");
-        assertThat(r.errorCode()).isEqualTo("JUTSU_PLAYER_MISSING");
+        assertThat(r.errorCode()).isEqualTo(JutsuErrorCodes.JUTSU_PLAYER_MISSING);
     }
 
     @Test
     void htmlWithPlayerButNoMp4SourcesIsSourceTagMissing() {
         // Player block present but no <source src="….mp4"> matched — schema drift territory.
-        ProviderDecodeResult r =
-                JutsuDecoderService.extractFromHtml(
+        JutsuDecodeResult r =
+                JutsuDecoder.extractFromHtml(
                         "<video class=\"video-js\"><source src=\"x.webm\""
                                 + " type=\"video/webm\"/></video>");
-        assertThat(r.errorCode()).isEqualTo("JUTSU_SOURCE_TAG_MISSING");
+        assertThat(r.errorCode()).isEqualTo(JutsuErrorCodes.JUTSU_SOURCE_TAG_MISSING);
     }
 
     @Test
     void emptyHtmlIsEmptyResponse() {
-        assertThat(JutsuDecoderService.extractFromHtml("").errorCode())
-                .isEqualTo("JUTSU_EMPTY_RESPONSE");
-        assertThat(JutsuDecoderService.extractFromHtml(null).errorCode())
-                .isEqualTo("JUTSU_EMPTY_RESPONSE");
+        assertThat(JutsuDecoder.extractFromHtml("").errorCode())
+                .isEqualTo(JutsuErrorCodes.JUTSU_EMPTY_RESPONSE);
+        assertThat(JutsuDecoder.extractFromHtml(null).errorCode())
+                .isEqualTo(JutsuErrorCodes.JUTSU_EMPTY_RESPONSE);
     }
 
     @Test
     void pickQualityPrefersLabelOverUrl() {
-        assertThat(JutsuDecoderService.pickQuality("480p", "https://x/something.mp4"))
-                .isEqualTo("480");
-        assertThat(JutsuDecoderService.pickQuality(null, "https://x/dn/720.mp4")).isEqualTo("720");
-        assertThat(JutsuDecoderService.pickQuality("HD", "https://x/no-quality.mp4"))
-                .isEqualTo("auto");
+        assertThat(JutsuDecoder.pickQuality("480p", "https://x/something.mp4")).isEqualTo("480");
+        assertThat(JutsuDecoder.pickQuality(null, "https://x/dn/720.mp4")).isEqualTo("720");
+        assertThat(JutsuDecoder.pickQuality("HD", "https://x/no-quality.mp4")).isEqualTo("auto");
     }
 
     @Test

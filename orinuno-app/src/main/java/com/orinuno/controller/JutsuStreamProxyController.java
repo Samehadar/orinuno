@@ -1,8 +1,8 @@
 package com.orinuno.controller;
 
 import com.orinuno.client.http.RotatingUserAgentProvider;
-import com.orinuno.service.provider.jutsu.JutsuRateLimiter;
-import com.orinuno.service.provider.jutsu.JutsuSessionManager;
+import com.orinuno.jutsu.auth.JutsuSessionManager;
+import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -20,7 +20,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -38,10 +37,11 @@ import reactor.core.publisher.Mono;
  * docs/quirks-and-hacks.md} → "JutSu DLE auth + sticky cookies + 1 RPS hard cap" → "CDN URLs are
  * session-bound".
  *
- * <p>This controller bridges that gap: the browser hits {@code GET /api/v1/providers/jutsu/stream
+ * <p>This controller bridges that gap: the browser hits {@code GET /api/v1/sources/jutsu/stream
  * ?url={cdnUrl}}, we re-issue the request from inside backend's session, and stream the response
  * straight back without buffering. The browser's {@code <video>} tag never talks to Yandex
- * directly.
+ * directly. The legacy alias {@code /api/v1/providers/jutsu/stream} routes through the same handler
+ * so older frontends keep working during the deprecation window.
  *
  * <p><strong>Hardening</strong>:
  *
@@ -74,9 +74,19 @@ import reactor.core.publisher.Mono;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/providers/jutsu")
-@Tag(name = "Providers", description = "JutSu CDN pass-through proxy (PROXY-1)")
+@Tag(name = "Sources", description = "JutSu CDN pass-through proxy (PROXY-1)")
 public class JutsuStreamProxyController {
+
+    /** Canonical path under the per-source API tier. */
+    static final String CANONICAL_PATH = "/api/v1/sources/jutsu/stream";
+
+    /**
+     * Legacy path kept as a deprecation alias. Browsers and frontends were originally pointed at
+     * {@code /api/v1/providers/jutsu/stream}; we cannot break them in-flight, so both URLs route
+     * through the same handler. Removal target: see ADR 0001 follow-up — at least one minor release
+     * after the new path ships.
+     */
+    static final String LEGACY_PATH = "/api/v1/providers/jutsu/stream";
 
     /** Suffix-match whitelist for upstream hosts we will proxy. */
     static final List<String> ALLOWED_HOST_SUFFIXES = List.of(".yandexwebcache.org");
@@ -132,7 +142,7 @@ public class JutsuStreamProxyController {
                         .register(meterRegistry);
     }
 
-    @GetMapping(value = "/stream", produces = MediaType.ALL_VALUE)
+    @GetMapping(value = CANONICAL_PATH, produces = MediaType.ALL_VALUE)
     @Operation(
             summary = "Stream a jut.su CDN URL through backend's session",
             description =
@@ -148,6 +158,27 @@ public class JutsuStreamProxyController {
             @RequestParam("url") String upstreamUrl,
             @RequestParam(value = "filename", required = false) @Nullable String filename,
             ServerWebExchange exchange) {
+        return doStream(upstreamUrl, filename, exchange);
+    }
+
+    @GetMapping(value = LEGACY_PATH, produces = MediaType.ALL_VALUE)
+    @Operation(
+            deprecated = true,
+            summary = "[Deprecated] use GET /api/v1/sources/jutsu/stream",
+            description =
+                    "Legacy alias for the canonical /api/v1/sources/jutsu/stream. Same handler,"
+                            + " same semantics, kept only so existing frontends keep working during"
+                            + " the transition. Remove after at least one minor release.")
+    @Deprecated
+    public Mono<Void> streamLegacy(
+            @RequestParam("url") String upstreamUrl,
+            @RequestParam(value = "filename", required = false) @Nullable String filename,
+            ServerWebExchange exchange) {
+        return doStream(upstreamUrl, filename, exchange);
+    }
+
+    private Mono<Void> doStream(
+            String upstreamUrl, @Nullable String filename, ServerWebExchange exchange) {
         URI uri;
         try {
             uri = URI.create(upstreamUrl);

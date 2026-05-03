@@ -1,11 +1,12 @@
-package com.orinuno.service.provider.jutsu;
+package com.orinuno.jutsu.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.orinuno.client.http.RotatingUserAgentProvider;
-import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.jutsu.JutsuConfig;
+import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -46,16 +47,15 @@ class JutsuSessionManagerTest {
         }
     }
 
-    private static OrinunoProperties propsWith(String username, String password) {
-        OrinunoProperties props = new OrinunoProperties();
-        OrinunoProperties.JutsuProperties jp = props.getProviders().getJutsu();
-        jp.setBaseUrl("https://jut.su");
-        jp.setUsername(username);
-        jp.setPassword(password);
-        jp.setRateLimitRps(100.0); // not the bottleneck in these tests
-        jp.setSessionTtlMinutes(60);
-        jp.setLoginTimeoutSeconds(5);
-        return props;
+    private static JutsuConfig configWith(String username, String password) {
+        return JutsuConfig.builder()
+                .baseUrl("https://jut.su")
+                .credentials(username, password)
+                .userAgent("Mozilla/5.0 (sdk-test)")
+                .rateLimitRps(100.0) // not the bottleneck in these tests
+                .sessionTtl(Duration.ofMinutes(60))
+                .loginTimeout(Duration.ofSeconds(5))
+                .build();
     }
 
     private static ClientResponse dleSuccess(String userId) {
@@ -81,39 +81,24 @@ class JutsuSessionManagerTest {
     }
 
     private JutsuSessionManager build(
-            OrinunoProperties props, List<ClientResponse> responses, Clock clock) {
-        StubExchange stub = new StubExchange(responses);
-        WebClient.Builder builder = WebClient.builder().exchangeFunction(stub);
-        JutsuSessionManager mgr =
-                new JutsuSessionManager(
-                        props,
-                        new RotatingUserAgentProvider(),
-                        new JutsuRateLimiter(props, new SimpleMeterRegistry()),
-                        new SimpleMeterRegistry(),
-                        builder,
-                        clock);
-        mgr.init();
-        return mgr;
+            JutsuConfig config, List<ClientResponse> responses, Clock clock) {
+        return build(config, new StubExchange(responses), clock);
     }
 
-    private JutsuSessionManager build(OrinunoProperties props, StubExchange stub, Clock clock) {
+    private JutsuSessionManager build(JutsuConfig config, StubExchange stub, Clock clock) {
         WebClient.Builder builder = WebClient.builder().exchangeFunction(stub);
-        JutsuSessionManager mgr =
-                new JutsuSessionManager(
-                        props,
-                        new RotatingUserAgentProvider(),
-                        new JutsuRateLimiter(props, new SimpleMeterRegistry()),
-                        new SimpleMeterRegistry(),
-                        builder,
-                        clock);
-        mgr.init();
-        return mgr;
+        return new JutsuSessionManager(
+                config,
+                new JutsuRateLimiter(config::rateLimitRps, new SimpleMeterRegistry()),
+                builder,
+                new SimpleMeterRegistry(),
+                clock);
     }
 
     @Test
     void emptyCookieHeaderWhenCredentialsNotConfigured() {
-        OrinunoProperties props = propsWith("", "");
-        JutsuSessionManager mgr = build(props, Collections.emptyList(), Clock.systemUTC());
+        JutsuConfig config = configWith("", "");
+        JutsuSessionManager mgr = build(config, Collections.emptyList(), Clock.systemUTC());
         assertThat(mgr.cookieHeader().blockOptional()).isEmpty();
         assertThat(mgr.peekHasCredentials()).isFalse();
     }
@@ -121,8 +106,8 @@ class JutsuSessionManagerTest {
     @Test
     void successfulLoginCachesCookieHeader() {
         StubExchange stub = new StubExchange(List.of(dleSuccess("3829047")));
-        OrinunoProperties props = propsWith("amateurdevideo", "hunter2");
-        JutsuSessionManager mgr = build(props, stub, Clock.systemUTC());
+        JutsuConfig config = configWith("amateurdevideo", "hunter2");
+        JutsuSessionManager mgr = build(config, stub, Clock.systemUTC());
 
         String cookies = mgr.cookieHeader().block();
         assertThat(cookies)
@@ -142,7 +127,7 @@ class JutsuSessionManagerTest {
     @Test
     void invalidateForcesReloginNextCall() {
         StubExchange stub = new StubExchange(List.of(dleSuccess("100"), dleSuccess("100")));
-        JutsuSessionManager mgr = build(propsWith("u", "p"), stub, Clock.systemUTC());
+        JutsuSessionManager mgr = build(configWith("u", "p"), stub, Clock.systemUTC());
         mgr.cookieHeader().block();
         mgr.invalidate("test");
         mgr.cookieHeader().block();
@@ -152,46 +137,51 @@ class JutsuSessionManagerTest {
     @Test
     void missingDleUserIdCookieIsTreatedAsLoginFailure() {
         StubExchange stub = new StubExchange(List.of(anonymousResponse()));
-        JutsuSessionManager mgr = build(propsWith("u", "p"), stub, Clock.systemUTC());
+        JutsuSessionManager mgr = build(configWith("u", "p"), stub, Clock.systemUTC());
         assertThat(mgr.cookieHeader().blockOptional()).isEmpty();
         assertThat(mgr.peek()).isNull();
     }
 
     @Test
     void expiredSessionIsRefreshedOnNextCall() {
-        OrinunoProperties props = propsWith("u", "p");
-        props.getProviders().getJutsu().setSessionTtlMinutes(1);
+        JutsuConfig config =
+                JutsuConfig.builder()
+                        .baseUrl("https://jut.su")
+                        .credentials("u", "p")
+                        .userAgent("ua")
+                        .rateLimitRps(100.0)
+                        .sessionTtl(Duration.ofMinutes(1))
+                        .loginTimeout(Duration.ofSeconds(5))
+                        .build();
         StubExchange stub = new StubExchange(List.of(dleSuccess("777"), dleSuccess("777")));
         StepClock clock = new StepClock(Instant.parse("2026-01-01T00:00:00Z"));
-        JutsuSessionManager mgr = build(props, stub, clock);
+        JutsuSessionManager mgr = build(config, stub, clock);
 
         mgr.cookieHeader().block();
         assertThat(stub.requests).hasSize(1);
 
-        clock.advance(java.time.Duration.ofMinutes(2));
+        clock.advance(Duration.ofMinutes(2));
         mgr.cookieHeader().block();
         assertThat(stub.requests).hasSize(2);
     }
 
     @Test
     void absolutizeReturnsAbsoluteUrlAsIs() {
-        JutsuSessionManager mgr = build(propsWith("", ""), List.of(), Clock.systemUTC());
+        JutsuSessionManager mgr = build(configWith("", ""), List.of(), Clock.systemUTC());
         assertThat(mgr.absolutize("https://jut.su/foo")).isEqualTo("https://jut.su/foo");
     }
 
     @Test
     void absolutizeAppendsBaseToRelativeUrl() {
-        OrinunoProperties props = propsWith("", "");
-        props.getProviders().getJutsu().setBaseUrl("https://jut.su");
-        JutsuSessionManager mgr = build(props, List.of(), Clock.systemUTC());
+        JutsuSessionManager mgr = build(configWith("", ""), List.of(), Clock.systemUTC());
         assertThat(mgr.absolutize("/naruto/episode-1.html"))
                 .isEqualTo("https://jut.su/naruto/episode-1.html");
     }
 
     @Test
     void previewLoginBodyUrlEncodesSpecialChars() {
-        OrinunoProperties props = propsWith("amateurdevideo", "5&L!s9bCk^GU*8dc");
-        JutsuSessionManager mgr = build(props, List.of(), Clock.systemUTC());
+        JutsuConfig config = configWith("amateurdevideo", "5&L!s9bCk^GU*8dc");
+        JutsuSessionManager mgr = build(config, List.of(), Clock.systemUTC());
         String body = mgr.previewLoginBody();
         // Java's URLEncoder follows form-urlencoded rules: '&' '!' '^' get percent-escaped, but
         // '*' is unreserved per RFC 3986 and passes through unchanged. Mirroring the actual
@@ -209,7 +199,7 @@ class JutsuSessionManagerTest {
             this.now = start;
         }
 
-        void advance(java.time.Duration d) {
+        void advance(Duration d) {
             now = now.plus(d);
         }
 

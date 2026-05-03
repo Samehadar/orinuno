@@ -2,8 +2,10 @@ package com.orinuno.controller;
 
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
+import com.orinuno.model.dto.ContentDto;
 import com.orinuno.repository.EpisodeSourceRepository;
 import com.orinuno.repository.EpisodeVideoRepository;
+import com.orinuno.service.ContentService;
 import com.orinuno.service.orchestration.MultiSourceRanker;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankedCandidate;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankingPreferences;
@@ -15,13 +17,13 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -34,10 +36,15 @@ import reactor.core.scheduler.Schedulers;
  * <p>The {@code prefer} query parameter accepts a comma-separated provider order override (e.g.
  * {@code ?prefer=ANIBOOM,KODIK,SIBNET,JUTSU}) for clients that want to demote Kodik in favour of a
  * specific alternative.
+ *
+ * <p><strong>API tier</strong>: the canonical resource-style path is {@code
+ * /api/v1/anime/{contentId}/episodes/{season}/{episode}/sources}. A by-kinopoisk variant lives
+ * alongside it. The original short path {@code /api/v1/sources/{contentId}/{season}/{episode}} is
+ * kept as a deprecated alias to avoid breaking the demo UI in-flight; remove after the API/module
+ * split lands.
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/sources")
 @RequiredArgsConstructor
 @Tag(name = "Multi-source", description = "AP-7: ranked provider candidates for an episode")
 public class MultiSourceController {
@@ -45,14 +52,17 @@ public class MultiSourceController {
     private final EpisodeSourceRepository sourceRepository;
     private final EpisodeVideoRepository videoRepository;
     private final MultiSourceRanker ranker;
+    private final ContentService contentService;
 
-    @GetMapping("/{contentId}/{season}/{episode}")
+    @GetMapping("/api/v1/anime/{contentId}/episodes/{season}/{episode}/sources")
     @Operation(
-            summary = "Ranked provider candidates for an episode",
+            summary = "Ranked provider candidates for an episode (canonical resource path)",
             description =
                     "Returns episode_source + episode_video rows joined and scored by"
-                            + " MultiSourceRanker (AP-7, ADR 0008). Higher score = better choice.")
-    public Mono<ResponseEntity<Map<String, Object>>> ranked(
+                        + " MultiSourceRanker (AP-7, ADR 0008). Higher score = better choice. This"
+                        + " is the canonical resource-style path; the legacy alias is GET"
+                        + " /api/v1/sources/{contentId}/{season}/{episode}.")
+    public Mono<ResponseEntity<Map<String, Object>>> rankedByContentId(
             @PathVariable Long contentId,
             @PathVariable Integer season,
             @PathVariable Integer episode,
@@ -62,6 +72,54 @@ public class MultiSourceController {
                                             + " ANIBOOM,KODIK,SIBNET,JUTSU)")
                     @RequestParam(required = false)
                     String prefer) {
+        return rankedFor(contentId, season, episode, prefer);
+    }
+
+    @GetMapping("/api/v1/anime/by-kinopoisk/{kinopoiskId}/episodes/{season}/{episode}/sources")
+    @Operation(
+            summary = "Ranked provider candidates for an episode, looked up by kinopoisk id",
+            description =
+                    "Same payload as the by-contentId variant, but lets external integrations skip"
+                        + " the contentId lookup. Returns 404 if no kodik_content row matches the"
+                        + " given kinopoiskId.")
+    public Mono<ResponseEntity<Map<String, Object>>> rankedByKinopoiskId(
+            @PathVariable String kinopoiskId,
+            @PathVariable Integer season,
+            @PathVariable Integer episode,
+            @RequestParam(required = false) String prefer) {
+        return Mono.fromCallable(() -> contentService.findByKinopoiskId(kinopoiskId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(
+                        (Optional<ContentDto> dto) -> {
+                            if (dto.isEmpty()) {
+                                Map<String, Object> body = new LinkedHashMap<>();
+                                body.put("error", "kinopoiskId not found");
+                                body.put("kinopoiskId", kinopoiskId);
+                                return Mono.just(ResponseEntity.status(404).body(body));
+                            }
+                            return rankedFor(dto.get().getId(), season, episode, prefer);
+                        });
+    }
+
+    @GetMapping("/api/v1/sources/{contentId}/{season}/{episode}")
+    @Operation(
+            deprecated = true,
+            summary = "[Deprecated] use /api/v1/anime/{contentId}/episodes/{s}/{e}/sources",
+            description =
+                    "Legacy short path kept so the demo UI keeps working during the API/module"
+                            + " split. Same response shape, same semantics. Remove after the new"
+                            + " path is documented and consumers migrate.")
+    @Deprecated
+    public Mono<ResponseEntity<Map<String, Object>>> ranked(
+            @PathVariable Long contentId,
+            @PathVariable Integer season,
+            @PathVariable Integer episode,
+            @RequestParam(required = false) String prefer) {
+        return rankedFor(contentId, season, episode, prefer);
+    }
+
+    private Mono<ResponseEntity<Map<String, Object>>> rankedFor(
+            Long contentId, Integer season, Integer episode, String prefer) {
         return Mono.fromCallable(
                         () -> {
                             List<EpisodeSource> sources =

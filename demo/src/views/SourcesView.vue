@@ -310,7 +310,9 @@ async function startDownload(url: string) {
         }
       }
     }
-    const blob = new Blob(chunks, { type: resp.headers.get('Content-Type') ?? 'video/mp4' })
+    const blob = new Blob(chunks as BlobPart[], {
+      type: resp.headers.get('Content-Type') ?? 'video/mp4',
+    })
     const blobUrl = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = blobUrl

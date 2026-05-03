@@ -21,8 +21,12 @@ Authentication is **optional** and off by default.
 - When `orinuno.security.api-key` is empty, every endpoint is open.
 - When set, `ApiKeyAuthFilter` requires the `X-API-KEY` header on every
   request to `/api/v1/content`, `/api/v1/parse`, `/api/v1/export`,
-  `/api/v1/hls`, `/api/v1/download`, `/api/v1/stream`, `/api/v1/kodik`,
-  `/api/v1/calendar`, and `/api/v1/embed`.
+  `/api/v1/download`, `/api/v1/kodik`, `/api/v1/calendar`, and
+  `/api/v1/embed`.
+- `/api/v1/sources/*`, `/api/v1/anime/*`, and `/api/v1/providers/*`
+  (legacy alias) are intentionally **not** gated so the demo UI and
+  embedded `<video>` tags can call them without an API key. Lock them
+  down at your reverse proxy if you ship Orinuno publicly.
 - `/api/v1/health/*` is always open.
 - `/swagger-ui.html` and `/v3/api-docs` are not protected by the API key —
   protect them at a reverse proxy if you deploy publicly.
@@ -79,8 +83,29 @@ throws a typed exception. For ad-hoc errors, the body is
 | `429` | Kodik rate limit hit — retry later |
 | `500` | Upstream or internal error |
 
+## API tiers
+
+| Tier | Path prefix | When to use |
+| --- | --- | --- |
+| **Sources** (per-provider) | `/api/v1/sources/...` | Talk to one provider in isolation: list capabilities, decode a single URL, stream a JutSu CDN video. Open-source-friendly entry point for external clients. |
+| **Anime resource** | `/api/v1/anime/{id}/episodes/.../sources` | Ask Orinuno to merge candidates across providers and return a ranked list. Resource-oriented, friendly to REST consumers. |
+| **Catalog & ingestion** | `/api/v1/content`, `/api/v1/parse`, `/api/v1/export` | Persisted Kodik content and the parser pipeline. Protected by `X-API-KEY` when configured. |
+| **Kodik direct** | `/api/v1/kodik/...`, `/api/v1/embed/...` | Thin wrappers over Kodik REST endpoints. |
+| **Calendar / health** | `/api/v1/calendar/...`, `/api/v1/health/...` | Operational surfaces. |
+
+The `Sources` and `Anime` tiers were introduced as part of the
+API/module split. The legacy `POST /api/v1/providers/decode`,
+`GET /api/v1/providers/jutsu/stream`, and
+`GET /api/v1/sources/{contentId}/{s}/{e}` paths still work as
+deprecation aliases — see the [Sources guide](/orinuno/api/sources/) for
+the mapping table.
+
 ## Where to go next
 
+- [Sources & Multi-Provider API](/orinuno/api/sources/) — per-source
+  endpoints + ranked candidates + deprecation aliases.
+- [Embed-link Shortcut](/orinuno/api/embed/) — resolve Kodik iframe URLs
+  by external id without going through the parser pipeline.
 - [API Reference](/orinuno/api/reference/) — generated from the OpenAPI
   snapshot (`openapi.json`). See the [docs-site README](https://github.com/Samehadar/orinuno/blob/master/docs-site/README.md#updating-the-openapi-snapshot) for how to refresh it.
 - [Quick Start](/orinuno/getting-started/quick-start/) — smoke test

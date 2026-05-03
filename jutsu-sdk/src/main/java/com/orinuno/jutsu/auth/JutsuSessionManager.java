@@ -1,11 +1,12 @@
-package com.orinuno.service.provider.jutsu;
+package com.orinuno.jutsu.auth;
 
-import com.orinuno.client.http.RotatingUserAgentProvider;
-import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.jutsu.JutsuConfig;
+import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
-import jakarta.annotation.PostConstruct;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import jakarta.annotation.Nullable;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -17,11 +18,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -38,109 +37,86 @@ import reactor.netty.http.client.HttpClient;
  * the episode HTML from "{@code pixel.png} placeholders + {@code tab_need_plus} overlay" to "real
  * {@code yandexwebcache.org} CDN URLs signed with {@code derou=$dle_user_id}".
  *
- * <p>This bean owns the cookie jar:
+ * <p>This class owns the cookie jar:
  *
  * <ul>
- *   <li>Lazy first-time login on demand (so {@code orinuno} still boots without {@code
- *       JUTSU_USERNAME / JUTSU_PASSWORD} set, just with the JutSu decoder permanently in anonymous
- *       mode).
+ *   <li>Lazy first-time login on demand (so consumers can boot without credentials configured, just
+ *       with the JutSu decoder permanently in anonymous mode).
  *   <li>Sticky cookie header reused across all jut.su requests until proactive TTL expiry or an
  *       explicit {@link #invalidate(String)} call from the decoder when it sees a premium-marker on
  *       a page we should be authenticated for.
- *   <li>Single-flight relogin via {@code Mono.cache()} + an {@link AtomicReference} so a burst of
+ *   <li>Single-flight relogin via {@link AtomicReference} + {@code synchronized} — a burst of
  *       parallel decoders sharing the same expired session triggers exactly one POST {@code /} and
  *       all of them resume on the same fresh cookie.
  *   <li>Every outbound call (login + each subsequent decode) is gated by {@link JutsuRateLimiter}
  *       so we never speed past the configured RPS, even during the login burst.
  * </ul>
  *
- * <p>What this bean intentionally does NOT do: persist cookies to disk. The cookie jar is RAM-only
+ * <p>What this class intentionally does NOT do: persist cookies to disk. The cookie jar is RAM-only
  * because (a) the DLE cookies are tied to the originating IP, so a cross-restart cache wouldn't
  * survive a pod move anyway, and (b) writing the {@code dle_password} md5 to disk would create a
  * second secret to manage. Cold-start latency is one extra POST.
- *
- * <p>See {@code docs/quirks-and-hacks.md} → "JutSu DLE auth + sticky cookies".
  */
 @Slf4j
-@Component
-public class JutsuSessionManager {
+public final class JutsuSessionManager {
 
-    private final OrinunoProperties properties;
-    private final RotatingUserAgentProvider userAgents;
+    private final JutsuConfig config;
     private final JutsuRateLimiter rateLimiter;
-    private final MeterRegistry meterRegistry;
     private final Clock clock;
-    private final WebClient.Builder webClientBuilder;
 
     private final AtomicReference<CachedSession> cached = new AtomicReference<>(null);
-    private Counter loginAttempts;
-    private Counter loginFailures;
-    private Counter invalidations;
-    private WebClient httpClient;
+    private final Counter loginAttempts;
+    private final Counter loginFailures;
+    private final Counter invalidations;
+    private final WebClient httpClient;
 
-    @Autowired
     public JutsuSessionManager(
-            OrinunoProperties properties,
-            RotatingUserAgentProvider userAgents,
+            JutsuConfig config,
             JutsuRateLimiter rateLimiter,
-            MeterRegistry meterRegistry,
-            WebClient.Builder webClientBuilder) {
-        this(
-                properties,
-                userAgents,
-                rateLimiter,
-                meterRegistry,
-                webClientBuilder,
-                Clock.systemUTC());
+            WebClient.Builder webClientBuilder,
+            @Nullable MeterRegistry meterRegistry) {
+        this(config, rateLimiter, webClientBuilder, meterRegistry, Clock.systemUTC());
     }
 
     JutsuSessionManager(
-            OrinunoProperties properties,
-            RotatingUserAgentProvider userAgents,
+            JutsuConfig config,
             JutsuRateLimiter rateLimiter,
-            MeterRegistry meterRegistry,
             WebClient.Builder webClientBuilder,
+            @Nullable MeterRegistry meterRegistry,
             Clock clock) {
-        this.properties = properties;
-        this.userAgents = userAgents;
+        this.config = config;
         this.rateLimiter = rateLimiter;
-        this.meterRegistry = meterRegistry;
-        this.webClientBuilder = webClientBuilder;
         this.clock = clock;
-    }
-
-    @PostConstruct
-    public void init() {
+        MeterRegistry registry = meterRegistry == null ? new SimpleMeterRegistry() : meterRegistry;
         this.loginAttempts =
                 Counter.builder("orinuno.providers.jutsu.login.attempts.total")
                         .description("DLE login POSTs to jut.su (success + failure)")
-                        .register(meterRegistry);
+                        .register(registry);
         this.loginFailures =
                 Counter.builder("orinuno.providers.jutsu.login.failures.total")
                         .description("DLE login POSTs that did not return the expected cookies")
-                        .register(meterRegistry);
+                        .register(registry);
         this.invalidations =
                 Counter.builder("orinuno.providers.jutsu.session.invalidations.total")
                         .description("Times the decoder asked us to discard the cached cookie jar")
                         .tags(Tags.empty())
-                        .register(meterRegistry);
+                        .register(registry);
 
-        // Build a dedicated WebClient that follows redirects and uses our shared User-Agent. We
-        // cannot reuse the injected builder verbatim because Spring's default WebClient does NOT
-        // follow redirects, and the DLE login response is sometimes a 302 → /.
+        // Build a dedicated WebClient that follows redirects and uses the configured User-Agent.
+        // We cannot reuse the injected builder verbatim because Spring's default WebClient does
+        // NOT follow redirects, and the DLE login response is sometimes a 302 → /.
         ReactorClientHttpConnector connector =
                 new ReactorClientHttpConnector(
                         HttpClient.create()
                                 .followRedirect(true)
                                 .compress(true)
-                                .responseTimeout(
-                                        Duration.ofSeconds(loginTimeoutSeconds(properties))));
+                                .responseTimeout(config.loginTimeout()));
         this.httpClient =
                 webClientBuilder
                         .clone()
-                        .baseUrl(properties.getProviders().getJutsu().getBaseUrl())
+                        .baseUrl(config.baseUrl())
                         .clientConnector(connector)
-                        .defaultHeader(HttpHeaders.USER_AGENT, userAgents.stableDesktop())
+                        .defaultHeader(HttpHeaders.USER_AGENT, config.userAgent())
                         .defaultHeader(
                                 HttpHeaders.ACCEPT,
                                 "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -149,17 +125,13 @@ public class JutsuSessionManager {
                         .build();
     }
 
-    private static int loginTimeoutSeconds(OrinunoProperties properties) {
-        return Math.max(1, properties.getProviders().getJutsu().getLoginTimeoutSeconds());
-    }
-
     /** Returns the {@code Cookie:} header value to send with the next jut.su request, or empty. */
     public Mono<String> cookieHeader() {
-        if (!properties.getProviders().getJutsu().hasCredentials()) {
+        if (!config.hasCredentials()) {
             return Mono.empty();
         }
         CachedSession current = cached.get();
-        if (current != null && !current.expired(clock, ttl())) {
+        if (current != null && !current.expired(clock, config.sessionTtl())) {
             return Mono.just(current.cookieHeader);
         }
         return loginAndCache().map(s -> s.cookieHeader).onErrorResume(ex -> Mono.empty());
@@ -184,14 +156,9 @@ public class JutsuSessionManager {
         }
     }
 
-    private Duration ttl() {
-        long minutes = properties.getProviders().getJutsu().getSessionTtlMinutes();
-        return Duration.ofMinutes(Math.max(1, minutes));
-    }
-
     private synchronized Mono<CachedSession> loginAndCache() {
         CachedSession current = cached.get();
-        if (current != null && !current.expired(clock, ttl())) {
+        if (current != null && !current.expired(clock, config.sessionTtl())) {
             return Mono.just(current);
         }
         return rateLimiter
@@ -207,21 +174,20 @@ public class JutsuSessionManager {
     }
 
     private Mono<CachedSession> performLogin() {
-        OrinunoProperties.JutsuProperties cfg = properties.getProviders().getJutsu();
         loginAttempts.increment();
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("login_name", cfg.getUsername());
-        form.add("login_password", cfg.getPassword());
+        form.add("login_name", config.username());
+        form.add("login_password", config.password());
         form.add("login", "submit");
         return httpClient
                 .post()
                 .uri("/")
-                .header(HttpHeaders.ORIGIN, cfg.getBaseUrl())
-                .header(HttpHeaders.REFERER, cfg.getBaseUrl() + "/")
+                .header(HttpHeaders.ORIGIN, config.baseUrl())
+                .header(HttpHeaders.REFERER, config.baseUrl() + "/")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(form))
                 .exchangeToMono(this::parseLoginResponse)
-                .timeout(Duration.ofSeconds(cfg.getLoginTimeoutSeconds()))
+                .timeout(config.loginTimeout())
                 .doOnError(
                         ex -> {
                             loginFailures.increment();
@@ -287,7 +253,7 @@ public class JutsuSessionManager {
         if (uri.isAbsolute()) {
             return href;
         }
-        String base = properties.getProviders().getJutsu().getBaseUrl();
+        String base = config.baseUrl();
         if (!base.endsWith("/") && !href.startsWith("/")) {
             return base + "/" + href;
         }
@@ -299,11 +265,10 @@ public class JutsuSessionManager {
 
     /** Visible for tests; computes the form-encoded body shape we POST during login. */
     String previewLoginBody() {
-        OrinunoProperties.JutsuProperties cfg = properties.getProviders().getJutsu();
         return "login_name="
-                + urlEncode(cfg.getUsername())
+                + urlEncode(config.username())
                 + "&login_password="
-                + urlEncode(cfg.getPassword())
+                + urlEncode(config.password())
                 + "&login=submit";
     }
 
@@ -312,17 +277,18 @@ public class JutsuSessionManager {
     }
 
     /** Test-visible accessor; exposes the currently cached session, if any. */
+    @Nullable
     CachedSession peek() {
         return cached.get();
     }
 
     /**
-     * True when {@code orinuno.providers.jutsu.username/password} are configured. Used by the
-     * decoder to decide whether seeing {@code JUTSU_PREMIUM_REQUIRED} is worth a "stale session"
-     * retry: without credentials we have nothing to log into, so a retry is wasted bandwidth.
+     * True when credentials are configured. Used by the decoder to decide whether seeing {@code
+     * JUTSU_PREMIUM_REQUIRED} is worth a "stale session" retry: without credentials we have nothing
+     * to log into, so a retry is wasted bandwidth.
      */
     public boolean peekHasCredentials() {
-        return properties.getProviders().getJutsu().hasCredentials();
+        return config.hasCredentials();
     }
 
     /** Immutable snapshot of one login result. */

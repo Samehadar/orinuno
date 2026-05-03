@@ -1,20 +1,20 @@
-package com.orinuno.service.provider.jutsu;
+package com.orinuno.jutsu.ratelimit;
 
-import com.orinuno.configuration.OrinunoProperties;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import jakarta.annotation.Nullable;
 import java.time.Duration;
+import java.util.function.DoubleSupplier;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 /**
  * Outbound rate limiter for every HTTP call we make to {@code jut.su} (login + episode page
- * fetches). Backed by a single Bucket4j token bucket sized from {@code
- * orinuno.providers.jutsu.rate-limit-rps} (default 1.0 req/sec).
+ * fetches). Backed by a single Bucket4j token bucket sized from a configurable RPS.
  *
  * <p>Why we need this even though jut.su has no published rate limit:
  *
@@ -35,25 +35,27 @@ import reactor.core.publisher.Mono;
  * <p>Reactive contract: {@link #acquire()} returns a {@code Mono<Void>} that completes once a token
  * has been issued. When the bucket is empty it suspends via {@link Mono#delay} for the exact refill
  * interval Bucket4j reports — no busy-spinning, no thread blocking.
+ *
+ * <p>Construction takes a {@link DoubleSupplier} for the configured RPS rather than a constant so
+ * orinuno-app can hot-swap the value via {@code OrinunoProperties} without rebuilding the bean.
+ * Pass {@code () -> 1.0} for a fixed limit.
  */
 @Slf4j
-@Component
-public class JutsuRateLimiter {
+public final class JutsuRateLimiter {
 
-    private final OrinunoProperties properties;
-    private final MeterRegistry meterRegistry;
+    private final DoubleSupplier rpsSupplier;
     private final Counter throttleCounter;
 
     private volatile Bucket bucket;
     private volatile double currentRps;
 
-    public JutsuRateLimiter(OrinunoProperties properties, MeterRegistry meterRegistry) {
-        this.properties = properties;
-        this.meterRegistry = meterRegistry;
+    public JutsuRateLimiter(DoubleSupplier rpsSupplier, @Nullable MeterRegistry meterRegistry) {
+        this.rpsSupplier = rpsSupplier;
+        MeterRegistry registry = meterRegistry == null ? new SimpleMeterRegistry() : meterRegistry;
         this.throttleCounter =
                 Counter.builder("orinuno.providers.jutsu.rate_limit.throttle.total")
                         .description("Outbound jut.su requests deferred by the rate limiter")
-                        .register(meterRegistry);
+                        .register(registry);
         this.currentRps = effectiveRps();
         this.bucket = newBucket(this.currentRps);
         log.info("🪣 JutSu outbound rate limiter initialised at {} req/sec", currentRps);
@@ -80,11 +82,6 @@ public class JutsuRateLimiter {
                         });
     }
 
-    /**
-     * Single bucket probe; returns {@link Duration#ZERO} when a token was issued or the wait
-     * duration before another attempt. Also checks for a hot-swapped {@code rateLimitRps} property
-     * and rebuilds the bucket on change.
-     */
     private Mono<Duration> tryConsumeOnce() {
         double configured = effectiveRps();
         if (configured != currentRps) {
@@ -107,7 +104,7 @@ public class JutsuRateLimiter {
     }
 
     private double effectiveRps() {
-        double configured = properties.getProviders().getJutsu().getRateLimitRps();
+        double configured = rpsSupplier.getAsDouble();
         // Floor at 0.1 req/sec (one request every 10 seconds). Bucket4j refuses zero/negative
         // capacity; capping low protects us from a misconfigured 0 disabling the decoder
         // entirely with no error signal, and from a negative value bouncing the app on startup.

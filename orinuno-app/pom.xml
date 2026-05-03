@@ -43,6 +43,18 @@
             <artifactId>kodik-sdk-drift</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--
+            jutsu-sdk — Step 2 of the API/module split. Carries the rate limiter, session
+            manager, decoder and source parser. orinuno-app keeps a thin
+            JutsuSdkConfiguration that wires SDK beans from OrinunoProperties so the rest of the
+            app sees the same JutsuRateLimiter / JutsuSessionManager beans it always did, just
+            from a different package.
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>jutsu-sdk</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- General -->
         <dependency>

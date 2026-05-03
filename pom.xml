@@ -23,6 +23,7 @@
 
     <modules>
         <module>kodik-sdk-drift</module>
+        <module>jutsu-sdk</module>
         <module>orinuno-app</module>
     </modules>
 
@@ -40,6 +41,16 @@
         <assertj.version>3.27.6</assertj.version>
         <spotless-maven-plugin.version>2.46.1</spotless-maven-plugin.version>
         <google-java-format.version>1.22.0</google-java-format.version>
+        <!--
+            jutsu-sdk transitive deps. Versions match what spring-boot-starter-parent 3.5.x ships
+            today so the SDK and orinuno-app stay binary-compatible inside the same reactor build.
+        -->
+        <spring-webflux.version>6.2.18</spring-webflux.version>
+        <reactor.version>3.7.18</reactor.version>
+        <reactor-netty.version>1.2.17</reactor-netty.version>
+        <bucket4j.version>8.18.0</bucket4j.version>
+        <micrometer.version>1.15.11</micrometer.version>
+        <jakarta-annotation.version>2.1.1</jakarta-annotation.version>
     </properties>
 
     <dependencyManagement>
@@ -47,6 +58,11 @@
             <dependency>
                 <groupId>com.orinuno</groupId>
                 <artifactId>kodik-sdk-drift</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orinuno</groupId>
+                <artifactId>jutsu-sdk</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

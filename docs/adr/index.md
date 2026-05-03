@@ -17,6 +17,7 @@ This directory holds the architectural decision records (ADRs) for orinuno. Each
 | [0009](0009-player4-jutsu-decoder.md) | PLAYER-4 (JutSu): direct-MP4 decoder, premium-tier blocked | Accepted (deferred) | providers |
 | [0010](0010-meta1-metadata-enrichment.md) | META-1: metadata enrichment from Shikimori + Kinopoisk + MyAnimeList | Accepted (deferred) | enrichment |
 | [0011](0011-kb1-knowledge-base-runbook.md) | KB-1: knowledge base / operator runbook | Accepted (phased) | docs |
+| [0012](0012-jutsu-sdk-extraction.md) | JutSu SDK extraction into `jutsu-sdk` module | Accepted | architecture |
 
 ## Status legend
 

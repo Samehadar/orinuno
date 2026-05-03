@@ -254,7 +254,7 @@ export interface RankedSourcesResponse {
 }
 
 export interface ProviderDecodeRequest {
-  provider: 'SIBNET' | 'ANIBOOM' | 'JUTSU'
+  provider: 'KODIK' | 'SIBNET' | 'ANIBOOM' | 'JUTSU'
   url: string
 }
 
@@ -263,5 +263,20 @@ export interface ProviderDecodeResult {
   qualities: Record<string, string>
   format: string | null
   errorCode: string | null
+}
+
+export interface SourceProviderInfo {
+  id: string
+  displayName: string
+  description: string
+  operations: string[]
+  credentialsRequired: boolean
+  credentialsConfigured: boolean
+  notes: string | null
+}
+
+export interface SourcesCapabilitiesResponse {
+  providers: SourceProviderInfo[]
+  count: number
 }
 
