@@ -8,6 +8,7 @@ const mobileMenuOpen = ref(false)
 const navItems = [
   { to: '/', label: 'Search', icon: '🔍' },
   { to: '/content', label: 'Library', icon: '📚' },
+  { to: '/sources', label: 'Sources', icon: '🌐' },
   { to: '/calendar', label: 'Calendar', icon: '📅' },
   { to: '/reference', label: 'Reference', icon: '📖' },
   { to: '/health', label: 'Health', icon: '💊' },

@@ -14,7 +14,10 @@ import type {
   KodikYear,
   PageResponse,
   ParseRequest,
+  ProviderDecodeRequest,
+  ProviderDecodeResult,
   ProxyHealth,
+  RankedSourcesResponse,
   ReferenceResponse,
   SchemaDriftHealth,
 } from './types'
@@ -156,6 +159,22 @@ export const api = {
     return get<ReferenceResponse<KodikQuality>>(
       `/api/v1/reference/qualities${fresh ? '?fresh=true' : ''}`,
     )
+  },
+
+  getEpisodeSources(
+    contentId: number,
+    season: number,
+    episode: number,
+    prefer?: string,
+  ) {
+    const qs = prefer ? `?prefer=${encodeURIComponent(prefer)}` : ''
+    return get<RankedSourcesResponse>(
+      `/api/v1/sources/${contentId}/${season}/${episode}${qs}`,
+    )
+  },
+
+  decodeProviderUrl(req: ProviderDecodeRequest) {
+    return post<ProviderDecodeResult>('/api/v1/providers/decode', req)
   },
 
   getCalendar(filter: CalendarFilter = {}) {
