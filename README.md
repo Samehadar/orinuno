@@ -23,6 +23,24 @@ docker compose up -d
 
 Swagger UI: <http://localhost:8085/swagger-ui.html> · Demo UI: <http://localhost:3000>
 
+## Repository layout
+
+Orinuno is a multi-module Maven reactor. Five modules ship from the same repo:
+
+| Module | Purpose | Spring? |
+|--------|---------|---------|
+| [`orinuno-app/`](./orinuno-app/) | The Spring Boot service: controllers, MyBatis, Liquibase, REST surface, Kodik client. | ✅ Boot |
+| [`kodik-sdk-drift/`](./kodik-sdk-drift/) | Domain-neutral schema-drift detector (used by orinuno-app + reusable elsewhere). | ❌ pure Java |
+| [`jutsu-sdk/`](./jutsu-sdk/) | Standalone JutSu client: DLE auth, sticky cookies, 1 RPS rate-limit, premium decode. | ❌ Reactor + WebFlux only |
+| [`sibnet-sdk/`](./sibnet-sdk/) | Standalone Sibnet decoder (`shell.php` + `player.src(...)` regex). Stateless. | ❌ Reactor + WebFlux only |
+| [`aniboom-sdk/`](./aniboom-sdk/) | Standalone Aniboom decoder (`<input id="video-data">` + Jackson). Stateless. | ❌ Reactor + WebFlux only |
+
+Provider SDKs are designed for direct consumption — depend on the SDK
+artefact you need without pulling in MySQL, Liquibase, MyBatis, or any
+orinuno-app type. See the per-SDK READMEs for the public API and config
+contracts. Migration history and contract details live in
+[`CHANGELOG.md`](./CHANGELOG.md) and [`docs/adr/`](./docs/adr/).
+
 ## 📚 Documentation
 
 Full documentation is published at **<https://samehadar.github.io/orinuno/>**.
@@ -40,8 +58,9 @@ Orinuno ships with conservative rate-limit defaults and is **not** intended for 
 
 ## Links
 
-- [DISCLAIMER](./DISCLAIMER.md) · [LICENSE](./LICENSE) · [CONTRIBUTING](./CONTRIBUTING.md) · [SECURITY](./SECURITY.md) · [CODE_OF_CONDUCT](./CODE_OF_CONDUCT.md)
+- [DISCLAIMER](./DISCLAIMER.md) · [LICENSE](./LICENSE) · [CONTRIBUTING](./CONTRIBUTING.md) · [SECURITY](./SECURITY.md) · [CODE_OF_CONDUCT](./CODE_OF_CONDUCT.md) · [CHANGELOG](./CHANGELOG.md)
 - Architecture diagrams (Mermaid + PlantUML source): [ARCHITECTURE.md](./ARCHITECTURE.md), [docs/](./docs/)
+- ADR index: [docs/adr/index.md](./docs/adr/index.md)
 
 ## Takedowns
 

@@ -13,6 +13,13 @@ This split is deliberately separate from the legacy "demo / one big
 controller" surface that grew organically. The old paths still work as
 deprecation aliases for at least one minor release.
 
+Internally, since the SDK-split refactor (`SDK-SPLIT 2026-05-03` in the
+[CHANGELOG](https://github.com/Samehadar/orinuno/blob/master/CHANGELOG.md)),
+the per-source decode endpoints route directly to the standalone SDK facades
+(`com.orinuno.jutsu.JutsuClient`, `com.orinuno.sibnet.SibnetClient`,
+`com.orinuno.aniboom.AniboomClient`). The HTTP surface is unchanged — only
+the wiring underneath the controllers has been simplified.
+
 ## At-a-glance
 
 | Path | Purpose |

@@ -9,6 +9,14 @@ exposes a versioned REST surface for consumers. The diagrams on this page
 cover three levels: system context, internal components, and the PlantUML
 container view.
 
+The codebase is a multi-module Maven reactor — `orinuno-app` (the Spring Boot
+service) plus four standalone SDK modules (`kodik-sdk-drift`, `jutsu-sdk`,
+`sibnet-sdk`, `aniboom-sdk`). The SDKs are reusable outside this repo and
+have no dependency on Spring Boot, MySQL, or any orinuno-specific type. See
+[Project Structure](/orinuno/development/project-structure/) for the file-tree
+view and the [CHANGELOG](https://github.com/Samehadar/orinuno/blob/master/CHANGELOG.md)
+`SDK-SPLIT 2026-05-03` entry for the migration history.
+
 ## System context (C4)
 
 ```mermaid

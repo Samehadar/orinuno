@@ -406,6 +406,26 @@ Sibnet — крупнейший сибирский видеохостинг с *
 - Внешние интеграторы / админ-UI, у которых есть только внешний id и нужен player-iframe «прямо сейчас».
 - Не заменяет `POST /api/v1/parse/search` — для ингеста + декодинга по-прежнему нужен полноценный pipeline.
 
+#### IDEA-SDK-SPLIT: Per-source SDK extraction (jutsu-sdk + sibnet-sdk + aniboom-sdk + controllers wired direct) — **DONE** (2026-05-03)
+
+**Статус:** Полностью реализовано в коммитах `e537c07` (Steps 1+2: per-source API tier + jutsu-sdk), `d0b1f26` (Step 3: sibnet-sdk + aniboom-sdk), `c09f283` (Step 4: контроллеры на SDK-фасадах напрямую). Step 5 (этот фиксирующий апдейт) — docs-only (`CHANGELOG.md`, `README.md`, `docs-site/.../project-structure.md`, `BACKLOG.md`).
+
+**Файлы:**
+- Новые модули: `jutsu-sdk/`, `sibnet-sdk/`, `aniboom-sdk/` — 7+5+5 source-классов на SDK + per-SDK README + per-SDK тесты (36+10+8 unit-тестов).
+- Удалено в `orinuno-app/`: `service/provider/{jutsu,sibnet,aniboom}/*DecoderService.java`, их адаптерные тесты, `service/provider/{jutsu,sibnet,aniboom}/{JutsuSourceParser,SibnetSourceParser,AniboomSourceParser}.java` (перенесены в SDK).
+- Wiring через bean-конфиги: `JutsuSdkConfiguration`, `SibnetSdkConfiguration`, `AniboomSdkConfiguration` + `service/provider/ProviderDecodeResults` (3-overload mapper SDK result → orinuno-app `ProviderDecodeResult`).
+- Контроллеры: `SourcesController`, `ProvidersController` инжектируют `*Client` напрямую.
+- Новые ADR: `docs/adr/0012-jutsu-sdk-extraction.md`, `0013-sibnet-and-aniboom-sdk-extraction.md`, `0014-controllers-on-sdk-facades.md`. Обновлён `0001-kodik-sdk-extraction.md` и `index.md`.
+- Полная история и migration guide: [`CHANGELOG.md`](CHANGELOG.md) → `SDK-SPLIT 2026-05-03`.
+
+**Что закрыто:**
+- Внешние консьюмеры могут импортировать только `jutsu-sdk` / `sibnet-sdk` / `aniboom-sdk` без втягивания Spring Boot, MySQL, Liquibase, MyBatis, или любого orinuno-specific типа.
+- HTTP API (`/api/v1/sources/*`, `/api/v1/providers/*`) byte-identical до/после refactor'а — verified diff'ом `docs-site/openapi.json`.
+- Live KZ smoke verified: JutSu premium decode (4 quality), Sibnet `videoid=5046725`, Aniboom error path, легаси `/providers/decode` алиас.
+
+**Use case:**
+- Подготавливает `IDEA-SDK-4` (Maven Central publishing) — артефакты теперь имеют стабильные публичные API и могут версионироваться независимо.
+
 #### IDEA-SDK-1: Multi-module pilot — extract `drift` package — **DONE** (2026-05-02)
 
 **Статус:** Реализовано. PR3 транспарентного roadmap'а.
@@ -421,45 +441,36 @@ Sibnet — крупнейший сибирский видеохостинг с *
 **Use case:**
 - Доказательство модели multi-module split на минимально инвазивном пакете. Открывает дорогу для IDEA-SDK-2/3/4.
 
-#### IDEA-SDK-2: Extract `client` + `client.dto.*` + `client.calendar` + `client.embed` — **PENDING**
+#### IDEA-SDK-2: Extract `client` + `client.dto.*` + `client.calendar` + `client.embed` — **SUPERSEDED → NOT PURSUED** (2026-05-03)
 
-**Приоритет:** Средний (после стабильного использования IDEA-SDK-1)
-**Сложность:** Высокая
-**Зависимости:** IDEA-SDK-1 (готово); SAM `CalendarFetchObserver`; `KodikSdkConfig` POJO в SDK; `OrinunoProperties` имплементирует interface.
+**Статус:** Снято с роадмапа. Решение зафиксировано в `CHANGELOG.md` (`SDK-SPLIT 2026-05-03` → "Decisions made along the way").
 
-**Что нужно сделать:**
-- Ввести в SDK интерфейс `KodikSdkConfig` с минимально-нужной поверхностью (`apiUrl`, `requestDelayMs`, `tokenFile`, `tokenFailoverMaxAttempts`, …).
-- `OrinunoProperties.KodikProperties` имплементирует этот интерфейс или экспортирует адаптер.
-- Развернуть SAM-интерфейс `CalendarFetchObserver` (методы `onSuccess`, `onUpstreamError`, `onTransportError`, `onCacheHit`) в SDK; `KodikCalendarMetrics` остаётся в orinuno-app и регистрируется как Spring bean имплементация.
-- Перенести `client/`, `client.dto.*`, `client.calendar`, `client.embed` в новый `kodik-sdk-client` модуль под пакет `com.kodik.sdk.client.*`. Bulk import-rewrite в orinuno-app.
-- Сохранить `WebClient` (Spring WebFlux) как транзитивную зависимость SDK — приемлемый трейд-офф (см. ADR §4).
+**Почему не делаем:**
+- Stripe-out паттерн оказался не туда направлен. Вместо извлечения «слоя» (`client/`) мы извлекли «провайдеры» (`jutsu-sdk`, `sibnet-sdk`, `aniboom-sdk`) — каждый standalone, со своей DLE-аутентификацией / парсером / rate-limit'ом — и это решило реальную задачу downstream-консьюмеров (хочу JutSu без orinuno-app).
+- Kodik HTTP client остаётся в `orinuno-app` потому что у него глубокая связь с MyBatis/MySQL ingestion pipeline. Извлекать его без перетягивания этой связки даст negative ROI (broken contracts на уровне `KodikContent`/`KodikEpisodeVariant` upserts).
+- `kodik-sdk-drift` (IDEA-SDK-1, **DONE**) — это не Kodik client, а domain-neutral schema-drift detector. Совмещение «drift detector» + «Kodik client» в одном SDK-namespace путает потребителей.
 
-**Out of scope:** `controller/`, `service/`, MyBatis, Liquibase — остаются в orinuno-app.
+**Что осталось как public API за пределами `orinuno-app` (без отдельного SDK):**
+- `kodik-sdk-drift` для schema-drift detection в произвольных Kodik-shape JSON-ах.
+- `jutsu-sdk` / `sibnet-sdk` / `aniboom-sdk` для прямого ad-hoc decode без Spring Boot.
 
-#### IDEA-SDK-3: Extract `token/` (registry, lifecycle probe interface) — **PENDING**
+#### IDEA-SDK-3: Extract `token/` (registry, lifecycle probe interface) — **SUPERSEDED → NOT PURSUED** (2026-05-03)
 
-**Приоритет:** Средний
-**Сложность:** Средняя
-**Зависимости:** IDEA-SDK-2 (логически — токены принадлежат тому же SDK, что и client, и должны двигаться вместе или сразу после).
+**Статус:** Снято с роадмапа по той же причине, что IDEA-SDK-2. `KodikTokenRegistry`/`KodikTokenLifecycle`/`KodikTokenMetrics` — слишком тесно связан с `OrinunoProperties` + Spring `@Scheduled` + Micrometer регистрами orinuno-app. Reuse-кейс «использовать Kodik token registry без orinuno-app» не материализовался ни у одного консьюмера.
 
-**Что нужно сделать:**
-- Перенести `KodikTokenRegistry`, `KodikTokenEntry`, `KodikTokenTier`, `KodikFunction`, `KodikTokenException`, `KodikTokenAutoDiscovery` в SDK под `com.kodik.sdk.token.*`.
-- `KodikTokenLifecycle` (`@Scheduled`-bean) **остаётся** в orinuno-app. SDK экспортирует `KodikTokenLifecycleProbe` interface, реализация-Spring живёт в сервисе.
-- `KodikTokenMetrics` остаётся в orinuno-app, инжектируется через тот же observer-pattern, что и calendar.
+#### IDEA-SDK-4: Publish standalone SDK artefacts to Maven Central — **PENDING (UNBLOCKED)**
 
-#### IDEA-SDK-4: Publish `kodik-sdk-*` artefacts to Maven Central — **PENDING**
-
-**Приоритет:** Низкий (можно жить и без публикации, потребляя локально)
-**Сложность:** Высокая (release tooling, GPG signing, sonatype account, semantic versioning policy)
-**Зависимости:** IDEA-SDK-1, IDEA-SDK-2, IDEA-SDK-3 завершены и стабильны.
+**Приоритет:** Средний (был Низкий — сейчас разблокирован, провайдер-SDK готовы к публикации).
+**Сложность:** Высокая (release tooling, GPG signing, sonatype account, semantic versioning policy).
+**Зависимости:** Steps 1-4 SDK-сплита завершены. `kodik-sdk-drift`, `jutsu-sdk`, `sibnet-sdk`, `aniboom-sdk` имеют стабильные публичные API (см. `CHANGELOG.md` → `SDK-SPLIT 2026-05-03` → "Migration guide").
 
 **Что нужно сделать:**
 - Завести Sonatype OSSRH аккаунт (или Maven Central Portal API token).
 - Завести GPG key, сохранить fingerprint в репо settings.
 - Настроить `maven-gpg-plugin` + `central-publishing-maven-plugin` (или `nexus-staging-maven-plugin`).
-- Семвер policy: SDK артефакты версионируются независимо от orinuno-app (для downstream-консьюмеров стабильность contract'а критична).
-- README + публичная документация → `docs-site` отдельная секция «Using kodik-sdk in your project».
-- CI: workflow `release-sdk.yml` с tag-trigger (например `sdk-v0.1.0`).
+- Семвер policy: SDK артефакты версионируются независимо от orinuno-app (для downstream-консьюмеров стабильность contract'а критична). Каждый SDK — собственный цикл версий (`jutsu-sdk-0.1.0`, `sibnet-sdk-0.1.0`, и т.д.).
+- README уже добавлен в каждый из четырёх SDK-модулей. Раздел `docs-site/development/...` "Using orinuno SDKs in your project" добавить как часть этого эпика.
+- CI: workflow `release-sdk.yml` с tag-trigger (например `jutsu-sdk-v0.1.0`, `sibnet-sdk-v0.1.0`).
 
 **Out of scope:** автоматическая публикация snapshot'ов на каждый PR — добавляется отдельным эпиком если будет спрос.
 
