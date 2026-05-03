@@ -199,6 +199,6 @@ Full flow with timing details: see
 
 ## See also
 
-- [Kodik /list proxy](kodik-api-flow.md) — the discovery side (read).
-- [Video decoding](video-decoding.md) — what `phase=DECODING` actually does.
+- [Kodik /list proxy](/orinuno/architecture/kodik-api-flow/) — the discovery side (read).
+- [Video decoding](/orinuno/architecture/video-decoding/) — what `phase=DECODING` actually does.
 - `TECH_DEBT.md` → `TD-PR-1`/`TD-PR-2`/`TD-PR-3` — known follow-ups.
