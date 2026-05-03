@@ -55,6 +55,22 @@
             <artifactId>jutsu-sdk</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--
+            sibnet-sdk + aniboom-sdk — Step 3 of the API/module split (ADR 0013).
+            orinuno-app keeps thin SibnetSdkConfiguration / AniboomSdkConfiguration that
+            wire SDK clients from OrinunoProperties so existing call sites and the
+            multi-source ranker keep their bean wiring unchanged.
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>sibnet-sdk</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>aniboom-sdk</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- General -->
         <dependency>

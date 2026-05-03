@@ -168,6 +168,14 @@ Track follow-ups in BACKLOG.md as IDEA-SDK-2/3/4.
   second standalone SDK module, following the same `kodik-sdk-drift`
   template (no Spring Boot, no auto-configuration, manual `@Configuration`
   wiring in `orinuno-app`). See [ADR 0012](0012-jutsu-sdk-extraction.md)
-  for the full extraction record. Steps 3 & 4 (`sibnet-sdk` +
-  `aniboom-sdk`, then `kodik-sdk` merging with `kodik-sdk-drift`) follow
-  the same template.
+  for the full extraction record.
+- **2026-05-03** — Step 3 of the API/module split landed `sibnet-sdk` and
+  `aniboom-sdk` as the third and fourth standalone SDK modules. Both are
+  stateless (no auth, no rate limit, no session) so they validate that
+  the per-provider SDK template scales down to "regex extractor +
+  WebClient" without ceremony. See
+  [ADR 0013](0013-sibnet-and-aniboom-sdk-extraction.md). The previously
+  planned `kodik-sdk` extraction is no longer pursued — `kodik-sdk-drift`
+  is a domain-neutral drift detector, not a Kodik client, and the actual
+  Kodik HTTP client stays in `orinuno-app` because of its deep DB
+  coupling.

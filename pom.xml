@@ -24,6 +24,8 @@
     <modules>
         <module>kodik-sdk-drift</module>
         <module>jutsu-sdk</module>
+        <module>sibnet-sdk</module>
+        <module>aniboom-sdk</module>
         <module>orinuno-app</module>
     </modules>
 
@@ -63,6 +65,16 @@
             <dependency>
                 <groupId>com.orinuno</groupId>
                 <artifactId>jutsu-sdk</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orinuno</groupId>
+                <artifactId>sibnet-sdk</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orinuno</groupId>
+                <artifactId>aniboom-sdk</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -1,4 +1,4 @@
-package com.orinuno.service.provider.sibnet;
+package com.orinuno.sibnet.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,7 +46,7 @@ class SibnetSourceParserTest {
     }
 
     @Test
-    void canonicalizesToIframeShape() {
+    void canonicalisesToIframeShape() {
         assertThat(SibnetSourceParser.toIframeUrl(123L))
                 .isEqualTo("https://video.sibnet.ru/shell.php?videoid=123");
     }

@@ -11,10 +11,12 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 ## Quick Reference
 
 > Multi-module reactor since PR3 (transparency roadmap). The Spring Boot
-> service lives under `orinuno-app/`; the SDK pilots live under
-> `kodik-sdk-drift/` (PR3) and `jutsu-sdk/` (Step 2 of the API/module
-> split). See `docs/adr/0001-kodik-sdk-extraction.md` and
-> `docs/adr/0012-jutsu-sdk-extraction.md`.
+> service lives under `orinuno-app/`; per-source SDK modules live under
+> `kodik-sdk-drift/` (PR3 — drift detector), `jutsu-sdk/` (Step 2),
+> `sibnet-sdk/` and `aniboom-sdk/` (Step 3). See
+> `docs/adr/0001-kodik-sdk-extraction.md`,
+> `docs/adr/0012-jutsu-sdk-extraction.md`, and
+> `docs/adr/0013-sibnet-and-aniboom-sdk-extraction.md`.
 
 | Area | Path |
 |------|------|
@@ -32,16 +34,24 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 | Mappers (entity↔dto) | `orinuno-app/src/main/java/com/orinuno/mapper/` |
 | Schema-drift SDK (extracted) | `kodik-sdk-drift/src/main/java/com/kodik/sdk/drift/` |
 | JutSu SDK (extracted, Step 2) | `jutsu-sdk/src/main/java/com/orinuno/jutsu/` |
+| Sibnet SDK (extracted, Step 3) | `sibnet-sdk/src/main/java/com/orinuno/sibnet/` |
+| Aniboom SDK (extracted, Step 3) | `aniboom-sdk/src/main/java/com/orinuno/aniboom/` |
 | JutSu Spring wiring | `orinuno-app/src/main/java/com/orinuno/configuration/JutsuSdkConfiguration.java` |
+| Sibnet Spring wiring | `orinuno-app/src/main/java/com/orinuno/configuration/SibnetSdkConfiguration.java` |
+| Aniboom Spring wiring | `orinuno-app/src/main/java/com/orinuno/configuration/AniboomSdkConfiguration.java` |
 | Tests (service) | `orinuno-app/src/test/java/com/orinuno/` |
 | Tests (drift SDK) | `kodik-sdk-drift/src/test/java/com/kodik/sdk/drift/` |
 | Tests (jutsu SDK) | `jutsu-sdk/src/test/java/com/orinuno/jutsu/` |
+| Tests (sibnet SDK) | `sibnet-sdk/src/test/java/com/orinuno/sibnet/` |
+| Tests (aniboom SDK) | `aniboom-sdk/src/test/java/com/orinuno/aniboom/` |
 | Properties | `orinuno-app/src/main/resources/application.yml` |
 | Test properties | `orinuno-app/src/test/resources/application-test.yml` |
 | Reactor pom | `pom.xml` |
 | Service module pom | `orinuno-app/pom.xml` |
 | SDK pilot module pom | `kodik-sdk-drift/pom.xml` |
 | JutSu SDK module pom | `jutsu-sdk/pom.xml` |
+| Sibnet SDK module pom | `sibnet-sdk/pom.xml` |
+| Aniboom SDK module pom | `aniboom-sdk/pom.xml` |
 | Docker | `Dockerfile`, `docker-compose.yml` |
 | Tech debt tracker | `TECH_DEBT.md` |
 | Backlog & ideas | `BACKLOG.md` |
@@ -109,6 +119,8 @@ mvn test
 # Tests (single module)
 mvn -pl kodik-sdk-drift test
 mvn -pl jutsu-sdk test
+mvn -pl sibnet-sdk test
+mvn -pl aniboom-sdk test
 mvn -pl orinuno-app test
 
 # Live integration test

@@ -1,12 +1,12 @@
-package com.orinuno.service.provider.sibnet;
+package com.orinuno.sibnet.parser;
 
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * PLAYER-3 (ADR 0006) — pure URL-shape parser for Sibnet (video.sibnet.ru). Recognizes the two URL
- * flavours Sibnet publishes:
+ * Pure URL-shape parser for Sibnet (video.sibnet.ru). Recognises the two URL flavours Sibnet
+ * publishes:
  *
  * <ul>
  *   <li>{@code https://video.sibnet.ru/video<id>-<slug>.html} — page URL, embeds the iframe.
@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  * </ul>
  *
  * <p>Both shapes carry the same numeric {@code videoid} which is the natural key. {@link
- * #extractVideoId(String)} returns it for either shape. {@link #toIframeUrl(long)} canonicalizes to
+ * #extractVideoId(String)} returns it for either shape. {@link #toIframeUrl(long)} canonicalises to
  * the iframe form (the shape the decoder fetches).
  */
 public final class SibnetSourceParser {

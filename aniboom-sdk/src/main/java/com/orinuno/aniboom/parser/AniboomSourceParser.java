@@ -1,12 +1,12 @@
-package com.orinuno.service.provider.aniboom;
+package com.orinuno.aniboom.parser;
 
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * PLAYER-2 (ADR 0006) — pure URL-shape parser for Aniboom (aniboom.one). Recognizes the {@code
- * /embed/<id>} embed-link shape used across animego.org / animevost.org / etc.
+ * Pure URL-shape parser for Aniboom (aniboom.one). Recognises the {@code /embed/<id>} embed-link
+ * shape used across animego.org / animevost.org / etc.
  */
 public final class AniboomSourceParser {
 
