@@ -39,6 +39,10 @@ data/*
 !data/README.md
 !data/TOKENS.md
 !data/kodik_tokens.example.json
+# JVM cwd may resolve relative ./data to orinuno-app/data when launched via java -jar from root.
+# Mirror the data/* whitelist here so token state never escapes the local checkout.
+orinuno-app/data/*
+!orinuno-app/data/README.md
 
 ### Environment ###
 .env

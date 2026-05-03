@@ -156,6 +156,204 @@ function copy(value: string | null) {
   navigator.clipboard?.writeText(value).catch(() => undefined)
 }
 
+const playerUrl = ref<string | null>(null)
+
+/**
+ * Build a backend pass-through URL for jut.su CDN links. Required because Yandex CDN signs URLs
+ * against the session that fetched them — the browser is a different session and gets 403 if it
+ * opens the raw URL. See `docs/quirks-and-hacks.md` → "JutSu DLE auth + sticky cookies + 1 RPS
+ * hard cap" → "CDN URLs are session-bound" and the PROXY-1 controller.
+ *
+ * Same-origin only when the demo is served on the same host as the API; otherwise it produces a
+ * cross-origin URL which `<video>` will happily follow.
+ */
+function streamProxyUrl(upstream: string): string {
+  const base = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
+  return `${base}/api/v1/providers/jutsu/stream?url=${encodeURIComponent(upstream)}`
+}
+
+function isJutsuCdnUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.hostname.toLowerCase().endsWith('.yandexwebcache.org')
+  } catch {
+    return false
+  }
+}
+
+function playInPlayer(url: string) {
+  playerUrl.value = streamProxyUrl(url)
+  // Scroll the player into view so the user actually sees what happened.
+  setTimeout(() => {
+    document.getElementById('jutsu-inline-player')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, 50)
+}
+
+type DownloadStatus = 'downloading' | 'done' | 'error' | 'cancelled'
+type DownloadEntry = {
+  status: DownloadStatus
+  received: number
+  total: number
+  startedAt: number
+  errorMessage?: string
+  aborter: AbortController
+}
+
+const downloads = ref<Record<string, DownloadEntry>>({})
+
+/**
+ * Build a sensible filename for the saved file. The CDN URL looks like
+ * https://r270106.yandexwebcache.org/one-punch-man/1/11.1080.282c57e06cdfaff2.mp4
+ * — we want `one-punch-man-s01e11-1080p.mp4`. Best-effort only: if the URL doesn't fit the
+ * expected layout we fall back to whatever is sensible. Filename ends up in the
+ * `Content-Disposition` header so backend can sanitise it server-side too.
+ */
+function buildFilename(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl)
+    const segments = u.pathname.split('/').filter(Boolean)
+    if (segments.length === 0) return 'jutsu-download.mp4'
+    const last = segments[segments.length - 1]
+    // last looks like "11.1080.282c57e06cdfaff2.mp4" or "4.480.0b71e025cd09ea5d.mp4"
+    const match = last.match(/^(\d+)\.(\d{3,4})\..*\.mp4$/i)
+    const slug = segments[0] || 'episode'
+    const season = segments.length >= 3 && /^\d+$/.test(segments[1]) ? segments[1] : '1'
+    if (match) {
+      const ep = match[1]
+      const quality = match[2]
+      const sNum = String(season).padStart(2, '0')
+      const eNum = String(ep).padStart(2, '0')
+      return `${slug}-s${sNum}e${eNum}-${quality}p.mp4`
+    }
+    return `${slug}-${last}`
+  } catch {
+    return 'jutsu-download.mp4'
+  }
+}
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+function downloadProgressPct(entry: DownloadEntry): number {
+  if (!entry.total) return 0
+  return Math.round((entry.received / entry.total) * 100)
+}
+
+function downloadEta(entry: DownloadEntry): string {
+  if (entry.status !== 'downloading' || !entry.total || !entry.received) return ''
+  const elapsedSec = (Date.now() - entry.startedAt) / 1000
+  if (elapsedSec < 0.5) return ''
+  const speed = entry.received / elapsedSec
+  if (speed <= 0) return ''
+  const remaining = (entry.total - entry.received) / speed
+  if (!isFinite(remaining)) return ''
+  return `${fmtBytes(speed)}/s · ETA ${Math.ceil(remaining)}s`
+}
+
+/**
+ * Download a jut.su CDN URL through the backend proxy with progress reporting. Uses
+ * `ReadableStream` from the fetch body so we can update progress chunk-by-chunk and surface a
+ * cancel button. Whole file is accumulated as a {@link Blob} in memory because the File System
+ * Access API is Chrome-only and StreamSaver.js requires a service worker — for typical episodes
+ * (<1 GB) the Blob path is fine. Episodes larger than 1 GB get a confirm() prompt.
+ */
+async function startDownload(url: string) {
+  if (downloads.value[url]?.status === 'downloading') return
+  const aborter = new AbortController()
+  downloads.value = {
+    ...downloads.value,
+    [url]: {
+      status: 'downloading',
+      received: 0,
+      total: 0,
+      startedAt: Date.now(),
+      aborter,
+    },
+  }
+  const filename = buildFilename(url)
+  const proxyUrl =
+    streamProxyUrl(url) + `&filename=${encodeURIComponent(filename)}`
+  try {
+    const resp = await fetch(proxyUrl, { signal: aborter.signal })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const total = Number(resp.headers.get('Content-Length') ?? 0)
+    if (total > 1024 * 1024 * 1024) {
+      const ok = window.confirm(
+        `This file is ~${fmtBytes(total)}. The browser will hold it in RAM until the download finishes. Continue?`,
+      )
+      if (!ok) {
+        aborter.abort()
+        downloads.value = {
+          ...downloads.value,
+          [url]: { ...downloads.value[url], status: 'cancelled' },
+        }
+        return
+      }
+    }
+    if (!resp.body) throw new Error('Response has no body (HTTP/1.0?)')
+    const reader = resp.body.getReader()
+    const chunks: Uint8Array[] = []
+    let received = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        chunks.push(value)
+        received += value.length
+        downloads.value = {
+          ...downloads.value,
+          [url]: { ...downloads.value[url], received, total },
+        }
+      }
+    }
+    const blob = new Blob(chunks, { type: resp.headers.get('Content-Type') ?? 'video/mp4' })
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    downloads.value = {
+      ...downloads.value,
+      [url]: { ...downloads.value[url], status: 'done', received, total },
+    }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      downloads.value = {
+        ...downloads.value,
+        [url]: { ...downloads.value[url], status: 'cancelled' },
+      }
+      return
+    }
+    downloads.value = {
+      ...downloads.value,
+      [url]: {
+        ...downloads.value[url],
+        status: 'error',
+        errorMessage: err?.message ?? 'Download failed',
+      },
+    }
+  }
+}
+
+function cancelDownload(url: string) {
+  const entry = downloads.value[url]
+  if (!entry || entry.status !== 'downloading') return
+  entry.aborter.abort()
+}
+
+function clearDownload(url: string) {
+  const next = { ...downloads.value }
+  delete next[url]
+  downloads.value = next
+}
+
 function knownProviders(): { value: ProviderName; label: string }[] {
   return [
     { value: 'KODIK', label: 'Kodik' },
@@ -439,20 +637,147 @@ function candidatesByProvider(): Record<string, RankedSourceCandidate[]> {
           <div
             v-for="(url, q) in sandboxResult.qualities"
             :key="q"
-            class="flex items-center justify-between gap-3 flex-wrap p-2 rounded bg-white/5"
+            class="flex flex-col gap-2 p-2 rounded bg-white/5"
           >
-            <span class="badge bg-white/5 text-[var(--color-neon-pink)] font-mono">{{ q }}</span>
-            <span class="text-[10px] font-mono text-[var(--color-text-muted)] break-all">
-              {{ url }}
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+              <span class="badge bg-white/5 text-[var(--color-neon-pink)] font-mono">{{ q }}</span>
+              <span class="text-[10px] font-mono text-[var(--color-text-muted)] break-all flex-1 min-w-0">
+                {{ url }}
+              </span>
+              <div class="flex items-center gap-1">
+                <button
+                  v-if="isJutsuCdnUrl(url) && downloads[url]?.status !== 'downloading'"
+                  @click="playInPlayer(url)"
+                  class="px-2 py-0.5 text-[10px] rounded bg-[var(--color-neon-orange)]/20 hover:bg-[var(--color-neon-orange)]/35 text-[var(--color-neon-orange)] border border-[var(--color-neon-orange)]/40"
+                  title="Play through backend proxy (required for jut.su; raw URL gives 403)"
+                >
+                  ▶ Play
+                </button>
+                <button
+                  v-if="isJutsuCdnUrl(url) && downloads[url]?.status !== 'downloading'"
+                  @click="startDownload(url)"
+                  class="px-2 py-0.5 text-[10px] rounded bg-[var(--color-neon-blue)]/20 hover:bg-[var(--color-neon-blue)]/35 text-[var(--color-neon-blue)] border border-[var(--color-neon-blue)]/40"
+                  title="Download MP4 through backend proxy with progress"
+                >
+                  ⬇ Download
+                </button>
+                <button
+                  v-if="downloads[url]?.status === 'downloading'"
+                  @click="cancelDownload(url)"
+                  class="px-2 py-0.5 text-[10px] rounded bg-[var(--color-neon-red)]/20 hover:bg-[var(--color-neon-red)]/35 text-[var(--color-neon-red)] border border-[var(--color-neon-red)]/40"
+                  title="Cancel download"
+                >
+                  ✕ Cancel
+                </button>
+                <button
+                  @click="copy(url)"
+                  class="px-2 py-0.5 text-[10px] rounded bg-white/5 hover:bg-white/10 text-[var(--color-text-muted)]"
+                  title="Copy URL"
+                >
+                  📋
+                </button>
+              </div>
+            </div>
+
+            <div v-if="downloads[url]" class="flex flex-col gap-1">
+              <div
+                v-if="downloads[url].status === 'downloading'"
+                class="flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]"
+              >
+                <div class="flex-1 h-1.5 rounded bg-white/10 overflow-hidden">
+                  <div
+                    class="h-full bg-[var(--color-neon-blue)] transition-all"
+                    :style="{ width: downloadProgressPct(downloads[url]) + '%' }"
+                  />
+                </div>
+                <span class="font-mono whitespace-nowrap">
+                  {{ downloadProgressPct(downloads[url]) }}% ·
+                  {{ fmtBytes(downloads[url].received) }}<span v-if="downloads[url].total"> / {{ fmtBytes(downloads[url].total) }}</span>
+                </span>
+                <span v-if="downloadEta(downloads[url])" class="font-mono whitespace-nowrap text-[var(--color-text-muted)]/70">
+                  {{ downloadEta(downloads[url]) }}
+                </span>
+              </div>
+              <div
+                v-else-if="downloads[url].status === 'done'"
+                class="flex items-center justify-between gap-2 text-[11px]"
+              >
+                <span class="text-[var(--color-neon-green)] font-mono">
+                  ✓ Downloaded {{ fmtBytes(downloads[url].received) }}
+                </span>
+                <button
+                  @click="clearDownload(url)"
+                  class="text-[var(--color-text-muted)] hover:text-white text-xs"
+                >
+                  ×
+                </button>
+              </div>
+              <div
+                v-else-if="downloads[url].status === 'error'"
+                class="flex items-center justify-between gap-2 text-[11px]"
+              >
+                <span class="text-[var(--color-neon-red)] font-mono">
+                  ✗ {{ downloads[url].errorMessage }}
+                </span>
+                <button
+                  @click="clearDownload(url)"
+                  class="text-[var(--color-text-muted)] hover:text-white text-xs"
+                >
+                  ×
+                </button>
+              </div>
+              <div
+                v-else-if="downloads[url].status === 'cancelled'"
+                class="flex items-center justify-between gap-2 text-[11px]"
+              >
+                <span class="text-[var(--color-text-muted)] font-mono">
+                  Cancelled at {{ fmtBytes(downloads[url].received) }}
+                </span>
+                <button
+                  @click="clearDownload(url)"
+                  class="text-[var(--color-text-muted)] hover:text-white text-xs"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          </div>
+          <p
+            v-if="Object.values(sandboxResult.qualities).some(isJutsuCdnUrl)"
+            class="text-[11px] text-[var(--color-text-muted)] mt-2"
+          >
+            ⚠ Direct jut.su CDN URLs return 403 in any other session — use ▶ Play to stream through the backend proxy.
+            <a
+              href="https://github.com"
+              @click.prevent
+              title="See docs/quirks-and-hacks.md → JutSu DLE auth + sticky cookies → CDN URLs are session-bound"
+              class="underline cursor-help"
+            >
+              why?
+            </a>
+          </p>
+        </div>
+      </div>
+
+      <div v-if="playerUrl" id="jutsu-inline-player" class="max-w-3xl mx-auto mt-6">
+        <div class="glass-card p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-[var(--color-text-muted)]">
+              Inline player — proxied via <span class="font-mono text-[var(--color-neon-blue)]">/api/v1/providers/jutsu/stream</span>
             </span>
             <button
-              @click="copy(url)"
-              class="px-2 py-0.5 text-[10px] rounded bg-white/5 hover:bg-white/10 text-[var(--color-text-muted)]"
-              title="Copy URL"
+              @click="playerUrl = null"
+              class="px-2 py-0.5 text-xs rounded bg-white/5 hover:bg-white/10 text-[var(--color-text-muted)]"
             >
-              📋
+              ✕ Close
             </button>
           </div>
+          <video
+            :src="playerUrl"
+            controls
+            preload="metadata"
+            class="w-full max-h-[480px] rounded bg-black"
+          />
         </div>
       </div>
 

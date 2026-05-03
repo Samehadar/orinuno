@@ -480,3 +480,113 @@ The orchestrator NEVER errors out — both decoders return an empty bucket on fa
 **Related**: DECODE-8 (Playwright sniff fallback uses the same `PlaywrightVideoFetcher` infrastructure).
 
 ---
+
+## JutSu premium gating leaks `<source>` tags with placeholder URLs
+
+**What**: A premium-gated jut.su episode (e.g. `https://jut.su/dead-dead-demons/episode-4.html`) does **not** render an empty player or a paywall-only page. It ships the full `<video>` block plus four well-formed `<source>` tags — but the `src` attribute points at `https://gen.jut.su/templates/school/images/pixel.png?{1080,720,480,360}` instead of the real CDN URL. A naive parser sees four `<source>` tags and either reports success (with broken URLs that won't play) or — like our first cut — reports `JUTSU_SOURCE_TAG_MISSING` because it requires `.mp4` in the `src` and the placeholders end in `.png`. Both reactions hide the real reason: **the user needs `Jutsu+`**.
+
+**Why misleading**:
+
+- The `<source>` tags pass HTML validation, look semantically correct, and even include `type="video/mp4"`.
+- The user-facing CTA ("необходимо наличие Jutsu+") is only in the response body as cyrillic text under `windows-1251` encoding, so any regex that uses UTF-8 cyrillic literals silently mismatches.
+- The marketing string `Jutsu+` appears in the navigation on **every** jut.su page (premium and free), so naively matching on `Jutsu\+` would tag every page as premium-required.
+
+**The marker**: the wrapper `<div class="tab_need_plus">` is present **only** on gated content, and the placeholder URL pattern `gen.jut.su/templates/school/images/pixel.png` only appears when the real CDN URL was withheld. Both are ASCII so they survive the windows-1251 → UTF-8 round-trip regardless of how the body is decoded.
+
+**Bonus quirk**: When jut.su decides our request looks like a bot (no cookies, suspicious User-Agent, etc.) it returns a *different* HTML body that omits the `<video>` block entirely. We distinguish that from "player present but premium-gated" with a separate error code so an operator can pick the right runbook.
+
+**Where in code**: [`JutsuDecoderService.PREMIUM_MARKER` and `VIDEO_BLOCK`](../orinuno-app/src/main/java/com/orinuno/service/provider/jutsu/JutsuDecoderService.java) — premium check now runs **before** `<source>` extraction.
+
+**Resulting error codes** (in priority order):
+
+| Code | Meaning | Operator action |
+|---|---|---|
+| `JUTSU_EMPTY_RESPONSE` | Nothing came back from jut.su. | Network / DNS issue; retry. |
+| `JUTSU_CLOUDFLARE_BLOCKED` | Cloudflare interstitial detected. | Rotate IP / cookies; transient. |
+| `JUTSU_PREMIUM_REQUIRED` | `tab_need_plus` overlay or `pixel.png` placeholder present. | Episode genuinely requires `Jutsu+`. Try a different episode of the same anime, or another provider for the same content. |
+| `JUTSU_PLAYER_MISSING` | No `<video>` block at all. | Likely bot detection; check User-Agent rotation, add referer, validate cookies. |
+| `JUTSU_SOURCE_TAG_MISSING` | Player present but no `<source src="….mp4">`. | Schema drift — re-grep the page, update `SOURCE_TAG` regex. |
+
+**Verified by**: [`JutsuDecoderServiceTest`](../orinuno-app/src/test/java/com/orinuno/service/provider/jutsu/JutsuDecoderServiceTest.java) — `tabNeedPlusOverlayIsPremiumRequired`, `pixelPngPlaceholderInSourceIsPremiumRequired`, `realDeadDeadDemonsSnapshotIsPremiumRequired`, `htmlWithoutPlayerBlockIsPlayerMissing`, `htmlWithPlayerButNoMp4SourcesIsSourceTagMissing`.
+
+**Discovered via**: user reported `JUTSU_SOURCE_TAG_MISSING` for `https://jut.su/dead-dead-demons/episode-4.html` from the Sources sandbox; the entire `dead-dead-demons` series is `Jutsu+`-only.
+
+---
+
+## JutSu DLE auth + sticky cookies + 1 RPS hard cap
+
+**What**: jut.su gates premium content behind a real `Jutsu+` paid subscription. The site runs on [DataLife Engine](https://dle-news.com/) (DLE), so authentication is a plain old form POST that issues five HTTP-only cookies; sending those cookies on subsequent GETs flips the response from "`pixel.png` placeholders + `tab_need_plus` overlay" to "real `yandexwebcache.org` CDN URLs signed with `derou=$dle_user_id`".
+
+**Login mechanics** (probed live 2026-05-03):
+
+| Step | Request | Effect |
+|---|---|---|
+| 1 | `GET https://jut.su/` | Sets anonymous `PHPSESSID`. Optional — DLE doesn't require an anonymous session before login. |
+| 2 | `POST https://jut.su/`<br>Body: `login_name=…&login_password=…&login=submit`<br>Content-Type: `application/x-www-form-urlencoded` | On success, returns `Set-Cookie:` headers for **five** cookies: `dle_newpm`, `dle_password` (md5 of password — yes, really), `dle_user_id`, `LB_member_sc`, `PHPSESSID`. |
+| 3 | `GET https://jut.su/{anime}/episode-{n}.html` with all five cookies | Returns the same HTML structure as the anonymous response, but `<source src="…">` now points at `https://r{N}.yandexwebcache.org/{anime}/{ep}.{quality}.{hash}.mp4?derou={dle_user_id}&hash=…&hash2=…`. The user id in `derou` matches the `dle_user_id` cookie value, so the URLs are personalised — copying them to a different account or a different IP is likely to be rejected by Yandex's edge. |
+
+**No CSRF token**, no captcha, no 2FA, no Cloudflare interstitial during login (so far). Bad credentials reply with **HTTP 200** + the homepage HTML *without* `dle_user_id` in `Set-Cookie` — that's the only authoritative signal of failure, which is why our parser explicitly requires `dle_user_id` to be present.
+
+**Why we cap at 1 RPS by default**:
+
+- The session is tied to a single real account. jut.su does not publish a rate limit, but high-cadence requests against one account are the fastest way to get the account flagged for "API abuse" and banned. Once banned, no decoder cleverness will recover it — we lose the only premium signal we have.
+- jut.su uses request cadence as one of several bot-detection signals. Pacing at human-tab-browsing speed (~1 req/sec) reduces the chance of falling into a Cloudflare challenge loop.
+- This is a hard cap, not an SLO. The decoder is allowed to be slower than `JUTSU_RATE_LIMIT_RPS` — it is never allowed to be faster. Bucket4j with `capacity=1, refill=1/sec` means a single 1-token burst followed by 1 token/sec strictly.
+
+**⚠ CDN URLs are session-bound — DO NOT serve them directly to end users**:
+
+This is the most important quirk in this section: the `r{N}.yandexwebcache.org/.../{episode}.{quality}.{hash}.mp4?derou={user_id}&hash={A}&hash2={B}` URL Yandex CDN gives back is NOT a generic CDN URL. The `(host, hash, hash2)` triplet is computed by jut.su's player JS based on the **session** that fetched the episode page — almost certainly bound to the originating IP, the `PHPSESSID` cookie, and possibly the request's TLS handshake. Verified empirically (2026-05-03):
+
+| Got URL with these cookies | Opens URL with these cookies | Result |
+|---|---|---|
+| backend (its own RAM cookie jar) | backend | ✓ HTTP 206 |
+| separate curl session | same curl session | ✓ HTTP 206 |
+| backend | a different session (curl, browser, anything else) | ✗ HTTP 403 — instantly |
+
+Two URLs fetched seconds apart from the same account on the same host (`derou=3829047`) end up on different CDN edges (`r510501` vs `r420501`) with completely different `hash`/`hash2` pairs, so this is per-session signing and not just IP / TTL.
+
+**Practical consequence**: the Sources sandbox UI cannot put the decoded URL straight into a `<video src="…">` and expect the user's browser to play it. The browser is a different session. The user reported "URLs return 403" the moment we shipped the auth fix — this was the smoking gun.
+
+**Implemented as PROXY-1** in `JutsuStreamProxyController`:
+
+1. `GET /api/v1/providers/jutsu/stream?url={cdnUrl}` — single endpoint.
+2. URL host **suffix-matched** against `.yandexwebcache.org` (no wildcard regex, no eTLD parsing — just plain `endsWith`, case-insensitive). Anything else returns `403 host not whitelisted`.
+3. `Range:` header forwarded verbatim from the browser to upstream — without this Safari refuses to seek and Chrome buffers the whole file before allowing playback.
+4. Whitelisted response headers pass through: `Content-Type`, `Content-Length`, `Content-Range`, `Accept-Ranges`, `Cache-Control`, `Last-Modified`, `ETag`. Everything else (most importantly `Set-Cookie` and any internal trace headers) is dropped — the proxy never leaks CDN-side cookies into the browser.
+5. Body streamed as `Flux<DataBuffer>` through `ServerHttpResponse.writeWith(...)` — no full-body buffering, so a 700 MB episode does not need 700 MB of heap. WebClient's default 256 KB in-memory codec limit does not apply to `bodyToFlux(DataBuffer.class)`.
+6. Rate-limited by the **same** `JutsuRateLimiter` bucket the decoder uses, so a chatty browser cannot evict the decoder's 1 RPS budget.
+7. Demo UI: `SourcesView.vue` shows a `▶ Play` button next to every URL with host `*.yandexwebcache.org`. Clicking it points an inline `<video>` at `/api/v1/providers/jutsu/stream?url=…` and the browser plays through us.
+8. **Download flow** (PROXY-1.1, same controller): pass `?filename=foo.mp4` and the proxy adds a sanitised `Content-Disposition: attachment; filename="..."; filename*=UTF-8''...` header (RFC 6266; CRLF stripped, path separators replaced, double-quotes backslash-escaped, unicode preserved via the {@code filename*} variant). The demo UI's `⬇ Download` button uses `fetch()` + `ReadableStream` to display a per-URL progress bar with bytes-received / total / speed / ETA + a Cancel button via `AbortController`. The whole file is accumulated as a `Blob` in the browser tab — fine up to ~1 GB; over that the UI shows a `confirm()` prompt because the File System Access API and StreamSaver.js were both rejected as too narrow / too heavy for the sandbox use case.
+
+Trade-off (well understood): full video traffic flows through our pod. For the Sources sandbox (manual one-off plays) this is fine; for an actual streaming product we'd want to either re-host episodes ourselves (pre-cache to S3 or similar) or negotiate a non-session-bound URL with jut.su. Tracked as **PROXY-2** in `BACKLOG.md`.
+
+**API-key gate**: `/api/v1/providers/**` is intentionally NOT in the API-key auth list — a `<video src=...>` tag cannot send custom headers, so requiring `X-API-KEY` would break the only browser-side use case. Inbound CORS rules (`OrinunoProperties.cors.allowedOrigins`) and the host whitelist on the proxy itself are the security boundaries here.
+
+**Discovered via**: user pasted a real Chromium DevTools curl with `&hash2=…` and reported "URLs return 403" from the demo UI. Probe in 2026-05-03 chat showed every party's URL works for them and only them.
+
+**Operational contract**:
+
+| Property | Default | Meaning |
+|---|---|---|
+| `JUTSU_USERNAME` / `JUTSU_PASSWORD` | empty | Empty → decoder runs anonymous → premium episodes return `JUTSU_PREMIUM_REQUIRED` (correct, just unhelpful). Set both to switch on premium decoding. NEVER commit values to git; populate via env vars only. |
+| `JUTSU_RATE_LIMIT_RPS` | `1.0` | Floor at `0.1` (1 req / 10 sec) to keep the decoder responsive even with a misconfigured `0`. |
+| `JUTSU_SESSION_TTL_MINUTES` | `240` (4 h) | DLE cookies are valid for ~52 weeks (`Max-Age` on `dle_password`), but we proactively re-login earlier so a silent password rotation or account ban surfaces while operators are still on shift. |
+
+**Where in code**:
+
+- [`JutsuProperties`](../orinuno-app/src/main/java/com/orinuno/configuration/OrinunoProperties.java) — properties class.
+- [`JutsuRateLimiter`](../orinuno-app/src/main/java/com/orinuno/service/provider/jutsu/JutsuRateLimiter.java) — Bucket4j, reactive `Mono<Void> acquire()`.
+- [`JutsuSessionManager`](../orinuno-app/src/main/java/com/orinuno/service/provider/jutsu/JutsuSessionManager.java) — login + cookie jar + invalidate.
+- [`JutsuDecoderService`](../orinuno-app/src/main/java/com/orinuno/service/provider/jutsu/JutsuDecoderService.java) — wires both into the request pipeline + auto-relogins exactly once on `JUTSU_PREMIUM_REQUIRED` (handles silent server-side cookie expiry).
+
+**Verified by**:
+
+- [`JutsuRateLimiterTest`](../orinuno-app/src/test/java/com/orinuno/service/provider/jutsu/JutsuRateLimiterTest.java) — first acquire is non-blocking, second waits ~1s at 1 RPS, hot-swap rebuilds the bucket, 0 / negative RPS clamps to 0.1 floor.
+- [`JutsuSessionManagerTest`](../orinuno-app/src/test/java/com/orinuno/service/provider/jutsu/JutsuSessionManagerTest.java) — anonymous when creds missing, caches cookies, `invalidate()` forces relogin, missing `dle_user_id` is treated as failure (returns empty), TTL expiry triggers refresh, `URLEncoder` form-encoding regression test.
+- [`JutsuDecoderServiceTest`](../orinuno-app/src/test/java/com/orinuno/service/provider/jutsu/JutsuDecoderServiceTest.java) — premium-marker detection (with and without auth) using captured snapshots from the real `dead-dead-demons/ep4` response.
+
+**Discovered via**: user provided a `Jutsu+` account (`amateurdevideo`) in 2026-05-03 chat after seeing `JUTSU_PREMIUM_REQUIRED` for `dead-dead-demons/episode-4`. Live login probe confirmed the DLE flow and the personalised CDN URL shape.
+
+**Related runbook**: `docs/runbooks/provider-cdn-block.md` → "Not a CDN block: provider-specific failure modes".
+
+---

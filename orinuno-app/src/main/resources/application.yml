@@ -114,6 +114,14 @@ orinuno:
       enabled: ${ORINUNO_CALENDAR_DELTA_WATCHER_ENABLED:false}
       poll-interval-minutes: ${ORINUNO_CALENDAR_DELTA_WATCHER_INTERVAL_MIN:5}
       initial-delay-seconds: ${ORINUNO_CALENDAR_DELTA_WATCHER_INITIAL_DELAY_S:60}
+  providers:
+    jutsu:
+      base-url: ${JUTSU_BASE_URL:https://jut.su}
+      username: ${JUTSU_USERNAME:}
+      password: ${JUTSU_PASSWORD:}
+      rate-limit-rps: ${JUTSU_RATE_LIMIT_RPS:1.0}
+      session-ttl-minutes: ${JUTSU_SESSION_TTL_MINUTES:240}
+      login-timeout-seconds: ${JUTSU_LOGIN_TIMEOUT_SECONDS:15}
   dumps:
     enabled: ${ORINUNO_DUMPS_ENABLED:false}
     base-url: ${ORINUNO_DUMPS_BASE_URL:https://dumps.kodikres.com}

@@ -17,7 +17,7 @@
 --      every successful watch cycle.
 --   2. Diffing the new fetch against this table and writing a row to
 --      `kodik_calendar_outbox` for every observed change (see the next
---      changeset).
+--      migration script).
 --
 -- Downstream consumers (kodik-parser, frontend, notifications, etc.) read the
 -- outbox to react to changes without having to poll the full calendar dump.

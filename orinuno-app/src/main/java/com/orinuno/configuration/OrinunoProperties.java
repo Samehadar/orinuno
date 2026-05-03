@@ -94,6 +94,58 @@ public class OrinunoProperties {
     private DriftSamplingProperties drift = new DriftSamplingProperties();
     private CalendarProperties calendar = new CalendarProperties();
     private DumpsProperties dumps = new DumpsProperties();
+    private ProvidersProperties providers = new ProvidersProperties();
+
+    /**
+     * Settings for the alternative video providers we decode (Sibnet, Aniboom, JutSu). Most are
+     * stateless decoders so they live without configuration; JutSu is special because real CDN URLs
+     * are gated behind a {@code Jutsu+} subscription, so we ship a per-provider auth + rate-limit
+     * block. Keeping providers under one prefix means future Aniboom/Sibnet auth (if they ever
+     * introduce it) can hang off the same parent without renaming env vars.
+     */
+    @Data
+    public static class ProvidersProperties {
+        private JutsuProperties jutsu = new JutsuProperties();
+    }
+
+    /**
+     * JutSu (jut.su) provider — DataLife Engine login + sticky cookie session + outbound rate
+     * limit. See {@code docs/quirks-and-hacks.md} → "JutSu premium gating leaks &lt;source&gt; tags
+     * with placeholder URLs" for the why.
+     *
+     * <ul>
+     *   <li>{@code username/password} — DLE form fields. Empty by default; when blank the decoder
+     *       runs in anonymous mode and returns {@code JUTSU_PREMIUM_REQUIRED} for gated episodes.
+     *       NEVER commit real values; populate via {@code JUTSU_USERNAME / JUTSU_PASSWORD} env vars
+     *       only.
+     *   <li>{@code rate-limit-rps} — outbound requests per second to {@code jut.su}, hard-capped to
+     *       protect the account from being flagged for API abuse. Default {@code 1.0} matches what
+     *       a single human browsing tab generates. Floors at {@code 0.1} (1 req / 10s); raise only
+     *       if you have a separate rate-limit agreement with jut.su.
+     *   <li>{@code session-ttl-minutes} — how long the cached cookie jar is treated as fresh before
+     *       we proactively re-login. The DLE cookies are valid for ~50 days (we observed {@code
+     *       Max-Age} ~52 weeks on {@code dle_password}), but we re-login much earlier so a silent
+     *       password rotation or account ban surfaces while operators are still on shift.
+     *   <li>{@code base-url} — kept configurable so a staging mirror or HAR-replay server can be
+     *       swapped in for tests. Production should never override this.
+     * </ul>
+     */
+    @Data
+    public static class JutsuProperties {
+        private String baseUrl = "https://jut.su";
+        private String username = "";
+        private String password = "";
+        private double rateLimitRps = 1.0;
+        private long sessionTtlMinutes = 240;
+        private int loginTimeoutSeconds = 15;
+
+        public boolean hasCredentials() {
+            return username != null
+                    && !username.isBlank()
+                    && password != null
+                    && !password.isBlank();
+        }
+    }
 
     @Data
     public static class SecurityProperties {
