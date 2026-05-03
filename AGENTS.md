@@ -13,10 +13,13 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 > Multi-module reactor since PR3 (transparency roadmap). The Spring Boot
 > service lives under `orinuno-app/`; per-source SDK modules live under
 > `kodik-sdk-drift/` (PR3 — drift detector), `jutsu-sdk/` (Step 2),
-> `sibnet-sdk/` and `aniboom-sdk/` (Step 3). See
+> `sibnet-sdk/` and `aniboom-sdk/` (Step 3). Step 4 wired the
+> orinuno-app controllers directly onto the SDK facades and dropped
+> the `*DecoderService` adapter shim. See
 > `docs/adr/0001-kodik-sdk-extraction.md`,
-> `docs/adr/0012-jutsu-sdk-extraction.md`, and
-> `docs/adr/0013-sibnet-and-aniboom-sdk-extraction.md`.
+> `docs/adr/0012-jutsu-sdk-extraction.md`,
+> `docs/adr/0013-sibnet-and-aniboom-sdk-extraction.md`, and
+> `docs/adr/0014-controllers-on-sdk-facades.md`.
 
 | Area | Path |
 |------|------|

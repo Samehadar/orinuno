@@ -1,11 +1,12 @@
 package com.orinuno.controller;
 
+import com.orinuno.aniboom.AniboomClient;
 import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.service.KodikVideoDecoderService;
 import com.orinuno.service.provider.ProviderDecodeResult;
-import com.orinuno.service.provider.aniboom.AniboomDecoderService;
-import com.orinuno.service.provider.jutsu.JutsuDecoderService;
-import com.orinuno.service.provider.sibnet.SibnetDecoderService;
+import com.orinuno.service.provider.ProviderDecodeResults;
+import com.orinuno.sibnet.SibnetClient;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,6 +43,12 @@ import reactor.core.publisher.Mono;
  * GET /api/v1/anime/{contentId}/episodes/{season}/{episode}/sources} on {@link
  * MultiSourceController}.
  *
+ * <p><strong>Step 4 of the API/module split (ADR 0014)</strong> rewires this controller directly on
+ * top of the per-provider SDK facades ({@link JutsuClient}, {@link SibnetClient}, {@link
+ * AniboomClient}). The previous orinuno-app {@code *DecoderService} adapter shim is gone — the
+ * SDK→{@link ProviderDecodeResult} translation lives in the {@link ProviderDecodeResults} static
+ * helper so it stays testable in isolation.
+ *
  * <p><strong>Auth</strong>: kept out of {@code ApiKeyAuthFilter}'s gate intentionally. The provider
  * sandbox is the same one the demo UI hits without an API key, and external consumers can call it
  * from a browser without a server-side hop.
@@ -53,21 +60,21 @@ import reactor.core.publisher.Mono;
 public class SourcesController {
 
     private final KodikVideoDecoderService kodikDecoder;
-    private final SibnetDecoderService sibnetDecoder;
-    private final AniboomDecoderService aniboomDecoder;
-    private final JutsuDecoderService jutsuDecoder;
+    private final SibnetClient sibnetClient;
+    private final AniboomClient aniboomClient;
+    private final JutsuClient jutsuClient;
     private final OrinunoProperties properties;
 
     public SourcesController(
             KodikVideoDecoderService kodikDecoder,
-            SibnetDecoderService sibnetDecoder,
-            AniboomDecoderService aniboomDecoder,
-            JutsuDecoderService jutsuDecoder,
+            SibnetClient sibnetClient,
+            AniboomClient aniboomClient,
+            JutsuClient jutsuClient,
             OrinunoProperties properties) {
         this.kodikDecoder = kodikDecoder;
-        this.sibnetDecoder = sibnetDecoder;
-        this.aniboomDecoder = aniboomDecoder;
-        this.jutsuDecoder = jutsuDecoder;
+        this.sibnetClient = sibnetClient;
+        this.aniboomClient = aniboomClient;
+        this.jutsuClient = jutsuClient;
         this.properties = properties;
     }
 
@@ -159,9 +166,21 @@ public class SourcesController {
                                                         ProviderDecodeResult.failure(
                                                                 "KODIK_DECODE_ERROR")));
                                     });
-            case "SIBNET" -> sibnetDecoder.decode(url).map(ResponseEntity::ok);
-            case "ANIBOOM" -> aniboomDecoder.decode(url).map(ResponseEntity::ok);
-            case "JUTSU" -> jutsuDecoder.decode(url).map(ResponseEntity::ok);
+            case "SIBNET" ->
+                    sibnetClient
+                            .decode(url)
+                            .map(ProviderDecodeResults::from)
+                            .map(ResponseEntity::ok);
+            case "ANIBOOM" ->
+                    aniboomClient
+                            .decode(url)
+                            .map(ProviderDecodeResults::from)
+                            .map(ResponseEntity::ok);
+            case "JUTSU" ->
+                    jutsuClient
+                            .decode(url)
+                            .map(ProviderDecodeResults::from)
+                            .map(ResponseEntity::ok);
             default ->
                     Mono.just(
                             ResponseEntity.badRequest()

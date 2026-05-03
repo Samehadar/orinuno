@@ -19,6 +19,7 @@ This directory holds the architectural decision records (ADRs) for orinuno. Each
 | [0011](0011-kb1-knowledge-base-runbook.md) | KB-1: knowledge base / operator runbook | Accepted (phased) | docs |
 | [0012](0012-jutsu-sdk-extraction.md) | JutSu SDK extraction into `jutsu-sdk` module | Accepted | architecture |
 | [0013](0013-sibnet-and-aniboom-sdk-extraction.md) | Sibnet and Aniboom SDK extraction into `sibnet-sdk` + `aniboom-sdk` modules | Accepted | architecture |
+| [0014](0014-controllers-on-sdk-facades.md) | Controllers wired directly on SDK facades (`*DecoderService` adapters removed) | Accepted | architecture |
 
 ## Status legend
 

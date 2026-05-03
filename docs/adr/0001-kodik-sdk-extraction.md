@@ -179,3 +179,10 @@ Track follow-ups in BACKLOG.md as IDEA-SDK-2/3/4.
   is a domain-neutral drift detector, not a Kodik client, and the actual
   Kodik HTTP client stays in `orinuno-app` because of its deep DB
   coupling.
+- **2026-05-03** — Step 4 of the API/module split removed the orinuno-app
+  `*DecoderService` adapter shim layer entirely. Controllers
+  (`SourcesController`, `ProvidersController`) now inject the SDK
+  facades (`JutsuClient`, `SibnetClient`, `AniboomClient`) directly and
+  delegate the SDK→`ProviderDecodeResult` translation to a single
+  `ProviderDecodeResults` static helper. See
+  [ADR 0014](0014-controllers-on-sdk-facades.md).

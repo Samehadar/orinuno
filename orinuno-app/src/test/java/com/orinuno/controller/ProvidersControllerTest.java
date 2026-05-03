@@ -6,10 +6,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.orinuno.service.provider.ProviderDecodeResult;
-import com.orinuno.service.provider.aniboom.AniboomDecoderService;
-import com.orinuno.service.provider.jutsu.JutsuDecoderService;
-import com.orinuno.service.provider.sibnet.SibnetDecoderService;
+import com.orinuno.aniboom.AniboomClient;
+import com.orinuno.aniboom.AniboomDecodeResult;
+import com.orinuno.aniboom.AniboomErrorCodes;
+import com.orinuno.jutsu.JutsuClient;
+import com.orinuno.jutsu.JutsuDecodeResult;
+import com.orinuno.sibnet.SibnetClient;
+import com.orinuno.sibnet.SibnetDecodeResult;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,26 +26,26 @@ import reactor.core.publisher.Mono;
 @ExtendWith(MockitoExtension.class)
 class ProvidersControllerTest {
 
-    @Mock private SibnetDecoderService sibnetDecoder;
-    @Mock private AniboomDecoderService aniboomDecoder;
-    @Mock private JutsuDecoderService jutsuDecoder;
+    @Mock private SibnetClient sibnetClient;
+    @Mock private AniboomClient aniboomClient;
+    @Mock private JutsuClient jutsuClient;
 
     private WebTestClient client;
 
     @BeforeEach
     void setUp() {
         ProvidersController controller =
-                new ProvidersController(sibnetDecoder, aniboomDecoder, jutsuDecoder);
+                new ProvidersController(sibnetClient, aniboomClient, jutsuClient);
         client = WebTestClient.bindToController(controller).build();
     }
 
     @Test
-    @DisplayName("POST /api/v1/providers/decode routes SIBNET to the Sibnet decoder")
+    @DisplayName("POST /api/v1/providers/decode routes SIBNET to SibnetClient")
     void routesSibnet() {
-        when(sibnetDecoder.decode(eq("https://video.sibnet.ru/shell.php?videoid=1")))
+        when(sibnetClient.decode(eq("https://video.sibnet.ru/shell.php?videoid=1")))
                 .thenReturn(
                         Mono.just(
-                                ProviderDecodeResult.success(
+                                SibnetDecodeResult.success(
                                         Map.of("720", "https://cdn/m.mp4"), "video/mp4")));
 
         client.post()
@@ -64,14 +67,17 @@ class ProvidersControllerTest {
                 .jsonPath("$.qualities.720")
                 .isEqualTo("https://cdn/m.mp4");
 
-        verifyNoInteractions(aniboomDecoder, jutsuDecoder);
+        verifyNoInteractions(aniboomClient, jutsuClient);
     }
 
     @Test
-    @DisplayName("POST /api/v1/providers/decode routes ANIBOOM to the Aniboom decoder")
+    @DisplayName("POST /api/v1/providers/decode routes ANIBOOM to AniboomClient")
     void routesAniboom() {
-        when(aniboomDecoder.decode(eq("https://aniboom.one/embed/abc")))
-                .thenReturn(Mono.just(ProviderDecodeResult.failure("ANIBOOM_GEO_BLOCKED")));
+        when(aniboomClient.decode(eq("https://aniboom.one/embed/abc")))
+                .thenReturn(
+                        Mono.just(
+                                AniboomDecodeResult.failure(
+                                        AniboomErrorCodes.ANIBOOM_GEO_BLOCKED)));
 
         client.post()
                 .uri("/api/v1/providers/decode")
@@ -85,16 +91,16 @@ class ProvidersControllerTest {
                 .jsonPath("$.errorCode")
                 .isEqualTo("ANIBOOM_GEO_BLOCKED");
 
-        verify(sibnetDecoder, never()).decode(org.mockito.ArgumentMatchers.anyString());
+        verify(sibnetClient, never()).decode(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
-    @DisplayName("POST /api/v1/providers/decode routes JUTSU to the JutSu decoder")
+    @DisplayName("POST /api/v1/providers/decode routes JUTSU to JutsuClient")
     void routesJutsu() {
-        when(jutsuDecoder.decode(eq("https://jut.su/naruto/episode-1.html")))
+        when(jutsuClient.decode(eq("https://jut.su/naruto/episode-1.html")))
                 .thenReturn(
                         Mono.just(
-                                ProviderDecodeResult.success(
+                                JutsuDecodeResult.success(
                                         Map.of("720", "https://x/720.mp4"), "video/mp4")));
 
         client.post()
@@ -124,7 +130,7 @@ class ProvidersControllerTest {
                 .jsonPath("$.errorCode")
                 .isEqualTo("UNSUPPORTED_PROVIDER:VIMEO");
 
-        verifyNoInteractions(sibnetDecoder, aniboomDecoder, jutsuDecoder);
+        verifyNoInteractions(sibnetClient, aniboomClient, jutsuClient);
     }
 
     @Test

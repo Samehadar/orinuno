@@ -7,12 +7,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.orinuno.aniboom.AniboomClient;
+import com.orinuno.aniboom.AniboomDecodeResult;
+import com.orinuno.aniboom.AniboomErrorCodes;
 import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.jutsu.JutsuClient;
+import com.orinuno.jutsu.JutsuDecodeResult;
 import com.orinuno.service.KodikVideoDecoderService;
-import com.orinuno.service.provider.ProviderDecodeResult;
-import com.orinuno.service.provider.aniboom.AniboomDecoderService;
-import com.orinuno.service.provider.jutsu.JutsuDecoderService;
-import com.orinuno.service.provider.sibnet.SibnetDecoderService;
+import com.orinuno.sibnet.SibnetClient;
+import com.orinuno.sibnet.SibnetDecodeResult;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,9 +31,9 @@ import reactor.core.publisher.Mono;
 class SourcesControllerTest {
 
     @Mock private KodikVideoDecoderService kodikDecoder;
-    @Mock private SibnetDecoderService sibnetDecoder;
-    @Mock private AniboomDecoderService aniboomDecoder;
-    @Mock private JutsuDecoderService jutsuDecoder;
+    @Mock private SibnetClient sibnetClient;
+    @Mock private AniboomClient aniboomClient;
+    @Mock private JutsuClient jutsuClient;
 
     private OrinunoProperties properties;
     private WebTestClient client;
@@ -40,7 +43,7 @@ class SourcesControllerTest {
         properties = new OrinunoProperties();
         SourcesController controller =
                 new SourcesController(
-                        kodikDecoder, sibnetDecoder, aniboomDecoder, jutsuDecoder, properties);
+                        kodikDecoder, sibnetClient, aniboomClient, jutsuClient, properties);
         client = WebTestClient.bindToController(controller).build();
     }
 
@@ -84,12 +87,12 @@ class SourcesControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/sources/sibnet/decode dispatches to SibnetDecoderService")
+    @DisplayName("POST /api/v1/sources/sibnet/decode dispatches to SibnetClient")
     void perSourceSibnetDispatch() {
-        when(sibnetDecoder.decode(eq("https://video.sibnet.ru/shell.php?videoid=1")))
+        when(sibnetClient.decode(eq("https://video.sibnet.ru/shell.php?videoid=1")))
                 .thenReturn(
                         Mono.just(
-                                ProviderDecodeResult.success(
+                                SibnetDecodeResult.success(
                                         Map.of("720", "https://cdn/m.mp4"), "video/mp4")));
 
         client.post()
@@ -104,14 +107,17 @@ class SourcesControllerTest {
                 .jsonPath("$.qualities.720")
                 .isEqualTo("https://cdn/m.mp4");
 
-        verifyNoInteractions(kodikDecoder, aniboomDecoder, jutsuDecoder);
+        verifyNoInteractions(kodikDecoder, aniboomClient, jutsuClient);
     }
 
     @Test
-    @DisplayName("POST /api/v1/sources/aniboom/decode dispatches to AniboomDecoderService")
+    @DisplayName("POST /api/v1/sources/aniboom/decode dispatches to AniboomClient")
     void perSourceAniboomDispatch() {
-        when(aniboomDecoder.decode(eq("https://aniboom.one/embed/abc")))
-                .thenReturn(Mono.just(ProviderDecodeResult.failure("ANIBOOM_GEO_BLOCKED")));
+        when(aniboomClient.decode(eq("https://aniboom.one/embed/abc")))
+                .thenReturn(
+                        Mono.just(
+                                AniboomDecodeResult.failure(
+                                        AniboomErrorCodes.ANIBOOM_GEO_BLOCKED)));
 
         client.post()
                 .uri("/api/v1/sources/aniboom/decode")
@@ -127,12 +133,12 @@ class SourcesControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/sources/jutsu/decode dispatches to JutsuDecoderService")
+    @DisplayName("POST /api/v1/sources/jutsu/decode dispatches to JutsuClient")
     void perSourceJutsuDispatch() {
-        when(jutsuDecoder.decode(eq("https://jut.su/naruto/episode-1.html")))
+        when(jutsuClient.decode(eq("https://jut.su/naruto/episode-1.html")))
                 .thenReturn(
                         Mono.just(
-                                ProviderDecodeResult.success(
+                                JutsuDecodeResult.success(
                                         Map.of("720", "https://x/720.mp4"), "video/mp4")));
 
         client.post()
@@ -176,7 +182,7 @@ class SourcesControllerTest {
                 .jsonPath("$.qualities.480")
                 .isEqualTo("https://hls.kodik/480/master.m3u8");
 
-        verify(sibnetDecoder, never()).decode(org.mockito.ArgumentMatchers.anyString());
+        verify(sibnetClient, never()).decode(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -217,7 +223,7 @@ class SourcesControllerTest {
                 .jsonPath("$.errorCode")
                 .isEqualTo("UNSUPPORTED_PROVIDER:VIMEO");
 
-        verifyNoInteractions(kodikDecoder, sibnetDecoder, aniboomDecoder, jutsuDecoder);
+        verifyNoInteractions(kodikDecoder, sibnetClient, aniboomClient, jutsuClient);
     }
 
     @Test
@@ -234,9 +240,8 @@ class SourcesControllerTest {
     @Test
     @DisplayName("Provider segment is case-insensitive (sibnet/SIBNET/SiBNeT all dispatch)")
     void perSourceProviderCaseInsensitive() {
-        when(sibnetDecoder.decode(org.mockito.ArgumentMatchers.anyString()))
-                .thenReturn(
-                        Mono.just(ProviderDecodeResult.success(Map.of("720", "u"), "video/mp4")));
+        when(sibnetClient.decode(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Mono.just(SibnetDecodeResult.success(Map.of("720", "u"), "video/mp4")));
         for (String segment : List.of("sibnet", "SIBNET", "SiBNeT")) {
             client.post()
                     .uri("/api/v1/sources/" + segment + "/decode")
@@ -245,7 +250,7 @@ class SourcesControllerTest {
                     .expectStatus()
                     .isOk();
         }
-        verify(sibnetDecoder, org.mockito.Mockito.times(3))
+        verify(sibnetClient, org.mockito.Mockito.times(3))
                 .decode(org.mockito.ArgumentMatchers.anyString());
     }
 

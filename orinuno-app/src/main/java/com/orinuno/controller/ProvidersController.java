@@ -1,9 +1,10 @@
 package com.orinuno.controller;
 
+import com.orinuno.aniboom.AniboomClient;
+import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.service.provider.ProviderDecodeResult;
-import com.orinuno.service.provider.aniboom.AniboomDecoderService;
-import com.orinuno.service.provider.jutsu.JutsuDecoderService;
-import com.orinuno.service.provider.sibnet.SibnetDecoderService;
+import com.orinuno.service.provider.ProviderDecodeResults;
+import com.orinuno.sibnet.SibnetClient;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,6 +25,9 @@ import reactor.core.publisher.Mono;
  *
  * <p>Kodik decode lives under {@code POST /api/v1/parse/decode/variant/{id}} because it needs an
  * existing variant row. Provider sandbox is purposefully read-only and stateless.
+ *
+ * <p><strong>Step 4 of the API/module split (ADR 0014)</strong> rewires this controller directly
+ * onto the per-provider SDK facades; the orinuno-app {@code *DecoderService} adapters are gone.
  */
 @Slf4j
 @RestController
@@ -32,9 +36,9 @@ import reactor.core.publisher.Mono;
 @Tag(name = "Providers", description = "Ad-hoc decoder sandbox for Sibnet/Aniboom/JutSu")
 public class ProvidersController {
 
-    private final SibnetDecoderService sibnetDecoder;
-    private final AniboomDecoderService aniboomDecoder;
-    private final JutsuDecoderService jutsuDecoder;
+    private final SibnetClient sibnetClient;
+    private final AniboomClient aniboomClient;
+    private final JutsuClient jutsuClient;
 
     @PostMapping("/decode")
     @Operation(
@@ -53,9 +57,21 @@ public class ProvidersController {
         String url = request.url().trim();
         log.info("Provider sandbox decode: provider={} url={}", provider, url);
         return switch (provider) {
-            case "SIBNET" -> sibnetDecoder.decode(url).map(ResponseEntity::ok);
-            case "ANIBOOM" -> aniboomDecoder.decode(url).map(ResponseEntity::ok);
-            case "JUTSU" -> jutsuDecoder.decode(url).map(ResponseEntity::ok);
+            case "SIBNET" ->
+                    sibnetClient
+                            .decode(url)
+                            .map(ProviderDecodeResults::from)
+                            .map(ResponseEntity::ok);
+            case "ANIBOOM" ->
+                    aniboomClient
+                            .decode(url)
+                            .map(ProviderDecodeResults::from)
+                            .map(ResponseEntity::ok);
+            case "JUTSU" ->
+                    jutsuClient
+                            .decode(url)
+                            .map(ProviderDecodeResults::from)
+                            .map(ResponseEntity::ok);
             default ->
                     Mono.just(
                             ResponseEntity.badRequest()

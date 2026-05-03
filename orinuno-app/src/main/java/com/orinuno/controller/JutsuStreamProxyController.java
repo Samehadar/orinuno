@@ -31,11 +31,10 @@ import reactor.core.publisher.Mono;
  * PROXY-1 — Backend pass-through proxy for jut.su CDN URLs.
  *
  * <p><strong>Why this exists</strong>: the {@code r{N}.yandexwebcache.org/...} URLs that {@link
- * com.orinuno.service.provider.jutsu.JutsuDecoderService} extracts are signed against the session
- * that fetched the episode page. Backend gets one URL, the browser gets a different (also
- * authenticated) URL — Yandex CDN rejects cross-session URLs with HTTP 403 instantly. See {@code
- * docs/quirks-and-hacks.md} → "JutSu DLE auth + sticky cookies + 1 RPS hard cap" → "CDN URLs are
- * session-bound".
+ * com.orinuno.jutsu.JutsuClient} extracts are signed against the session that fetched the episode
+ * page. Backend gets one URL, the browser gets a different (also authenticated) URL — Yandex CDN
+ * rejects cross-session URLs with HTTP 403 instantly. See {@code docs/quirks-and-hacks.md} → "JutSu
+ * DLE auth + sticky cookies + 1 RPS hard cap" → "CDN URLs are session-bound".
  *
  * <p>This controller bridges that gap: the browser hits {@code GET /api/v1/sources/jutsu/stream
  * ?url={cdnUrl}}, we re-issue the request from inside backend's session, and stream the response
@@ -49,9 +48,8 @@ import reactor.core.publisher.Mono;
  *   <li><strong>Host whitelist</strong>: only {@code *.yandexwebcache.org} is proxied. This
  *       endpoint is NOT an open relay.
  *   <li><strong>Rate limit shared with the decoder</strong>: every proxied request consumes a token
- *       from the same {@link JutsuRateLimiter} bucket as {@link
- *       com.orinuno.service.provider.jutsu.JutsuDecoderService} so a chatty browser cannot evict
- *       the decoder's RPS budget.
+ *       from the same {@link JutsuRateLimiter} bucket as {@link com.orinuno.jutsu.JutsuClient} so a
+ *       chatty browser cannot evict the decoder's RPS budget.
  *   <li><strong>Range forwarded verbatim</strong>: the browser asks for {@code bytes=…} (HTML5
  *       seek), we pass it upstream, we pass {@code Content-Range} / {@code Content-Length} / {@code
  *       Accept-Ranges} back. Without this, Safari refuses to seek and Chrome buffers the whole file
