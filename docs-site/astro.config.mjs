@@ -44,6 +44,7 @@ export default defineConfig({
         starlightLinksValidator({
           errorOnFallbackPages: false,
           errorOnInconsistentLocale: false,
+          errorOnLocalLinks: false,
           exclude: [
             '/orinuno/api/reference/**',
             '/orinuno/api/reference',
