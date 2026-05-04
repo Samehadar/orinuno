@@ -116,6 +116,7 @@ This module follows the parent reactor's version (`0.1.0` today). Public API sur
 ## Reference projects
 
 - [`AnimeParsers`](https://github.com/AmcfaR/AnimeParsers/blob/main/anime_parsers_ru/jutsu_parser_async.py) — Python equivalent, uses similar DLE-cookie + sticky-session approach.
+- [GitHub Tier A survey](../docs/research/2026-05-04-jut-su-tier-A-per-repo-analysis.md) — построчный разбор 95 релевантных поиску `jut.su` репозиториев (orinuno research, 2026-05).
 
 ## See also
 

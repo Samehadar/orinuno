@@ -41,6 +41,11 @@ class SourcesControllerTest {
     @BeforeEach
     void setUp() {
         properties = new OrinunoProperties();
+        // Default healthy snapshot so capabilities() can read driftHealth without NPE.
+        // lenient because not every test reaches the capabilities path.
+        org.mockito.Mockito.lenient()
+                .when(jutsuClient.getDriftSnapshot())
+                .thenReturn(new com.orinuno.jutsu.drift.JutsuDriftDetector().snapshot());
         SourcesController controller =
                 new SourcesController(
                         kodikDecoder, sibnetClient, aniboomClient, jutsuClient, properties);
@@ -67,7 +72,23 @@ class SourcesControllerTest {
                 .jsonPath("$.providers[?(@.id=='sibnet')].credentialsRequired")
                 .isEqualTo(false)
                 .jsonPath("$.providers[?(@.id=='aniboom')].credentialsRequired")
-                .isEqualTo(false);
+                .isEqualTo(false)
+                .jsonPath("$.providers[?(@.id=='jutsu')].operations[?(@=='catalog')]")
+                .exists()
+                .jsonPath("$.providers[?(@.id=='jutsu')].operations[?(@=='search')]")
+                .exists()
+                .jsonPath("$.providers[?(@.id=='jutsu')].operations[?(@=='anime-info')]")
+                .exists()
+                .jsonPath("$.providers[?(@.id=='jutsu')].operations[?(@=='episode-meta')]")
+                .exists()
+                .jsonPath("$.providers[?(@.id=='jutsu')].operations[?(@=='notice-feed')]")
+                .exists()
+                .jsonPath("$.providers[?(@.id=='jutsu')].operations[?(@=='drift-health')]")
+                .exists()
+                .jsonPath("$.providers[?(@.id=='jutsu')].driftHealth")
+                .isEqualTo("HEALTHY")
+                .jsonPath("$.providers[?(@.id=='jutsu')].driftLifetimeEvents")
+                .isEqualTo(0);
     }
 
     @Test
