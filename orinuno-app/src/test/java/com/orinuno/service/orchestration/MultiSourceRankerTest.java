@@ -93,6 +93,43 @@ class MultiSourceRankerTest {
     }
 
     @Test
+    void demotedProvidersFallToTheBottomEvenWhenTheyAreFirstInProviderOrder() {
+        LocalDateTime now = LocalDateTime.of(2026, 5, 2, 12, 0);
+        List<EpisodeSource> sources =
+                List.of(
+                        src(1L, EpisodeSource.Provider.JUTSU),
+                        src(2L, EpisodeSource.Provider.SIBNET));
+        List<EpisodeVideo> videos = List.of(vid(1L, "1080", now, 0), vid(2L, "480", now, 0));
+        RankingPreferences prefs = RankingPreferences.defaults();
+        prefs.now = now;
+        prefs.providerOrder = List.of(EpisodeSource.Provider.JUTSU, EpisodeSource.Provider.SIBNET);
+        prefs.demotedProviders = java.util.Set.of(EpisodeSource.Provider.JUTSU);
+
+        List<RankedCandidate> ranked = ranker.rank(sources, videos, prefs);
+
+        assertThat(ranked).hasSize(2);
+        assertThat(ranked.get(0).source().getProvider())
+                .as("non-demoted SIBNET must rank ahead of demoted JUTSU")
+                .isEqualTo(EpisodeSource.Provider.SIBNET);
+        assertThat(ranked.get(1).source().getProvider()).isEqualTo(EpisodeSource.Provider.JUTSU);
+    }
+
+    @Test
+    void demotedProvidersStillAppearInOutput() {
+        LocalDateTime now = LocalDateTime.of(2026, 5, 2, 12, 0);
+        List<EpisodeSource> sources = List.of(src(1L, EpisodeSource.Provider.JUTSU));
+        List<EpisodeVideo> videos = List.of(vid(1L, "720", now, 0));
+        RankingPreferences prefs = RankingPreferences.defaults();
+        prefs.now = now;
+        prefs.demotedProviders = java.util.Set.of(EpisodeSource.Provider.JUTSU);
+
+        List<RankedCandidate> ranked = ranker.rank(sources, videos, prefs);
+
+        assertThat(ranked).hasSize(1);
+        assertThat(ranked.get(0).source().getProvider()).isEqualTo(EpisodeSource.Provider.JUTSU);
+    }
+
+    @Test
     void rankerHandlesEmptyInputs() {
         assertThat(ranker.rank(List.of(), List.of(), null)).isEmpty();
         assertThat(ranker.rank(null, null, null)).isEmpty();
