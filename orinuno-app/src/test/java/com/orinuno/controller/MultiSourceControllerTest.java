@@ -4,6 +4,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.orinuno.jutsu.JutsuClient;
+import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
 import com.orinuno.model.dto.ContentDto;
@@ -28,14 +30,24 @@ class MultiSourceControllerTest {
     @Mock private EpisodeSourceRepository sourceRepository;
     @Mock private EpisodeVideoRepository videoRepository;
     @Mock private ContentService contentService;
+    @Mock private JutsuClient jutsuClient;
 
     private WebTestClient client;
 
     @BeforeEach
     void setUp() {
+        // Default: jut.su is healthy → not demoted. lenient() because not every controller test
+        // path actually reaches the ranker (sources-empty paths short-circuit before).
+        org.mockito.Mockito.lenient()
+                .when(jutsuClient.getDriftSnapshot())
+                .thenReturn(new JutsuDriftDetector().snapshot());
         MultiSourceController controller =
                 new MultiSourceController(
-                        sourceRepository, videoRepository, new MultiSourceRanker(), contentService);
+                        sourceRepository,
+                        videoRepository,
+                        new MultiSourceRanker(),
+                        contentService,
+                        jutsuClient);
         client = WebTestClient.bindToController(controller).build();
     }
 

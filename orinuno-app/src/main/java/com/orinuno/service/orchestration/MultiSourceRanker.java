@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -66,7 +67,8 @@ public class MultiSourceRanker {
 
     private double score(
             EpisodeSource src, EpisodeVideo v, RankingPreferences prefs, LocalDateTime now) {
-        double providerScore = providerScore(src.getProvider(), prefs.providerOrder);
+        double providerScore =
+                providerScore(src.getProvider(), prefs.providerOrder, prefs.demotedProviders);
         double freshnessScore = freshnessScore(v.getDecodedAt(), now);
         double qualityScore = qualityScore(v.getQuality());
         double reliabilityScore = reliabilityScore(v.getDecodeFailedCount());
@@ -76,8 +78,18 @@ public class MultiSourceRanker {
                 + prefs.weightReliability * reliabilityScore;
     }
 
-    static double providerScore(String provider, List<String> order) {
+    /**
+     * Provider preference score in {@code [0.0, 1.0]}. Providers in {@code demotedProviders} (e.g.
+     * jut.su when its SDK drift detector reports DEGRADED) are pinned to {@code 0.0} regardless of
+     * their position in {@code order}, so they fall to the bottom of the candidate list without
+     * being silently filtered out — the consumer can still pick them if every other candidate
+     * fails.
+     */
+    static double providerScore(String provider, List<String> order, Set<String> demoted) {
         if (provider == null || order == null || order.isEmpty()) {
+            return 0.0;
+        }
+        if (demoted != null && demoted.contains(provider)) {
             return 0.0;
         }
         int idx = order.indexOf(provider);
@@ -142,6 +154,15 @@ public class MultiSourceRanker {
         public double weightFreshness = 0.3;
         public double weightQuality = 0.2;
         public double weightReliability = 0.1;
+
+        /**
+         * Provider IDs (KODIK, JUTSU, …) currently demoted by external signals — primarily
+         * populated from the jut.su SDK drift detector. Demoted providers receive {@code
+         * providerScore = 0} regardless of their position in {@link #providerOrder}, so they fall
+         * to the bottom of the candidate list. They are NOT filtered out, so a caller can still
+         * pick them as a last resort.
+         */
+        public Set<String> demotedProviders = Set.of();
 
         /** Optional clock pin for deterministic tests. */
         public LocalDateTime now;

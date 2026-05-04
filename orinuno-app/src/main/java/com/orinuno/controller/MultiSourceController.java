@@ -1,5 +1,7 @@
 package com.orinuno.controller;
 
+import com.orinuno.jutsu.JutsuClient;
+import com.orinuno.jutsu.drift.JutsuDriftHealth;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
 import com.orinuno.model.dto.ContentDto;
@@ -18,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +56,7 @@ public class MultiSourceController {
     private final EpisodeVideoRepository videoRepository;
     private final MultiSourceRanker ranker;
     private final ContentService contentService;
+    private final JutsuClient jutsuClient;
 
     @GetMapping("/api/v1/anime/{contentId}/episodes/{season}/{episode}/sources")
     @Operation(
@@ -142,6 +146,18 @@ public class MultiSourceController {
                                 if (!order.isEmpty()) {
                                     prefs.providerOrder = order;
                                 }
+                            }
+                            // Auto-demote jut.su when its SDK drift detector is unhappy. Demoted
+                            // providers stay in the candidate list (so we can still pick them as
+                            // a last resort) but receive providerScore=0 — they fall to the
+                            // bottom of the ranking. Catches "the site changed its DOM" without
+                            // needing manual intervention.
+                            JutsuDriftHealth jutsuHealth = jutsuClient.getDriftSnapshot().health();
+                            if (jutsuHealth != JutsuDriftHealth.HEALTHY) {
+                                log.info(
+                                        "Demoting JUTSU in ranker — drift health is {}",
+                                        jutsuHealth);
+                                prefs.demotedProviders = Set.of(EpisodeSource.Provider.JUTSU);
                             }
                             List<RankedCandidate> ranked = ranker.rank(sources, videos, prefs);
                             return ResponseEntity.ok(toBody(contentId, season, episode, ranked));
