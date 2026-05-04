@@ -67,6 +67,19 @@
             <version>${jakarta-annotation.version}</version>
         </dependency>
 
+        <!--
+            HTML parser for the catalog/info/episode/notice subpackages. The episode-decoder
+            JutsuDecoder will keep using regex on the embedded JS (regex on minified JS stays
+            simpler and faster), but every DOM-shaped surface (filter form, anime card,
+            anime info page, notice feed) is parsed via jsoup so the schema-drift signals
+            (SELECTOR_MISS / UNKNOWN_FILTER_SLUG) come from real CSS selectors.
+        -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

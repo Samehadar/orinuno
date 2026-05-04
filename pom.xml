@@ -53,6 +53,12 @@
         <bucket4j.version>8.18.0</bucket4j.version>
         <micrometer.version>1.15.11</micrometer.version>
         <jakarta-annotation.version>2.1.1</jakarta-annotation.version>
+        <!--
+            HTML parser used by jutsu-sdk catalog/info/notice subpackages and orinuno-app.
+            Centralised here so SDK and app stay in lock-step; bumping in one place
+            forbids accidental drift.
+        -->
+        <jsoup.version>1.22.2</jsoup.version>
     </properties>
 
     <dependencyManagement>
@@ -110,6 +116,11 @@
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
