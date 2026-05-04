@@ -47,3 +47,7 @@ orinuno-app/data/*
 ### Environment ###
 .env
 *.env.local
+
+### Python (helper scripts under scripts/research/) ###
+__pycache__/
+*.pyc

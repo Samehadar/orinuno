@@ -15,11 +15,15 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 > `kodik-sdk-drift/` (PR3 — drift detector), `jutsu-sdk/` (Step 2),
 > `sibnet-sdk/` and `aniboom-sdk/` (Step 3). Step 4 wired the
 > orinuno-app controllers directly onto the SDK facades and dropped
-> the `*DecoderService` adapter shim. See
+> the `*DecoderService` adapter shim. Step 5 (ADR 0015) extended the
+> jut.su SDK with full browser parity (catalog / search / anime info /
+> episode meta / notice feed) plus a drift detector that auto-demotes
+> jut.su in `MultiSourceRanker` when upstream HTML changes. See
 > `docs/adr/0001-kodik-sdk-extraction.md`,
 > `docs/adr/0012-jutsu-sdk-extraction.md`,
-> `docs/adr/0013-sibnet-and-aniboom-sdk-extraction.md`, and
-> `docs/adr/0014-controllers-on-sdk-facades.md`.
+> `docs/adr/0013-sibnet-and-aniboom-sdk-extraction.md`,
+> `docs/adr/0014-controllers-on-sdk-facades.md`, and
+> `docs/adr/0015-jutsu-full-browser-parity.md`.
 
 | Area | Path |
 |------|------|
@@ -80,6 +84,7 @@ Controller → Service → Repository (MyBatis XML) → MySQL
 6. **Embed-link shortcut (IDEA-AP-6)**: `KodikEmbedController.resolve()` → `KodikEmbedService.resolve()` → `KodikEmbedHttpClient.getPlayerRaw()` → Kodik `GET /get-player`. Returns a single `EmbedLinkDto` for the supplied external id (`shikimori`, `kinopoisk`, `imdb`, `mdl`, `kodik`, `worldart_animation`, `worldart_cinema`) without writing to the DB or triggering the decoder. Use this when you just need an iframe URL; use `/parse/search` when you also need to ingest.
 7. **TTL Refresh**: `@Scheduled ParserService.refreshExpiredLinks()` → re-decodes links older than TTL
 8. **Retry Failed**: `@Scheduled ParserService.retryFailedDecodes()` → retries previously failed decodes
+9. **jut.su browser parity (ADR 0015)**: `JutsuApiController` under `/api/v1/sources/jutsu/` calls the `jutsu-sdk` facade directly — `/catalog`, `/search`, `/anime/{slug}`, `/episode`, `/notice`, `/notice/stream` (NDJSON), `/drift`. `JutsuDriftScheduledProbe` (`@Scheduled`, `@ConditionalOnProperty`) hits a canary set in lenient mode; `MultiSourceController` reads `JutsuClient.getDriftSnapshot().health()` and adds jut.su to `RankingPreferences.demotedProviders` whenever health ≠ HEALTHY (it still appears in results, but lands at the bottom).
 
 ### Database Tables
 
@@ -101,7 +106,8 @@ Kodik uses a custom obfuscation: ROT13 with shift +18 (mod 26) + URL-safe Base64
 - **Kodik tokens**: Managed by `KodikTokenRegistry` over `data/kodik_tokens.json` (gitignored). Tier model + `functions_availability` matrix mirror AnimeParsers' `kdk_tokns/tokens.json`. Full contract in `data/TOKENS.md`. Never commit real token values. First boot seeds from `KODIK_TOKEN` env, or scrapes `kodik-add.com/add-players.min.js` as a legacy fallback. **DEAD-tier is not terminal**: `validateAll()` re-probes dead entries every `orinuno.kodik.dead-revalidation-interval-minutes` (default 24h) and `markValid()` auto-promotes them back to `unstable` on first success — see BACKLOG `TD-TOKEN-1`.
 - **COALESCE upsert**: When upserting `kodik_episode_variant`, never overwrite a valid `mp4_link` with NULL. Use `COALESCE(VALUES(mp4_link), mp4_link)`.
 - **SQL injection protection**: `sortBy` and `order` parameters in `ContentController` are whitelisted. MyBatis `${...}` interpolation is used only for these validated fields.
-- **API key auth**: When `orinuno.security.api-key` is set, all `/api/v1/content`, `/api/v1/parse` (incl. `/parse/requests`), `/api/v1/export`, `/api/v1/download`, `/api/v1/kodik`, `/api/v1/calendar`, `/api/v1/embed` require `X-API-KEY` header.
+- **API key auth**: When `orinuno.security.api-key` is set, all `/api/v1/content`, `/api/v1/parse` (incl. `/parse/requests`), `/api/v1/export`, `/api/v1/download`, `/api/v1/kodik`, `/api/v1/calendar`, `/api/v1/embed`, `/api/v1/sources/jutsu/**` require `X-API-KEY` header.
+- **jut.su drift modes (ADR 0015)**: SDK parsers run in **lenient** mode by default — schema drift is logged + counted, parsing continues best-effort. **Strict** mode (`JutsuParserContext.strict()`) is reserved for `JutsuStrictReplayTest` against captured fixtures. Never flip production calls to strict; instead add a fixture and let strict-mode replay catch the regression.
 - **No-polling rule for parse-requests**: machine consumers (kodik-parser) MUST drive completion via `GET /api/v1/export/ready?updatedSince=…`, not by polling `GET /api/v1/parse/requests/{id}`. The list endpoint is allowed for backpressure (`?status=PENDING&limit=0` → `X-Total-Count`) only.
 - **Retry with backoff**: Decoder uses `Retry.backoff(maxRetries, 2s)` — do not remove retry logic.
 - **TTL links**: mp4 links from Kodik CDN expire. `mp4_link_decoded_at` tracks when a link was decoded. Scheduled task refreshes expired links.

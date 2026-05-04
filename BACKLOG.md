@@ -250,7 +250,7 @@ AnimeParsers hardcoded набор токенов в репозитории. orin
 | Kodik API client (`/search`, `/list`, `/translations`) | ✅ Полный (`KodikSearch`, `KodikList`, `get_translations()`) | ✅ Полный | **Паритет** |
 | Kodik video decode | Есть (базовый) | Полный (8-step + brute-force) | **Наше преимущество** |
 | Aniboom parser | Есть | Нет | **Gap** |
-| JutSu parser | Есть | Нет | **Gap** |
+| JutSu parser | Есть (decode-only, regex `<source>`) | ✅ Полный (decode + catalog + search + info + episode meta + notice feed + drift detector) — `jutsu-sdk` (ADR 0009 / 0012 / 0015) | **Наше преимущество** |
 | Shikimori parser | Есть | Нет | **Gap** |
 | HLS манифест | Абсолютизация URL | `HlsManifestService` | **Реализовано** |
 | Token brute-force | Есть | Нет (есть brute-force для ROT shift) | **Не нужно** (у нас есть токен) |
@@ -281,20 +281,24 @@ Aniboom (aniboom.one) — видеохостинг, альтернативный
 
 **Важно:** Aniboom меняет домены (aniboom.one → animejoy.ru и т.д.), нужна конфигурируемая base URL.
 
-#### IDEA-AP-2: JutSu парсер
+#### IDEA-AP-2: JutSu парсер — **DONE (ADR 0009 + ADR 0012 + ADR 0015, 2026-05-04)**
 
-**Приоритет:** Средний
-**Сложность:** Средняя
-**Референс:** `AnimeParsers/src/anime_parsers_ru/parser_jutsu.py`
+**Статус:** Реализовано полностью, с превышением исходного скоупа.
 
-JutSu (jut.su) — популярный anime-хостинг с прямыми mp4 ссылками. Проще Kodik, т.к. не использует шифрование.
+Что сделано (по итогам трёх ADR):
 
-**Алгоритм из AnimeParsers:**
-1. GET запрос к странице серии
-2. Regex для извлечения прямых mp4 URL из `<source src="...">` тегов
-3. URL доступны в нескольких качествах (360p, 480p, 720p, 1080p)
+1. **ADR 0009 — PLAYER-4 jut.su decoder.** Прямой `JutsuDecoder` извлекает mp4 URL по качествам (360p / 480p / 720p / 1080p) с поддержкой DLE-аутентификации, sticky-cookies, Cloudflare detection и premium-gate (`tab_need_plus` + `pixel.png`).
+2. **ADR 0012 — `jutsu-sdk` extraction.** Декодер вынесен в standalone Java SDK (`com.orinuno.jutsu.*`) — `JutsuClient`, `JutsuConfig`, `JutsuRateLimiter` (1 RPS Bucket4j hard cap), `JutsuSessionManager` (DLE cookies). Используется orinuno-app через Spring-конфигурацию, но сам модуль Spring-Boot-free.
+3. **ADR 0015 — full browser parity.** SDK расширен пятью новыми subpackage-ами:
+   - `catalog/` — `POST /anime/` пагинация + composable filter slug (`JutsuCatalogFilter` + `JutsuFilterSlugger`, ~1000-case property test) + orthogonal title search через `show_search`.
+   - `info/` — `GET /{slug}/` returns full anime info incl. all seasons + green (available) / black (premium-gated) episodes.
+   - `episode/` — `GET …/episode-N.html` returns lightweight metadata (slug, season, episode, titles, thumbnail, premium flag) without decoding.
+   - `notice/` — `POST /engine/ajax/site_notice.php` paginated upcoming-releases feed + backward walk + NDJSON streaming.
+   - `drift/` — thread-safe `JutsuDriftDetector` shared by all parsers; lenient mode in production, strict mode in `JutsuStrictReplayTest`. orinuno-app's `JutsuDriftScheduledProbe` runs canary calls and `MultiSourceController` auto-demотирует jut.su в `MultiSourceRanker.RankingPreferences.demotedProviders`, когда health ≠ HEALTHY.
 
-**Реализация:** Новый `JutsuService`, `JutsuController`.
+REST endpoints (orinuno-app): `GET /api/v1/sources/jutsu/{catalog,search,anime/{slug},episode,notice,notice/stream,drift}`. Capabilities advertised in `GET /api/v1/sources` with live `driftHealth` + `driftLifetimeEvents`.
+
+Превышение скоупа: исходная задача требовала «новый `JutsuService`, `JutsuController`» — мы дали полнофункциональный SDK с шестью операциями, drift-аппаратом и канареечным probe-ом.
 
 #### IDEA-AP-3: Shikimori интеграция
 
@@ -1074,7 +1078,7 @@ Kodik применяет многоуровневую защиту. Это зн�
 | **Мультисорсинг** | | | | | |
 | Kodik parser | ✅ | ✅ (search + decode) | ✅ (API only) | ✅ | ✅ |
 | Aniboom parser | ❌ | ❌ | ❌ | ❌ | ✅ |
-| JutSu parser | ❌ | ❌ | ❌ | ❌ | ✅ |
+| JutSu parser | ✅ Полный (decode + catalog + search + info + episode meta + notice feed + drift, ADR 0009/0012/0015) | ❌ | ❌ | ❌ | ✅ (decode-only) |
 | Shikimori integration | ❌ | ⚠️ (только search by ID) | ❌ | ❌ | ✅ |
 | Sibnet parser | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Token auto-discovery | ❌ | ❌ (hardcoded) | ❌ | ✅ | ✅ (`get_token()`) |
@@ -1093,7 +1097,7 @@ Kodik применяет многоуровневую защиту. Это зн�
 
 ### Наши слабые стороны
 
-1. **Single-source** — только Kodik, конкуренты (AnimeParsers) поддерживают 3+ источника
+1. **Single-source** — Kodik + jut.su (после ADR 0015 — full browser parity), Sibnet/Aniboom — decode-only. AnimeParsers поддерживает Kodik + Aniboom + JutSu + Shikimori; gap'ы остаются по Aniboom catalog/info и Shikimori discovery (см. IDEA-AP-1, IDEA-AP-3)
 2. **Self-maintained** — AnimeParsers поддерживается сообществом на GitHub
 3. **Java ecosystem** — тяжелее деплоить, чем Python/Node.js скрипты
 4. **Нет async jobs** — длительные операции блокируют HTTP connection
@@ -1126,7 +1130,7 @@ Kodik применяет многоуровневую защиту. Это зн�
 | 8d | IDEA-DRIFT-3: TrafficAnalyzer service | Средний | Высокая | Ждёт второго парсера |
 | 9 | IDEA-10: Rate limiter для потребителей | Средний | Средняя | — |
 | 10 | IDEA-AP-1: Aniboom парсер | Средний | Высокая | Абстракция VideoHostParser |
-| 11 | IDEA-AP-2: JutSu парсер | Средний | Средняя | Абстракция VideoHostParser |
+| 11 | IDEA-AP-2: JutSu парсер (full browser parity + drift) | ✅ Done (2026-05-04, ADR 0009/0012/0015) | Высокая | jutsu-sdk standalone module |
 | 11a | IDEA-AP-5: Calendar dump consumer | ✅ Done (2026-04-27) | Средняя | — |
 | 11g | IDEA-AP-6: Embed-link shortcut endpoint | ✅ Done (2026-05-02) | Низкая | KodikTokenRegistry |
 | 11b | IDEA-CAL-1: Refresh prioritization (next_episode_at) | Средний | Средняя | IDEA-AP-5 |
