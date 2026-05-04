@@ -1,12 +1,17 @@
 # jutsu-sdk
 
-Standalone reactive Java client for [jut.su](https://jut.su) episode pages.
+Standalone reactive Java client for [jut.su](https://jut.su).
 
-This module is the **second per-source SDK** extracted out of the [orinuno](../README.md) project (after [`kodik-sdk-drift`](../kodik-sdk-drift)). It owns three things end users care about:
+This module is the **second per-source SDK** extracted out of the [orinuno](../README.md) project (after [`kodik-sdk-drift`](../kodik-sdk-drift)). After ADR 0015 it offers **full browser parity** with jut.su, not just episode decoding:
 
 - **DLE authentication** with sticky cookies (`JutsuSessionManager`) — fetches the homepage POST shape, parses the four DLE-flavoured cookies, refreshes them on TTL expiry or explicit invalidation.
-- **1 RPS hard cap** outbound to `jut.su` (`JutsuRateLimiter`) — single Bucket4j bucket, hot-swappable RPS via a `DoubleSupplier`, reactive `Mono.delay`-based suspension (no thread blocking).
-- **Episode-page decoder** (`JutsuDecoder`) — fetches the episode page with the cached cookies, recognises the `tab_need_plus` overlay + `pixel.png` placeholder URLs (premium gate), classifies Cloudflare challenges and bot-detection responses with their own error codes, and returns one mp4 URL per quality bucket.
+- **1 RPS hard cap** outbound to `jut.su` (`JutsuRateLimiter`) — single Bucket4j bucket, hot-swappable RPS via a `DoubleSupplier`, reactive `Mono.delay`-based suspension (no thread blocking). Shared across every subpackage so adding clients does not multiply outbound traffic.
+- **Episode-page decoder** (`decoder/JutsuDecoder`) — fetches the episode page with the cached cookies, recognises the `tab_need_plus` overlay + `pixel.png` placeholder URLs (premium gate), classifies Cloudflare challenges and bot-detection responses with their own error codes, and returns one mp4 URL per quality bucket.
+- **Catalog browser** (`catalog/JutsuCatalogClient` + `filter/JutsuFilterSlugger`) — paginated `POST /anime/` with composable filters (genre, type, year, sort) and orthogonal title search via `show_search`. Filter slug round-trips through `parse → toString → parse` (~1000-case property test).
+- **Anime info** (`info/JutsuAnimeInfoClient`) — `GET /{slug}/` returns the full season list + every episode (green-coloured = available, black-coloured = premium-gated).
+- **Episode metadata** (`episode/JutsuEpisodeMetaClient`) — `GET …/episode-N.html` returns slug / season / episode / titles / thumbnail / `premiumGated` without actually decoding the player.
+- **Upcoming releases feed** (`notice/JutsuNoticeClient`) — `POST /engine/ajax/site_notice.php` paginated cursor, including a backward walk (`Flux<JutsuNoticeFeed>`) and a flattened `Flux<JutsuNoticeEntry>` for NDJSON streaming.
+- **Schema-drift detection** (`drift/`) — every parser raises typed `JutsuDriftSignal` events through a thread-safe `JutsuDriftDetector`. Lenient mode keeps best-effort parsing alive in production; **strict mode** (used by `JutsuStrictReplayTest` + the `orinuno-app` canary probe) escalates any signal to `JutsuDriftException` so a parser regression fails CI before it ships.
 
 It is intentionally Spring-Boot-free: the only Spring dependency is `spring-webflux` (for `WebClient`) and `spring-context` (transitively required by WebClient on Spring 6). No `@Component`, no auto-configuration, no `@ConfigurationProperties` — consumers wire the SDK manually.
 
@@ -41,6 +46,46 @@ if (result.success()) {
 } else {
     System.err.println("error: " + result.errorCode());
 }
+```
+
+### Other operations
+
+```java
+// Browse the anime catalog with filters
+JutsuCatalogPage page = client.browseCatalog(
+        JutsuCatalogRequest.builder()
+                .filter(JutsuCatalogFilter.builder()
+                        .type(JutsuType.SERIES)
+                        .genre(JutsuGenre.ACTION)
+                        .year(JutsuYear.year(2024))
+                        .sort(JutsuSort.NEWEST_FIRST)
+                        .build())
+                .page(2)
+                .build())
+        .block();
+
+// Title search composes orthogonally with filters
+JutsuCatalogPage hits = client.searchByTitle("naruto", 1).block();
+
+// Full anime info incl. seasons + episodes
+JutsuAnimeInfo info = client.getAnimeInfo("naruto").block();
+
+// Lightweight episode meta (no decode)
+JutsuEpisodeMeta meta = client
+        .getEpisodeMeta("https://jut.su/naruto/episode-1.html")
+        .block();
+
+// Latest "upcoming releases" notice feed page
+JutsuNoticeFeed latest = client.getLatestNoticeFeed().block();
+
+// Stream the entire historical feed as one Flux of entries
+client.streamNoticeEntries(latest.requestedNoticeId())
+        .doOnNext(entry -> System.out.println(entry.title()))
+        .blockLast();
+
+// Live drift snapshot for dashboards / orchestrators
+JutsuDriftSnapshot snapshot = client.getDriftSnapshot();
+System.out.println(snapshot.health() + " events=" + snapshot.lifetimeEvents());
 ```
 
 ## Configuration
@@ -92,14 +137,35 @@ public class JutsuSdkConfiguration {
     }
 
     @Bean
-    JutsuClient jutsuClient(JutsuConfig cfg, JutsuRateLimiter rl,
-                            JutsuSessionManager sm, WebClient.Builder wcb) {
-        return new JutsuClient(cfg, rl, sm, wcb);
+    JutsuDriftDetector jutsuDriftDetector() { return new JutsuDriftDetector(); }
+
+    @Bean
+    JutsuClient jutsuClient(JutsuConfig cfg,
+                            JutsuRateLimiter rl,
+                            JutsuSessionManager sm,
+                            JutsuDriftDetector drift,
+                            WebClient.Builder wcb) {
+        return JutsuClient.builder()
+                .config(cfg)
+                .rateLimiter(rl)
+                .sessionManager(sm)
+                .driftDetector(drift)
+                .webClientBuilder(wcb)
+                .build();
     }
 }
 ```
 
-Notice that the same `JutsuRateLimiter` and `JutsuSessionManager` beans are reused by `JutsuClient` — building a fresh limiter inside `jutsuClient(...)` would silently double the outbound RPS budget.
+Notice that the same `JutsuRateLimiter`, `JutsuSessionManager` and `JutsuDriftDetector` beans are reused by `JutsuClient` — building a fresh limiter inside `jutsuClient(...)` would silently double the outbound RPS budget, and a fresh detector would split drift counters across two snapshots.
+
+### Schema drift in production
+
+Every parser is drift-aware (`drift/`). In **lenient** mode (the default) the SDK logs the signal and returns whatever it could parse; in **strict** mode it throws `JutsuDriftException`. Strict mode is used by:
+
+- `JutsuStrictReplayTest` — re-runs every parser against its captured fixture and asserts zero drift events. This is the regression net.
+- orinuno-app's `JutsuDriftScheduledProbe` — calls a canary set of endpoints periodically and surfaces health on `GET /api/v1/sources` so downstream rankers can demote jut.su when something changes upstream.
+
+Use `JutsuClient.getDriftSnapshot()` to read the live signal yourself.
 
 ## Quirks
 
@@ -111,7 +177,12 @@ The decoder handles three known jut.su weirdnesses; if you hit a new one, please
 
 ## Versioning
 
-This module follows the parent reactor's version (`0.1.0` today). Public API surface is `com.orinuno.jutsu.JutsuClient`, `JutsuConfig`, `JutsuDecodeResult`, `JutsuErrorCodes`, plus the package-level entry points (`auth.JutsuSessionManager`, `decoder.JutsuDecoder`, `parser.JutsuSourceParser`, `ratelimit.JutsuRateLimiter`). Breaking changes here will bump the minor version.
+This module follows the parent reactor's version (`0.1.0` today). Public API surface:
+
+- Facade: `com.orinuno.jutsu.JutsuClient`, `JutsuConfig`, `JutsuDecodeResult`, `JutsuErrorCodes`.
+- Subpackages: `auth.JutsuSessionManager`, `catalog.*`, `decoder.JutsuDecoder`, `drift.*`, `episode.*`, `filter.*`, `info.*`, `notice.*`, `parser.JutsuSourceParser`, `ratelimit.JutsuRateLimiter`.
+
+Breaking changes here will bump the minor version.
 
 ## Reference projects
 
@@ -122,5 +193,6 @@ This module follows the parent reactor's version (`0.1.0` today). Public API sur
 
 - [ADR 0009](../docs/adr/0009-player4-jutsu-decoder.md) — original PLAYER-4 decision (decoder design)
 - [ADR 0012](../docs/adr/0012-jutsu-sdk-extraction.md) — extraction into this module (Step 2 of the API/module split)
+- [ADR 0015](../docs/adr/0015-jutsu-full-browser-parity.md) — full browser parity (catalog / search / info / episode meta / notice feed) + drift detection
 - [`docs/quirks-and-hacks.md`](../docs/quirks-and-hacks.md) — full DLE auth + Yandex CDN session-binding writeup
 - [`docs/runbooks/provider-cdn-block.md`](../docs/runbooks/provider-cdn-block.md) — operator runbook for `JUTSU_*` error codes
