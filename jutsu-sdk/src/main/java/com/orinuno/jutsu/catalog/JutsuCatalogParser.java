@@ -196,8 +196,11 @@ public final class JutsuCatalogParser {
      * Map a granular 4-digit year (as it appears on entry cards, e.g., {@code anime_year_2018}) to
      * the bucket {@link JutsuYear} that the form filter uses. Returns empty when the slug is not a
      * 4-digit year or falls outside the supported range.
+     *
+     * <p>Public for cross-package reuse (e.g. by {@code JutsuAnimeInfoParser}); see ADR-0015 for
+     * why we keep this on the catalog parser instead of {@link JutsuYear} itself.
      */
-    static Optional<JutsuYear> mapGranularYear(String slugPart) {
+    public static Optional<JutsuYear> mapGranularYear(String slugPart) {
         if (slugPart == null || slugPart.length() != 4) return Optional.empty();
         int parsed;
         try {
