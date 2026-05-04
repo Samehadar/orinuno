@@ -98,19 +98,7 @@ public class SourcesController {
                                 false,
                                 "Token-driven; configured via KODIK_TOKEN env var. See"
                                         + " /api/v1/parse and /api/v1/kodik for the full surface."),
-                        provider(
-                                "jutsu",
-                                "JutSu",
-                                "JutSu free-and-premium anime player. Premium content needs a"
-                                        + " jut.su+ account.",
-                                List.of("decode", "stream"),
-                                true,
-                                jutsuCredsConfigured,
-                                jutsuCredsConfigured
-                                        ? "JUTSU_USERNAME / JUTSU_PASSWORD configured — premium"
-                                                + " content will be decoded automatically."
-                                        : "No JUTSU_USERNAME / JUTSU_PASSWORD set — premium"
-                                                + " episodes will return JUTSU_PREMIUM_REQUIRED."),
+                        jutsuCapabilities(jutsuCredsConfigured),
                         provider(
                                 "sibnet",
                                 "Sibnet",
@@ -188,6 +176,41 @@ public class SourcesController {
                                             ProviderDecodeResult.failure(
                                                     "UNSUPPORTED_PROVIDER:" + key)));
         };
+    }
+
+    /**
+     * jut.su entry for the capabilities listing. Pulled out into its own helper so the live drift
+     * snapshot is wired in cleanly: dashboards and orchestrators can read {@code /api/v1/sources}
+     * alone and immediately see whether jut.su is currently HEALTHY / DEGRADED without making a
+     * second call to {@code /api/v1/sources/jutsu/drift}.
+     */
+    private Map<String, Object> jutsuCapabilities(boolean credentialsConfigured) {
+        Map<String, Object> p =
+                provider(
+                        "jutsu",
+                        "JutSu",
+                        "JutSu free-and-premium anime player. Premium content needs a jut.su+"
+                                + " account.",
+                        List.of(
+                                "catalog",
+                                "search",
+                                "anime-info",
+                                "episode-meta",
+                                "notice-feed",
+                                "decode",
+                                "stream",
+                                "drift-health"),
+                        true,
+                        credentialsConfigured,
+                        credentialsConfigured
+                                ? "JUTSU_USERNAME / JUTSU_PASSWORD configured — premium content"
+                                        + " will be decoded automatically."
+                                : "No JUTSU_USERNAME / JUTSU_PASSWORD set — premium episodes"
+                                        + " will return JUTSU_PREMIUM_REQUIRED.");
+        // Live drift signal so callers don't need a second round-trip.
+        p.put("driftHealth", jutsuClient.getDriftSnapshot().health().name());
+        p.put("driftLifetimeEvents", jutsuClient.getDriftSnapshot().lifetimeEvents());
+        return p;
     }
 
     private static Map<String, Object> provider(
