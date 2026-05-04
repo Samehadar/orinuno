@@ -50,12 +50,9 @@ class JutsuDriftScheduledProbeTest {
                                         null,
                                         null,
                                         Optional.empty(),
-                                        List.of(),
-                                        Optional.empty(),
                                         Set.of(),
                                         Set.of(),
                                         null,
-                                        List.of(),
                                         List.of())));
         when(jutsuClient.getLatestNoticeFeed())
                 .thenReturn(Mono.just(new JutsuNoticeFeed(0, List.of())));
@@ -97,12 +94,9 @@ class JutsuDriftScheduledProbeTest {
                                         null,
                                         null,
                                         Optional.empty(),
-                                        List.of(),
-                                        Optional.empty(),
                                         Set.of(),
                                         Set.of(),
                                         null,
-                                        List.of(),
                                         List.of())));
         when(jutsuClient.getLatestNoticeFeed())
                 .thenReturn(Mono.just(new JutsuNoticeFeed(0, List.of())));
