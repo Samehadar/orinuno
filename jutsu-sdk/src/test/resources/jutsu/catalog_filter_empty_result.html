@@ -1,0 +1,56 @@
+
+
+<script type="text/javascript">
+$(document).ready(function() {
+var anime_page_next = false;
+$( ".all_anime_global" ).tooltip({close: function(event, ui)
+   				{
+   						$(ui.tooltip).unbind('mouseenter');
+   						ui.tooltip.one('mouseenter', function()
+   								{
+   										var clone = $(ui.tooltip).clone();
+   										clone.mouseleave(function()
+   												{
+   														clone.fadeOut(300, function()
+   																{clone.remove();
+   																}
+   														)
+   												}
+   										);
+
+   										$(this).parent().append(clone);
+   										clone.css({opacity: 1, visibility: 'visible'});
+
+   								}
+   						);
+
+   				},
+   				items: ".all_anime_tooltip",
+   				position: { my: "right top" },
+   				classes: {
+    "ui-tooltip": "the_hildi all_anime_tooltip_in"
+   				}
+
+   		});
+
+$(".all_anime_global").each(function(indx, element){
+//    var cont_here = $(element).find(".all_anime_tooltip").attr("id");
+//$(element).tooltip( "option", "content", anime_id_descrs[cont_here] );
+//$(element).tooltip( "option", "content", $("#tooltip_" + cont_here).attr("content") );
+var cont_here = $(element).find(".tooltip_of_the_anime").attr("content");
+$(element).tooltip( "option", "content", cont_here );
+});
+
+if ( ! anime_page_next ) {
+    setTimeout(function() {
+        $(".load_more_anime").css({"display":"none"});
+    }, 100);
+}
+
+$(".all_anime_mark_viewed").unbind("click", mark_anime_viewed).click(mark_anime_viewed);
+$(".all_anime_mark_viewed_star span").unbind("click", mark_anime_viewed_star).click(mark_anime_viewed_star);
+
+});
+
+
+</script> 

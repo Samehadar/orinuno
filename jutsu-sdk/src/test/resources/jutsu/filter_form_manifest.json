@@ -1,0 +1,187 @@
+{
+  "ganres": [
+    {
+      "slug": "adventure",
+      "label": "Приключения"
+    },
+    {
+      "slug": "action",
+      "label": "Боевик"
+    },
+    {
+      "slug": "comedy",
+      "label": "Комедия"
+    },
+    {
+      "slug": "everyday",
+      "label": "Повседневность"
+    },
+    {
+      "slug": "romance",
+      "label": "Романтика"
+    },
+    {
+      "slug": "drama",
+      "label": "Драма"
+    },
+    {
+      "slug": "fantastic",
+      "label": "Фантастика"
+    },
+    {
+      "slug": "fantasy",
+      "label": "Фэнтези"
+    },
+    {
+      "slug": "mystic",
+      "label": "Мистика"
+    },
+    {
+      "slug": "detective",
+      "label": "Детектив"
+    },
+    {
+      "slug": "thriller",
+      "label": "Триллер"
+    },
+    {
+      "slug": "psychology",
+      "label": "Психология"
+    }
+  ],
+  "types": [
+    {
+      "slug": "fighting",
+      "label": "Боевые искусства"
+    },
+    {
+      "slug": "vampire",
+      "label": "Вампиры"
+    },
+    {
+      "slug": "military",
+      "label": "Военное"
+    },
+    {
+      "slug": "demons",
+      "label": "Демоны"
+    },
+    {
+      "slug": "game",
+      "label": "Игры"
+    },
+    {
+      "slug": "historical",
+      "label": "История"
+    },
+    {
+      "slug": "space",
+      "label": "Космос"
+    },
+    {
+      "slug": "magic",
+      "label": "Магия"
+    },
+    {
+      "slug": "mecha",
+      "label": "Меха"
+    },
+    {
+      "slug": "music",
+      "label": "Музыка"
+    },
+    {
+      "slug": "parody",
+      "label": "Пародия"
+    },
+    {
+      "slug": "police",
+      "label": "Полиция"
+    },
+    {
+      "slug": "samurai",
+      "label": "Самураи"
+    },
+    {
+      "slug": "shojo",
+      "label": "Сёдзё"
+    },
+    {
+      "slug": "shonen",
+      "label": "Сёнен"
+    },
+    {
+      "slug": "sport",
+      "label": "Спорт"
+    },
+    {
+      "slug": "superpower",
+      "label": "Суперсила"
+    },
+    {
+      "slug": "horror",
+      "label": "Ужасы"
+    },
+    {
+      "slug": "school",
+      "label": "Школа"
+    }
+  ],
+  "years": [
+    {
+      "slug": "ongoing",
+      "label": "Онгоинг"
+    },
+    {
+      "slug": "2026",
+      "label": "2026"
+    },
+    {
+      "slug": "2025",
+      "label": "2025"
+    },
+    {
+      "slug": "2024",
+      "label": "2024"
+    },
+    {
+      "slug": "2015-2023",
+      "label": "2015-2023"
+    },
+    {
+      "slug": "2008-2014",
+      "label": "2008-2014"
+    },
+    {
+      "slug": "2000-2007",
+      "label": "2000-2007"
+    },
+    {
+      "slug": "before2000",
+      "label": "до 2000"
+    }
+  ],
+  "order": [
+    {
+      "slug": "",
+      "label": "По рейтингу",
+      "note": "BY_RATING — elided in URL"
+    },
+    {
+      "slug": "order-by-name",
+      "label": "По алфавиту"
+    },
+    {
+      "slug": "order-by-count",
+      "label": "По кол-ву серий"
+    },
+    {
+      "slug": "order-by-date",
+      "label": "По году выхода"
+    },
+    {
+      "slug": "order-by-add",
+      "label": "По дате добавл."
+    }
+  ]
+}
