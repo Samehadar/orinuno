@@ -4,8 +4,8 @@ import com.orinuno.jutsu.JutsuConfig;
 import com.orinuno.jutsu.JutsuDecodeResult;
 import com.orinuno.jutsu.JutsuErrorCodes;
 import com.orinuno.jutsu.auth.JutsuSessionManager;
+import com.orinuno.jutsu.parser.JutsuHtmlCharset;
 import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
-import java.nio.charset.Charset;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -197,21 +197,12 @@ public final class JutsuDecoder {
      * page as UTF-8 mojibakes the cyrillic premium-overlay text, but our markers are all ASCII so
      * it does not affect detection — this is purely defence-in-depth for any future cyrillic
      * matchers we might add.
+     *
+     * <p>Delegates to {@link JutsuHtmlCharset#decode(byte[], MediaType)} so the catalog/info/notice
+     * parsers get the exact same fallback behaviour without duplicating the resolution logic.
      */
     static String decodeBytes(byte[] bytes, MediaType contentType) {
-        if (bytes == null || bytes.length == 0) return "";
-        Charset cs = null;
-        if (contentType != null && contentType.getCharset() != null) {
-            cs = contentType.getCharset();
-        }
-        if (cs == null) {
-            try {
-                cs = Charset.forName("windows-1251");
-            } catch (Exception fallback) {
-                cs = java.nio.charset.StandardCharsets.UTF_8;
-            }
-        }
-        return new String(bytes, cs);
+        return JutsuHtmlCharset.decode(bytes, contentType);
     }
 
     public static JutsuDecodeResult extractFromHtml(String html) {
