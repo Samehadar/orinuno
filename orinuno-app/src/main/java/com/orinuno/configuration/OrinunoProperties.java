@@ -49,7 +49,7 @@ public class OrinunoProperties {
      * Inbound rate limit applied to {@code POST /api/v1/parse/requests}. Per-consumer
      * (X-Created-By) token bucket. Surfaced as the {@code orinuno_inbound_throttle_total}
      * Prometheus counter and the integration health endpoint. See
-     * operations/kodik-parser-integration.
+     * operations/downstream consumer-integration.
      */
     @Data
     public static class InboundRateLimitProperties {
@@ -139,11 +139,40 @@ public class OrinunoProperties {
         private long sessionTtlMinutes = 240;
         private int loginTimeoutSeconds = 15;
 
+        /**
+         * Drift canary probe knobs. The probe periodically calls a small fixed set of jut.su
+         * endpoints (latest notice feed, OnePunch Man anime info, page 1 of the unfiltered
+         * catalog). Drift signals observed during these calls are aggregated into the SDK drift
+         * detector and read by {@code MultiSourceRanker} to decide whether to demote jut.su.
+         *
+         * <p>Disabled by default in tests; enabled in production via {@code
+         * orinuno.providers.jutsu.drift-probe.enabled=true}.
+         */
+        private DriftProbeProperties driftProbe = new DriftProbeProperties();
+
         public boolean hasCredentials() {
             return username != null
                     && !username.isBlank()
                     && password != null
                     && !password.isBlank();
+        }
+
+        @Data
+        public static class DriftProbeProperties {
+            private boolean enabled = false;
+
+            /** Minutes between probe runs. Default 6 hours = 360 minutes. */
+            private long intervalMinutes = 360;
+
+            /** Initial delay before the first probe run, in seconds. */
+            private long initialDelaySeconds = 60;
+
+            /**
+             * Anime slug used for the info-page canary probe. Must be a slug that exists on the
+             * site for the lifetime of the probe; defaults to OnePunch Man because we have a
+             * captured fixture for it.
+             */
+            private String canonicalSlug = "onepuunchman";
         }
     }
 
