@@ -51,8 +51,3 @@ orinuno-app/data/*
 ### Python (helper scripts under scripts/research/) ###
 __pycache__/
 *.pyc
-
-# Per-source service runtime data when launched via `mvn spring-boot:run`
-# from each module dir. Mirror the orinuno-app/data/* exclusion.
-orinuno-source-kodik/data/
-orinuno-source-jutsu/data/

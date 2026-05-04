@@ -291,8 +291,8 @@ Aniboom (aniboom.one) — видеохостинг, альтернативный
 2. **ADR 0012 — `jutsu-sdk` extraction.** Декодер вынесен в standalone Java SDK (`com.orinuno.jutsu.*`) — `JutsuClient`, `JutsuConfig`, `JutsuRateLimiter` (1 RPS Bucket4j hard cap), `JutsuSessionManager` (DLE cookies). Используется orinuno-app через Spring-конфигурацию, но сам модуль Spring-Boot-free.
 3. **ADR 0015 — full browser parity.** SDK расширен пятью новыми subpackage-ами:
    - `catalog/` — `POST /anime/` пагинация + composable filter slug (`JutsuCatalogFilter` + `JutsuFilterSlugger`, ~1000-case property test) + orthogonal title search через `show_search`.
-   - `info/` — `GET /{slug}/` returns full anime info incl. all seasons + green (available) / black (premium-gated) episodes, **plus** `films: [JutsuFilmListing]` + `totalFilmCount()` for full-length movies attached to a series (anchors `/{slug}/film-N.html`, follow-up 2026-05-08).
-   - `episode/` — `GET …/episode-N.html` **or** `GET …/film-N.html` returns a sealed `JutsuPageMeta` (`JutsuEpisodeMeta` для серий, `JutsuFilmMeta` для полнометражных фильмов) с slug / titles / thumbnail / premium flag без декодирования. REST-проекция — `JutsuPageMetaDto` с дискриминатором `kind: "episode" | "film"` (Jackson `@JsonTypeInfo`).
+   - `info/` — `GET /{slug}/` returns full anime info incl. all seasons + green (available) / black (premium-gated) episodes.
+   - `episode/` — `GET …/episode-N.html` returns lightweight metadata (slug, season, episode, titles, thumbnail, premium flag) without decoding.
    - `notice/` — `POST /engine/ajax/site_notice.php` paginated upcoming-releases feed + backward walk + NDJSON streaming.
    - `drift/` — thread-safe `JutsuDriftDetector` shared by all parsers; lenient mode in production, strict mode in `JutsuStrictReplayTest`. orinuno-app's `JutsuDriftScheduledProbe` runs canary calls and `MultiSourceController` auto-demотирует jut.su в `MultiSourceRanker.RankingPreferences.demotedProviders`, когда health ≠ HEALTHY.
 
