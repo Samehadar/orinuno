@@ -4,6 +4,7 @@ import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.JutsuConfig;
 import com.orinuno.jutsu.auth.JutsuSessionManager;
+import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
@@ -65,19 +66,38 @@ public class JutsuSdkConfiguration {
     }
 
     /**
+     * Process-wide drift detector for the jut.su SDK. Exposed as a bean so the canary scheduled
+     * probe and the {@code MultiSourceRanker} both see the same lifetime event totals as the client
+     * itself does.
+     */
+    @Bean
+    public JutsuDriftDetector jutsuDriftDetector() {
+        return new JutsuDriftDetector();
+    }
+
+    /**
      * The high-level facade. Most callers prefer this; the lower-level beans above are exposed for
-     * the cases where we need direct access to the cookie jar (CDN proxy) or the bucket (RPS
-     * sharing).
+     * the cases where we need direct access to the cookie jar (CDN proxy), the bucket (RPS
+     * sharing), or the drift detector (canary probe, MultiSourceRanker).
      */
     @Bean
     public JutsuClient jutsuClient(
             JutsuConfig config,
             JutsuRateLimiter rateLimiter,
             JutsuSessionManager sessionManager,
+            JutsuDriftDetector driftDetector,
+            MeterRegistry meterRegistry,
             WebClient.Builder webClientBuilder) {
-        // We pass the same singletons we just registered so the orchestrator and the
-        // controller/proxy-controller side share the same buckets and cookie jars. Building a
-        // new JutsuClient here would silently double the outbound RPS budget.
-        return new JutsuClient(config, rateLimiter, sessionManager, webClientBuilder);
+        // Share the same rate limiter, session manager, and drift detector beans the controllers
+        // already inject — the SDK Builder reuses them so the outbound RPS budget and cookie jar
+        // stay coherent across SDK and direct controller calls.
+        return JutsuClient.builder()
+                .config(config)
+                .rateLimiter(rateLimiter)
+                .sessionManager(sessionManager)
+                .driftDetector(driftDetector)
+                .meterRegistry(meterRegistry)
+                .webClientBuilder(webClientBuilder)
+                .build();
     }
 }
