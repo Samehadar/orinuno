@@ -150,6 +150,15 @@ public class OrinunoProperties {
          */
         private DriftProbeProperties driftProbe = new DriftProbeProperties();
 
+        /**
+         * Catalog sync worker (ARCH-0016 P1a Step 2). When enabled, periodically full-crawls the
+         * jut.su anime catalog into the local L1 cache ({@code jutsu_title}) so REST reads can be
+         * served from the DB instead of hammering upstream on every request. Disabled by default —
+         * flip {@code enabled} after applying the P1a Liquibase migrations and confirming the
+         * outbound rate is acceptable for your jut.su account / IP.
+         */
+        private SyncProperties sync = new SyncProperties();
+
         public boolean hasCredentials() {
             return username != null
                     && !username.isBlank()
@@ -173,6 +182,42 @@ public class OrinunoProperties {
              * captured fixture for it.
              */
             private String canonicalSlug = "onepuunchman";
+        }
+
+        /**
+         * Knobs for {@code JutsuCatalogSyncService} (ARCH-0016 P1a Step 2). The full-crawl loop
+         * walks {@code POST /anime/} page by page, mapping each entry into {@code jutsu_title}. It
+         * resumes from the persisted {@code full_crawl_last_page} after a crash and restarts at
+         * page 1 once the previous full crawl completed.
+         *
+         * <p>Default cadence (24 h, max 30 pages per tick = 900 titles per tick at 1 RPS) is
+         * conservative; the whole catalog (~3500 entries on jut.su, growing) finishes in roughly 4
+         * ticks. Tighten the interval / raise {@code maxPagesPerTick} only if your account has a
+         * separate rate-limit agreement with jut.su — the SDK still rate-limits at {@code
+         * orinuno.providers.jutsu.rate-limit-rps} regardless.
+         */
+        @Data
+        public static class SyncProperties {
+            private boolean enabled = false;
+            private FullCrawlProperties fullCrawl = new FullCrawlProperties();
+
+            @Data
+            public static class FullCrawlProperties {
+                private boolean enabled = false;
+
+                /** Hours between full-crawl ticks. Default 24h. */
+                private long intervalHours = 24;
+
+                /** Initial delay before the first tick, in seconds. */
+                private long initialDelaySeconds = 300;
+
+                /**
+                 * Hard cap on the number of catalog pages fetched per tick. Each page costs one
+                 * outbound request against the jut.su RPS budget; default 30 pages × 30 entries =
+                 * 900 titles per tick.
+                 */
+                private int maxPagesPerTick = 30;
+            }
         }
     }
 
