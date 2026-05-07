@@ -122,6 +122,13 @@ orinuno:
       rate-limit-rps: ${JUTSU_RATE_LIMIT_RPS:1.0}
       session-ttl-minutes: ${JUTSU_SESSION_TTL_MINUTES:240}
       login-timeout-seconds: ${JUTSU_LOGIN_TIMEOUT_SECONDS:15}
+      sync:
+        enabled: ${JUTSU_SYNC_ENABLED:false}
+        full-crawl:
+          enabled: ${JUTSU_SYNC_FULL_CRAWL_ENABLED:false}
+          interval-hours: ${JUTSU_SYNC_FULL_CRAWL_INTERVAL_HOURS:24}
+          initial-delay-seconds: ${JUTSU_SYNC_FULL_CRAWL_INITIAL_DELAY_SECONDS:300}
+          max-pages-per-tick: ${JUTSU_SYNC_FULL_CRAWL_MAX_PAGES_PER_TICK:30}
   dumps:
     enabled: ${ORINUNO_DUMPS_ENABLED:false}
     base-url: ${ORINUNO_DUMPS_BASE_URL:https://dumps.kodikres.com}
