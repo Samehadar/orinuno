@@ -18,12 +18,16 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 > the `*DecoderService` adapter shim. Step 5 (ADR 0015) extended the
 > jut.su SDK with full browser parity (catalog / search / anime info /
 > episode meta / notice feed) plus a drift detector that auto-demotes
-> jut.su in `MultiSourceRanker` when upstream HTML changes. See
+> jut.su in `MultiSourceRanker` when upstream HTML changes. ADR 0016
+> fixes the architecture trajectory: stay as a modular monolith with a
+> universal canonical catalog (L3) as a separate bounded context;
+> split into per-source services only when explicit triggers fire. See
 > `docs/adr/0001-kodik-sdk-extraction.md`,
 > `docs/adr/0012-jutsu-sdk-extraction.md`,
 > `docs/adr/0013-sibnet-and-aniboom-sdk-extraction.md`,
-> `docs/adr/0014-controllers-on-sdk-facades.md`, and
-> `docs/adr/0015-jutsu-full-browser-parity.md`.
+> `docs/adr/0014-controllers-on-sdk-facades.md`,
+> `docs/adr/0015-jutsu-full-browser-parity.md`, and
+> `docs/adr/0016-architecture-trajectory.md`.
 
 | Area | Path |
 |------|------|
@@ -88,16 +92,60 @@ Controller → Service → Repository (MyBatis XML) → MySQL
 
 ### Database Tables
 
-| Table | Purpose | Unique key |
-|-------|---------|------------|
-| `kodik_content` | Content metadata | `kinopoisk_id` |
-| `kodik_episode_variant` | Episode/translation variants with mp4 links | `(content_id, season, episode, translation_id)` |
-| `kodik_proxy` | Proxy pool | `(host, port)` |
-| `orinuno_parse_request` | Async parse-request log (Phase 2) | `request_hash` (active rows only) |
+Tables are grouped by bounded context (ADR 0016). Cross-context FK constraints are forbidden; all cross-context references are soft.
+
+| Context | Table | Purpose | Unique key |
+|---------|-------|---------|------------|
+| `kodik` | `kodik_content` | Content metadata | `kinopoisk_id` |
+| `kodik` | `kodik_episode_variant` | Episode/translation variants with mp4 links | `(content_id, season, episode, translation_id)` |
+| `kodik` | `kodik_proxy` | Proxy pool | `(host, port)` |
+| `kodik` | `kodik_decoder_path_cache` | Persistent cache of decoder POST path per netloc | `netloc` |
+| `kodik` | `kodik_calendar_state` | Last calendar snapshot per shikimori_id (CAL-6) | `shikimori_id` |
+| `kodik` | `kodik_calendar_outbox` | Calendar deltas with watermark | auto-incrementing seq |
+| `kodik` | `kodik_content_enrichment` | Raw + enriched metadata (Shikimori/MAL/Kinopoisk) (META-1) | `kodik_content_id` |
+| `jutsu` | `jutsu_title` (P1a) | jut.su catalog mirror | `slug` |
+| `jutsu` | `jutsu_episode` (P1a) | jut.su episode metadata + qualities | `(title_slug, season, episode)` |
+| `jutsu` | `jutsu_sync_state` (P1a) | sync cursor (full crawl + notice feed) | singleton |
+| `catalog` | `catalog_content` (P1b) | Universal canonical record | `id` |
+| `catalog` | `catalog_content_external_id` (P1b) | source-typed external IDs | `(source_type, external_id)` |
+| `catalog` | `catalog_episode` (P1b) | Canonical episodes | `(content_id, season, episode)` |
+| `catalog` | `catalog_episode_source_link` (P1b) | M:N link canonical → per-source `episode_source` | `(catalog_episode_id, episode_source_id)` |
+| `core` | `orinuno_parse_request` | Async parse-request log (Phase 2) | `request_hash` (active rows only) |
+| `core` | `orinuno_dump_state` | Public Kodik dump poll state | `dump_kind` |
+| `core` | `episode_source` | provider-agnostic source-per-episode (ADR 0005) | `(content_id, season, episode, source_type, source_id)` |
+| `core` | `episode_video` | decoded URLs per quality with TTL (ADR 0005) | `(episode_source_id, quality)` |
 
 ### Video Decoding
 
 Kodik uses a custom obfuscation: ROT13 with shift +18 (mod 26) + URL-safe Base64 encoding. The `KodikVideoDecoderService` handles the 8-step decoding process: fetch iframe → extract JS params → build POST request → get encoded URL → ROT13 decode → Base64 decode → get final mp4 URLs.
+
+## Bounded contexts (ADR 0016)
+
+`orinuno-app` is one process, but logically split into bounded contexts. Code lives under `com.orinuno.<context>` packages; each context owns a Liquibase changelog directory (`com/orinuno/db/changelog/<context>/`) and exposes its public surface via a single `*PublicApi` interface.
+
+| Context | Package | Owns (DB tables) | Class |
+|---------|---------|------------------|-------|
+| `kodik` | `com.orinuno.{client,token,service.calendar,service.requestlog,service.metrics}` (existing pre-ADR-0016 layout) | `kodik_content`, `kodik_episode_variant`, `kodik_proxy`, `kodik_decoder_path_cache`, `kodik_calendar_state`, `kodik_calendar_outbox`, `kodik_content_enrichment` | catalog source |
+| `jutsu` | `com.orinuno.jutsu` (orinuno-app side, separate from `jutsu-sdk`) | `jutsu_title`, `jutsu_episode`, `jutsu_translation` (optional), `jutsu_sync_state` (P1a) | catalog source |
+| `aniboom` | `com.orinuno.aniboom` (thin Spring wiring around `aniboom-sdk`) | — | decoder source (stateless) |
+| `sibnet` | `com.orinuno.sibnet` (thin Spring wiring around `sibnet-sdk`) | — | decoder source (stateless) |
+| `catalog` | `com.orinuno.catalog` (NEW, P1b) | `catalog_content`, `catalog_content_external_id`, `catalog_episode`, `catalog_episode_source_link` | universal canonical catalog |
+| `core` | `com.orinuno.{core,service.requestlog}` | `orinuno_parse_request`, `orinuno_dump_state`, `episode_source`, `episode_video` | cross-source orchestration |
+
+### Zoning rules (enforced by ArchUnit + Liquibase guard tests in P3)
+
+- **No cross-context `@Autowired`** of internal classes. The only types crossing a context boundary are the context's `*PublicApi` interface and DTOs in the context's `api` subpackage. Everything else is package-local.
+- **No cross-context `FOREIGN KEY` constraints** in the database. Cross-context references are soft (raw column with the other context's PK value, no FK). This makes a future per-source service split (ADR 0016 Layout B) a refactor instead of a rewrite.
+- **Each context owns its Liquibase changelog directory**. `liquibase-changelog.yaml` aggregates them via explicit `<include>` per directory.
+- **SDK facade stability**. Each SDK's facade (`KodikApiClient`, `JutsuClient`, `SibnetClient`, `AniboomClient`) plus its result records are the only types crossing the SDK boundary. They are the wire types if/when we ever distribute the system.
+
+### Adding a new source
+
+The decision tree from ADR 0016 §"Source classification":
+
+1. **"Does the source expose a list of titles?"** → catalog source → add an L1 schema (`<source>_title`, `<source>_episode`, `<source>_sync_state` at minimum) and a sync worker (full crawl + incremental). Wire it through `CatalogIngestionService` so titles get reflected into L3 (`catalog_content`).
+2. **"Does the source take a URL and return mp4?"** → decoder source → keep it stateless behind the SDK facade. No DB tables, no sync worker. Aniboom and Sibnet are the canonical examples.
+3. A source that is **both** (Kodik, future Sibnet-with-album-listing) gets both: L1 catalog tables + the decoder pipeline.
 
 ## Key Rules
 

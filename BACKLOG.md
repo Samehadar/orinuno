@@ -490,6 +490,125 @@ Sibnet — крупнейший сибирский видеохостинг с *
 
 ## 3. Идеи для реализации
 
+### ARCH-0016: Architecture trajectory roadmap (modular monolith + L1/L3 catalog) — **High priority, новые задачи P1a/P1b/P2/P3**
+
+**Контекст:** ADR 0016 фиксирует архитектурное направление — остаёмся modular monolith, добавляем universal canonical catalog (L3) как отдельный bounded context внутри `orinuno-app`, а jut.su получает L1-кеш (`jutsu_*` таблицы) с фоновой синхронизацией. Полное обоснование, классификация источников, триггеры будущего расщепления и принципы bounded contexts — в [`docs/adr/0016-architecture-trajectory.md`](docs/adr/0016-architecture-trajectory.md).
+
+#### P1a: jut.su L1 (per-source raw cache + sync worker + hybrid fallback)
+
+**Приоритет:** Высокий
+**Сложность:** Средняя
+**Зависимости:** `jutsu-sdk` (ADR 0015 — `JutsuClient.browseCatalog`, `streamNoticeEntries`), Bucket4j (уже в pom), Caffeine (уже в pom).
+
+**Что нужно сделать:**
+
+1. **Liquibase changeset** в новой директории `com/orinuno/db/changelog/jutsu/`:
+   - `jutsu_title` — `slug` (PK), `title_ru`, `title_en`, `status` (`ongoing`/`released`), `year`, `episodes_total`, `shikimori_id` (nullable), `mal_id` (nullable), `description`, `poster_url`, `last_synced_at`, `source_etag`.
+   - `jutsu_episode` — `(title_slug, season, episode)` PK, `embed_url`, `video_qualities` (JSON), `last_synced_at`.
+   - `jutsu_translation` — опционально (если jut.su начнёт отдавать дубликаты с разными озвучками).
+   - `jutsu_sync_state` — singleton row: `last_full_crawl_at`, `last_notice_cursor`, `notice_walk_in_progress`.
+   - Подключить через `<include>` в `liquibase-changelog.yaml`.
+
+2. **`JutsuCatalogSyncService`** в `com.orinuno.jutsu`:
+   - Full crawl через `JutsuClient.browseCatalog()` (`@Scheduled`, default 24–72h, configurable через `orinuno.jutsu.full-crawl-interval-hours`).
+   - Incremental через `JutsuClient.streamNoticeEntries()` / `walkNoticeFeedsBackwards()` с cursor в `jutsu_sync_state.last_notice_cursor`. При drift'е notice feed — fallback на full crawl.
+   - При upsert title → синхронный вызов `CatalogIdentityResolver.findOrCreate(JUTSU, slug, shikimoriId?, malId?)` (после P1b) → запись в `catalog_content_external_id`.
+   - **Sync worker никогда не блокирует REST**: при stall'е sync — REST читает stale данные с `X-Sync-Stale-Seconds` header.
+
+3. **REST cutover для `JutsuApiController`** (`/api/v1/sources/jutsu/{catalog,search,anime/{slug},episode}`):
+   - Cache hit: ответ из БД, не из upstream. Header `X-Sync-Stale-Seconds: <last_synced_at - now>` если sync stalled.
+   - Cache miss (slug отсутствует в `jutsu_title`): inline-fallback на `JutsuClient` SDK, синхронный upsert в `jutsu_title`.
+   - **Hybrid-fallback guards (acceptance criteria — без них не релизим, это DDoS-вектор):**
+     - **Rate limit** через Bucket4j: per `X-API-KEY` (или per remote IP), default `1 req/5s`, конфиг `orinuno.jutsu.live-fallback.rate-limit.requests-per-second`. Превышение → `429`.
+     - **Negative cache** Caffeine, TTL 24h, key=slug. 404/parser-fail → slug в negative cache, повторные miss-запросы по нему **не идут** в upstream до истечения TTL.
+     - **Kill-switch** `orinuno.jutsu.live-fallback.enabled` (default `true` в dev profile, `false` в prod profile). Disabled → cache miss возвращает `404` без upstream.
+     - **Метрики** `jutsu_live_fallback_total{outcome=hit|miss|rate_limited|disabled|negative_cache}` через `/actuator/prometheus`.
+     - **Force-refresh для admin/debug** — `?refresh=true` пропускает БД и форсит SDK-вызов; защищён тем же rate limit и требует non-anonymous `X-API-KEY` даже в dev.
+
+4. **Тесты:**
+   - Unit для `JutsuCatalogSyncService` (full crawl, incremental, drift fallback) — mock `JutsuClient`.
+   - Integration `JutsuCatalogSyncServiceIT` — Testcontainers MySQL + mocked SDK.
+   - Hybrid-fallback тесты: rate limit, negative cache, kill-switch, force-refresh — `WebTestClient` + Bucket4j real instance.
+   - Schema sanity: `JutsuMigrationSmokeTest` — проверяет наличие таблиц/индексов.
+
+#### P1b: Catalog L3 (universal canonical catalog + identity resolver)
+
+**Приоритет:** Высокий
+**Сложность:** Средняя
+**Зависимости:** Liquibase (уже есть). **Не зависит от P1a** — можно делать параллельно.
+
+**Что нужно сделать:**
+
+1. **Liquibase changeset** в `com/orinuno/db/changelog/catalog/`:
+   - `catalog_content` — `id` (PK), `kind` (`movie`/`series`/`anime`), `title_ru`, `title_en`, `year`, `kinopoisk_id` (nullable), `imdb_id` (nullable), `shikimori_id` (nullable), `mal_id` (nullable), `mdl_id` (nullable), `tmdb_id` (nullable), `created_at`, `updated_at`. Уникальные индексы по каждому `*_id` (sparse).
+   - `catalog_content_external_id` — `(source_type, external_id, content_id)` с UNIQUE на `(source_type, external_id)` для O(1) lookup.
+   - `catalog_episode` — `(content_id, season, episode)` PK.
+   - `catalog_episode_source_link` — M:N link canonical episode ↔ `episode_source`. Soft-reference на `episode_source.id` (no FK, кросс-контекстное).
+
+2. **`CatalogIdentityResolver`** в `com.orinuno.catalog`:
+   - `findOrCreate(sourceType, sourceId, externalIds…)`. Lookup order: `shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId)`.
+   - Аналог `CatalogContentFindOrCreateService` из meter, но без бизнес-логики Kin.
+   - Идемпотентность: повторный вызов с теми же external IDs возвращает существующий `catalog_content`.
+
+3. **`CatalogIngestionService`** + `CatalogPublicApi`:
+   - `CatalogPublicApi.attachSource(sourceType, sourceId, externalIds, episodes)` — единственная точка входа из других контекстов (`kodik`, `jutsu`).
+   - На P1b — синхронный вызов в той же транзакции, что и source-upsert. Без Rabbit/Kafka.
+
+4. **Hooks из `kodik` контекста:** в `KodikContentService.upsert(...)` после успешной записи `kodik_content` — синхронный `CatalogIngestionService.attachSource(KODIK, kodikId, externalIds, ...)`. Защита: не падать на ошибке canonical-sync, только log warning.
+
+5. **Тесты:**
+   - `CatalogIdentityResolverTest` — все 7 lookup paths, идемпотентность, cross-source merge (shikimori_id matches existing catalog_content created from kinopoisk_id).
+   - `CatalogIngestionServiceTest` — sync hook from kodik / jutsu контекстов.
+   - Integration `CatalogIngestionIT` — Testcontainers + полный цикл.
+
+#### P2: Canonical REST API + unified per-source content lookup
+
+**Приоритет:** Высокий
+**Сложность:** Низкая
+**Зависимости:** P1a + P1b (нужен и L1, и L3).
+
+**Что нужно сделать:**
+
+1. **`CatalogController`** (`/api/v1/catalog/*`):
+   - `GET /api/v1/catalog/content` — список с фильтрами (`kind`, `year`, `external_id`, paging).
+   - `GET /api/v1/catalog/content/{id}` — single canonical record + все attached external IDs.
+   - `GET /api/v1/catalog/content/{id}/episodes` — canonical episode tree.
+   - `GET /api/v1/catalog/content/{id}/sources` — все источники для канонического тайтла (superset `MultiSourceController` для use-case'а "show me everything we have").
+
+2. **Unified raw lookup:** `GET /api/v1/sources/{provider}/content/{externalId}` — единая точка для "fetch by source's external id":
+   - Для `kodik` → resolve через embed/get-player + lookup в `kodik_content`.
+   - Для `jutsu` → lookup в `jutsu_title` по slug.
+   - Для `aniboom`/`sibnet` → 404 (decoder-only sources).
+   - Кодифицирует то, что сейчас разбросано по `/api/v1/embed/{idType}/{id}` и `/api/v1/sources/jutsu/anime/{slug}`.
+
+3. **OpenAPI snapshot** — пересобрать `docs-site/openapi.json` после P2.
+
+4. **Тесты:** `CatalogControllerTest` (WebTestClient bindToController), интеграция `/sources/{provider}/content/{externalId}` для kodik + jutsu.
+
+#### P3: ArchUnit + Liquibase zoning checks
+
+**Приоритет:** Средний (можно делать после P1/P2)
+**Сложность:** Низкая
+
+**Что нужно сделать:**
+
+1. **ArchUnit-тест** `BoundedContextZoningTest`:
+   - "no cross-context `@Autowired` of internal classes" — пакеты `com.orinuno.kodik`, `com.orinuno.jutsu`, `com.orinuno.aniboom`, `com.orinuno.sibnet`, `com.orinuno.catalog`, `com.orinuno.core` не импортируют friend'-классов друг друга. Allowed: `*PublicApi` interfaces + DTOs из `<context>.api`.
+   - SDK-фасады (`KodikApiClient`, `JutsuClient`, `SibnetClient`, `AniboomClient`) можно импортировать откуда угодно (это публичный SDK contract).
+
+2. **Liquibase guard test** `LiquibaseZoningTest`:
+   - Парсит каждый `*.sql` в `com/orinuno/db/changelog/<context>/scripts/`.
+   - Asserts: ни один `FOREIGN KEY` не указывает на таблицу из другой context-директории.
+   - Soft-references (raw column без FK) разрешены.
+
+3. **CI integration:** оба теста в основной `mvn test` пуле (не e2e), чтобы regression ловился до merge.
+
+#### P4–P5 (информационно — не задачи)
+
+P4 — жить в monolith, пока не сработает один из триггеров расщепления (см. ADR 0016 §"Triggers for moving to Layout B"). P5 — точечный split (вынести один источник в свой деплой) только при срабатывании триггера, не массово.
+
+---
+
 ### PHASE-2: Async parse-requests + Kodik /list proxy + ContentExportDto v2 — **DONE** (2026-04-26)
 
 **Статус:** Реализовано полным ходом, см. TD-1 выше и `ARCHITECTURE.md` §7.
@@ -1155,3 +1274,7 @@ Kodik применяет многоуровневую защиту. Это зн�
 | 24b | IDEA-SDK-2: Extract client + dto | Средний | Высокая | IDEA-SDK-1, KodikSdkConfig POJO |
 | 24c | IDEA-SDK-3: Extract token | Средний | Средняя | IDEA-SDK-2 |
 | 24d | IDEA-SDK-4: Publish to Maven Central | Низкий | Высокая | IDEA-SDK-1..3 stable |
+| 25a | ARCH-0016 P1a: jut.su L1 (`jutsu_*` tables + sync worker + hybrid-fallback guards) | **Высокий** | Средняя | jutsu-sdk (ADR 0015) |
+| 25b | ARCH-0016 P1b: catalog L3 (`catalog_*` tables + `CatalogIdentityResolver` + `CatalogIngestionService`) | **Высокий** | Средняя | — (можно параллельно с 25a) |
+| 25c | ARCH-0016 P2: canonical REST `/api/v1/catalog/*` + unified `GET /api/v1/sources/{provider}/content/{externalId}` | **Высокий** | Низкая | 25a + 25b |
+| 25d | ARCH-0016 P3: ArchUnit + Liquibase zoning checks | Средний | Низкая | 25a + 25b (контексты должны существовать) |

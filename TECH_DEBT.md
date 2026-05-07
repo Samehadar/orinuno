@@ -1,5 +1,37 @@
 # Technical Debt
 
+## ARCH-0016: `kodik_episode_variant` is an L1+L2 hybrid
+
+**Priority:** Low (informational — recorded for the future split)
+**Discovered:** 2026-05-07 (ADR 0016 audit)
+**Reference:** [`docs/adr/0016-architecture-trajectory.md`](docs/adr/0016-architecture-trajectory.md) §"Known tech debt"
+
+**Context:** Per ADR 0016, the project follows a three-layer data model:
+
+- L1 — per-source raw cache (mirror of upstream's catalogue).
+- L2 — provider-agnostic episode pointers (`episode_source` + `episode_video`, ADR 0005).
+- L3 — universal canonical catalog (`catalog_*`, P1b).
+
+`kodik_episode_variant` predates ADR 0005 and currently mixes both L1 and L2 semantics in one table:
+
+- **L1 columns** (mirror of upstream): `kodik_link` — raw URL from Kodik upstream.
+- **L2 columns** (decoded URL bookkeeping): `mp4_link`, `mp4_link_decoded_at`, `mp4_link_failed_count`, `decode_method`, `local_filepath`. These are the same problem space as `episode_video.video_url` + `episode_video.decoded_at` + `episode_video.failed_count` for non-Kodik sources.
+
+A clean L1/L2 split would migrate the L2 columns out of `kodik_episode_variant` into `episode_video` rows with `source_type=KODIK`, leaving `kodik_episode_variant` as a pure L1 mirror.
+
+**Why deferred:** while we run as a single process the hybrid causes no operational harm — the COALESCE-upsert rule from `AGENTS.md` keeps `mp4_link` consistent, the TTL refresher works against `mp4_link_decoded_at`, and the export DTO knows where to look. The cost only materializes at the **moment of split**: extracting Kodik into its own service would mean either:
+
+1. The Kodik service owns both L1 and L2 storage (i.e. duplicates `episode_video`-equivalent fields locally) — defeats the purpose of L2 as a provider-agnostic layer.
+2. The Kodik service does the migration as part of the split — risky, large changeset under deadline pressure.
+
+**Resolution:** deferred to **P5** in the ADR 0016 roadmap (when a real split trigger fires). The migration is a small but non-trivial Liquibase changeset:
+
+1. New rows in `episode_source` with `source_type=KODIK` for every existing `kodik_episode_variant` (one per `(content_id, season, episode, translation_id)`).
+2. Move `mp4_link`/`mp4_link_decoded_at`/`mp4_link_failed_count`/`decode_method` into `episode_video` rows linked to the new `episode_source`.
+3. Drop the L2 columns from `kodik_episode_variant`. Update `KodikEpisodeVariantRepository`, `ParserService.decodeForVariant`, `VideoDownloadService`, and the export mapper accordingly.
+
+For now: do **not** add new L2-shaped columns to `kodik_episode_variant`. Any new decoded-URL state for Kodik should go straight into `episode_video`.
+
 ## PF-I7: Async Jobs for Long-Running Decode Operations (PARTIAL — Phase 2 landing)
 
 **Priority:** Medium
