@@ -7,6 +7,13 @@ import type {
   DownloadState,
   EpisodeVariantDto,
   HealthResponse,
+  JutsuAnimeInfo,
+  JutsuCatalogFilterParams,
+  JutsuCatalogPage,
+  JutsuDriftSnapshot,
+  JutsuEpisodeMeta,
+  JutsuNoticeEntry,
+  JutsuNoticeFeed,
   KodikCountry,
   KodikGenre,
   KodikQuality,
@@ -195,4 +202,86 @@ export const api = {
     const qs = params.toString()
     return get<CalendarResponse>(`/api/v1/calendar${qs ? `?${qs}` : ''}`)
   },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // jut.su SDK surface — see JutsuApiController + ADR 0015.
+  // Filter values accept either slugs (e.g. "action") or enum names ("ACTION")
+  // since the controller binds both. We send slugs because they're what the
+  // response shapes echo back, so a UI never has to translate.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  jutsuBrowseCatalog(filter: JutsuCatalogFilterParams = {}) {
+    const qs = jutsuFilterParams(filter).toString()
+    return get<JutsuCatalogPage>(
+      `/api/v1/sources/jutsu/catalog${qs ? `?${qs}` : ''}`,
+    )
+  },
+
+  jutsuSearch(filter: JutsuCatalogFilterParams) {
+    if (!filter.q) throw new Error('q is required for jut.su search')
+    const qs = jutsuFilterParams(filter).toString()
+    return get<JutsuCatalogPage>(`/api/v1/sources/jutsu/search?${qs}`)
+  },
+
+  jutsuGetAnimeInfo(slug: string) {
+    return get<JutsuAnimeInfo>(`/api/v1/sources/jutsu/anime/${encodeURIComponent(slug)}`)
+  },
+
+  jutsuGetEpisodeMeta(url: string) {
+    return get<JutsuEpisodeMeta>(
+      `/api/v1/sources/jutsu/episode?url=${encodeURIComponent(url)}`,
+    )
+  },
+
+  jutsuGetNoticeFeed(cursor?: number) {
+    const qs = cursor != null ? `?cursor=${cursor}` : ''
+    return get<JutsuNoticeFeed>(`/api/v1/sources/jutsu/notice${qs}`)
+  },
+
+  /**
+   * Stream the notice feed as NDJSON; each line is one {@link JutsuNoticeEntry}.
+   * Returns an async iterator the caller can consume incrementally. Each feed
+   * page costs one outbound request against the SDK's 1 RPS budget, so keep
+   * `maxFeeds` modest.
+   */
+  async *jutsuStreamNoticeEntries(
+    startCursor: number,
+    maxFeeds = 5,
+    signal?: AbortSignal,
+  ): AsyncGenerator<JutsuNoticeEntry, void, void> {
+    const url = `${BASE}/api/v1/sources/jutsu/notice/stream?startCursor=${startCursor}&maxFeeds=${maxFeeds}`
+    const res = await fetch(url, { headers: headers(), signal })
+    if (!res.ok || !res.body) throw new Error(`${res.status} ${res.statusText}`)
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let nl: number
+      while ((nl = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, nl).trim()
+        buffer = buffer.slice(nl + 1)
+        if (line) yield JSON.parse(line) as JutsuNoticeEntry
+      }
+    }
+    const tail = buffer.trim()
+    if (tail) yield JSON.parse(tail) as JutsuNoticeEntry
+  },
+
+  jutsuGetDrift() {
+    return get<JutsuDriftSnapshot>('/api/v1/sources/jutsu/drift')
+  },
+}
+
+function jutsuFilterParams(f: JutsuCatalogFilterParams): URLSearchParams {
+  const p = new URLSearchParams()
+  if (f.page != null) p.set('page', String(f.page))
+  if (f.q) p.set('q', f.q)
+  for (const g of f.genres ?? []) p.append('genres', g)
+  for (const t of f.types ?? []) p.append('types', t)
+  for (const y of f.years ?? []) p.append('years', y)
+  if (f.sort) p.set('sort', f.sort)
+  return p
 }

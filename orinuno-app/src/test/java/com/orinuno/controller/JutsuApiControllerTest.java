@@ -104,6 +104,38 @@ class JutsuApiControllerTest {
     }
 
     @Test
+    @DisplayName("GET /catalog binds URL slugs (round-trip from response → request)")
+    void browseCatalogAcceptsSlugInputs() {
+        // Slugs come straight from the response shape (e.g. "action", "before2000", "shonen") so
+        // a UI can copy them back into a follow-up request without translating to enum names.
+        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
+        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
+                .thenReturn(Mono.just(page));
+
+        client.get()
+                .uri(
+                        b ->
+                                b.path("/api/v1/sources/jutsu/catalog")
+                                        .queryParam("genres", "action")
+                                        .queryParam("types", "shonen")
+                                        .queryParam("years", "before2000")
+                                        .queryParam("sort", "order-by-name")
+                                        .build())
+                .exchange()
+                .expectStatus()
+                .isOk();
+
+        ArgumentCaptor<JutsuCatalogFilter> captor =
+                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
+        verify(jutsuClient).browseCatalog(captor.capture(), eq(1));
+        JutsuCatalogFilter f = captor.getValue();
+        assertThat(f.genres()).containsExactly(JutsuGenre.ACTION);
+        assertThat(f.types()).containsExactly(JutsuType.SHONEN);
+        assertThat(f.years()).containsExactly(JutsuYear.BEFORE_2000);
+        assertThat(f.sort()).isEqualTo(com.orinuno.jutsu.filter.JutsuSort.BY_NAME);
+    }
+
+    @Test
     @DisplayName("GET /catalog tolerates unknown enum names without 5xx")
     void browseCatalogIgnoresUnknownEnumValues() {
         JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);

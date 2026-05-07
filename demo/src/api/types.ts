@@ -280,3 +280,114 @@ export interface SourcesCapabilitiesResponse {
   count: number
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JutSu SDK surface — backed by JutsuApiController under /api/v1/sources/jutsu/.
+// Field shapes mirror the Swagger snapshot at docs-site/openapi.json.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface JutsuCatalogEntry {
+  slug: string
+  title: string
+  originalTitle: string | null
+  thumbnailUrl: string | null
+  episodeCount: number | null
+  movieCount: number | null
+  genres: string[]
+  types: string[]
+  year: string | null
+  detailUrl: string
+}
+
+export interface JutsuCatalogPage {
+  page: number
+  entries: JutsuCatalogEntry[]
+  hasMore: boolean
+}
+
+export interface JutsuEpisodeListing {
+  slug: string
+  season: number
+  episode: number
+  label: string
+  url: string
+}
+
+export interface JutsuSeason {
+  index: number
+  name: string
+  episodeCount: number
+  episodes: JutsuEpisodeListing[]
+}
+
+export interface JutsuAnimeInfo {
+  slug: string
+  title: string
+  originalTitle: string | null
+  synopsis: string | null
+  thumbnailUrl: string | null
+  year: string | null
+  genres: string[]
+  types: string[]
+  seasons: JutsuSeason[]
+  totalEpisodeCount: number
+}
+
+export interface JutsuEpisodeMeta {
+  slug: string
+  season: number
+  episode: number
+  displayTitle: string
+  pageTitle: string
+  canonicalUrl: string
+  thumbnailUrl: string | null
+  prevEpisodeUrl: string | null
+  nextEpisodeUrl: string | null
+  allEpisodesUrl: string | null
+  premiumGated: boolean
+}
+
+export interface JutsuNoticeEntry {
+  slug: string
+  season: number
+  episode: number
+  title: string
+  episodeUrl: string
+  thumbnailUrl: string | null
+  relativeDate: string
+}
+
+export interface JutsuNoticeFeed {
+  requestedCursor: number
+  nextCursor: number | null
+  entries: JutsuNoticeEntry[]
+  hasEntries: boolean
+}
+
+export interface JutsuDriftEvent {
+  signal: string
+  source: string
+  detail: string
+  timestamp: string
+  selector: string | null
+  fixtureRef: string | null
+}
+
+export interface JutsuDriftSnapshot {
+  capturedAt: string
+  health: 'HEALTHY' | 'DEGRADED' | 'UNAVAILABLE' | string
+  lifetimeEvents: number
+  windowSize: number
+  eventsInWindow: number
+  bySignal: Record<string, number>
+  recentEvents: JutsuDriftEvent[]
+}
+
+export interface JutsuCatalogFilterParams {
+  page?: number
+  genres?: string[]
+  types?: string[]
+  years?: string[]
+  sort?: string
+  q?: string
+}
+
