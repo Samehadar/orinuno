@@ -319,50 +319,20 @@ export interface JutsuSeason {
   episodes: JutsuEpisodeListing[]
 }
 
-/**
- * One full-length movie ("полнометражный фильм") attached to an anime entry on jut.su. Films are
- * a sibling concept to seasons / episodes — they live under `/{slug}/film-N.html` URLs and
- * jut.su renders them in a dedicated "Полнометражные фильмы" block separate from season grids.
- */
-export interface JutsuFilmListing {
-  slug: string
-  /** 1-based film index from the URL (`/life-no-game/film-1.html` → 1). */
-  index: number
-  label: string
-  url: string
-}
-
 export interface JutsuAnimeInfo {
   slug: string
   title: string
   originalTitle: string | null
   synopsis: string | null
   thumbnailUrl: string | null
-  /** Coarse filter-form year bucket (e.g. `"2015-2023"`); use `years` for per-season air years. */
   year: string | null
-  /** Per-season air years from the labelled info block (e.g. `[2014, 2020, 2024]`). */
-  years: number[]
-  /** Russian age rating wire form: `"0+"` / `"6+"` / `"12+"` / `"16+"` / `"18+"` or null. */
-  ageRating: string | null
   genres: string[]
   types: string[]
   seasons: JutsuSeason[]
-  /**
-   * Full-length movies attached to the same series. Empty for anime without movies. Films are
-   * NOT counted in `totalEpisodeCount` — see `totalFilmCount`.
-   */
-  films: JutsuFilmListing[]
   totalEpisodeCount: number
-  totalFilmCount: number
 }
 
-/**
- * Lightweight metadata for one jut.su episode page; serialised by the backend with `kind:
- * "episode"`. The backend also returns {@link JutsuFilmMeta} for full-length-film pages — use
- * the {@link JutsuPageMeta} discriminated union when consuming `GET /sources/jutsu/episode`.
- */
 export interface JutsuEpisodeMeta {
-  kind: 'episode'
   slug: string
   season: number
   episode: number
@@ -375,29 +345,6 @@ export interface JutsuEpisodeMeta {
   allEpisodesUrl: string | null
   premiumGated: boolean
 }
-
-/**
- * Lightweight metadata for one jut.su full-length-film page (`/{slug}/film-N.html`); serialised
- * by the backend with `kind: "film"`. Films are siblings to episodes — same chrome, different
- * URL grammar, separate prev/next navigation cohort.
- */
-export interface JutsuFilmMeta {
-  kind: 'film'
-  slug: string
-  /** 1-based film index from the URL (`/life-no-game/film-1.html` → 1). */
-  filmIndex: number
-  displayTitle: string
-  pageTitle: string
-  canonicalUrl: string
-  thumbnailUrl: string | null
-  prevFilmUrl: string | null
-  nextFilmUrl: string | null
-  allEpisodesUrl: string | null
-  premiumGated: boolean
-}
-
-/** Discriminated union returned by `GET /api/v1/sources/jutsu/episode`. */
-export type JutsuPageMeta = JutsuEpisodeMeta | JutsuFilmMeta
 
 export interface JutsuNoticeEntry {
   slug: string

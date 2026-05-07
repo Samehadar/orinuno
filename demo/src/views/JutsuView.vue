@@ -12,9 +12,9 @@ import type {
   JutsuCatalogEntry,
   JutsuCatalogPage,
   JutsuDriftSnapshot,
+  JutsuEpisodeMeta,
   JutsuNoticeEntry,
   JutsuNoticeFeed,
-  JutsuPageMeta,
 } from '../api/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,75 +198,6 @@ const infoLoading = ref(false)
 const infoError = ref('')
 const infoResult = ref<JutsuAnimeInfo | null>(null)
 
-// Slug → Russian label lookup. Kept inline (no Map) — the lists are small
-// (≈ 12/19 entries) and the linear scan is invisible in practice.
-function genreLabel(slug: string): string {
-  return GENRES.find((g) => g[0] === slug)?.[1] ?? slug
-}
-function typeLabel(slug: string): string {
-  return TYPES.find((t) => t[0] === slug)?.[1] ?? slug
-}
-function yearBucketLabel(slug: string): string {
-  return YEARS.find((y) => y[0] === slug)?.[1] ?? slug
-}
-
-// Human-readable comma list with Russian " и " ("and") before the last entry,
-// matching jut.su's own formatting on the labelled info block. ["a","b","c"] →
-// "a, b и c"; ["a","b"] → "a и b"; ["a"] → "a".
-function joinHumanRu(items: string[]): string {
-  if (items.length === 0) return ''
-  if (items.length === 1) return items[0]
-  return items.slice(0, -1).join(', ') + ' и ' + items[items.length - 1]
-}
-
-// Russian pluralisation for the "N фильм/фильма/фильмов" suffix. The Slavic
-// rule splits on the last digit (or last two digits for the teens). This
-// mirrors what jut.su prints next to the films heading on its own UI.
-function filmsCountSuffix(n: number): string {
-  const abs = Math.abs(n)
-  const mod10 = abs % 10
-  const mod100 = abs % 100
-  if (mod100 >= 11 && mod100 <= 14) return 'фильмов'
-  if (mod10 === 1) return 'фильм'
-  if (mod10 >= 2 && mod10 <= 4) return 'фильма'
-  return 'фильмов'
-}
-
-const infoGenreLabels = computed<string[]>(
-  () => infoResult.value?.genres.map(genreLabel) ?? [],
-)
-const infoTypeLabels = computed<string[]>(
-  () => infoResult.value?.types.map(typeLabel) ?? [],
-)
-const infoYearsLine = computed<string>(() => {
-  const ys = infoResult.value?.years ?? []
-  if (ys.length) return ys.join(', ')
-  // Fallback to the coarse filter-form bucket when years[] is empty (cache row
-  // pre-migration, or older fixture without the labelled block). yearBucketLabel
-  // yields the human label ("до 2000") instead of the slug ("before2000").
-  const bucket = infoResult.value?.year
-  return bucket ? yearBucketLabel(bucket) : ''
-})
-
-// Age-rating colour map. 18+ red, 16+ orange, 12+ yellow-ish (we reuse the
-// orange neon to keep the palette tight), 6+ and 0+ green. Keep the wire form
-// strings here — that's what the API ships.
-const ageRatingPillClass = computed<string>(() => {
-  switch (infoResult.value?.ageRating) {
-    case '18+':
-      return 'bg-[var(--color-neon-red)]/15 text-[var(--color-neon-red)] border border-[var(--color-neon-red)]/40'
-    case '16+':
-      return 'bg-[var(--color-neon-orange)]/15 text-[var(--color-neon-orange)] border border-[var(--color-neon-orange)]/40'
-    case '12+':
-      return 'bg-[var(--color-neon-orange)]/10 text-[var(--color-neon-orange)] border border-[var(--color-neon-orange)]/30'
-    case '6+':
-    case '0+':
-      return 'bg-[var(--color-neon-green)]/15 text-[var(--color-neon-green)] border border-[var(--color-neon-green)]/40'
-    default:
-      return 'bg-white/10 text-[var(--color-text-muted)] border border-white/20'
-  }
-})
-
 async function loadAnimeInfo() {
   if (!infoSlug.value.trim()) {
     infoError.value = 'Slug is required'
@@ -298,7 +229,7 @@ function jumpToInfo(slug: string) {
 const episodeUrl = ref('https://jut.su/onepuunchman/season-1/episode-1.html')
 const episodeLoading = ref(false)
 const episodeError = ref('')
-const episodeResult = ref<JutsuPageMeta | null>(null)
+const episodeResult = ref<JutsuEpisodeMeta | null>(null)
 
 const jutsuVideo = useJutsuVideo()
 const {
@@ -352,34 +283,6 @@ function jumpToEpisode(url: string) {
   tab.value = 'episode'
   loadEpisodeMeta()
 }
-
-// Discriminated-union helpers for the episode/film result card. Films use
-// `filmIndex` instead of season/episode, and a different prev/next cohort
-// (sibling films, not sibling episodes), so the badge label and the
-// prev/next bindings have to switch on `kind`.
-const episodeBadge = computed(() => {
-  const r = episodeResult.value
-  if (!r) return ''
-  return r.kind === 'film' ? `F${r.filmIndex}` : `S${r.season}E${r.episode}`
-})
-
-const episodePrevUrl = computed(() => {
-  const r = episodeResult.value
-  if (!r) return null
-  return r.kind === 'film' ? r.prevFilmUrl : r.prevEpisodeUrl
-})
-
-const episodeNextUrl = computed(() => {
-  const r = episodeResult.value
-  if (!r) return null
-  return r.kind === 'film' ? r.nextFilmUrl : r.nextEpisodeUrl
-})
-
-const episodeKindLabel = computed(() => {
-  const r = episodeResult.value
-  if (!r) return ''
-  return r.kind === 'film' ? 'Полнометражный фильм' : 'Серия'
-})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Notice feed tab
@@ -816,92 +719,30 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             referrerpolicy="no-referrer"
             @error="($event.target as HTMLImageElement).style.display = 'none'"
           />
-          <div class="flex-1 min-w-0">
+          <div class="flex-1">
             <h2 class="text-2xl font-bold">{{ infoResult.title }}</h2>
-
-            <!-- Labelled info block — mirrors the chrome jut.su renders under the
-                 player on every anime page (Жанры / Темы / Годы выпуска /
-                 Оригинальное название / Возрастной рейтинг). Each row is suppressed
-                 individually when its source field is empty, so older fixtures /
-                 cache rows that pre-date the labelled-block migration still render
-                 cleanly with whatever subset they have. -->
-            <dl class="mt-2 text-sm space-y-1.5">
-              <div v-if="infoGenreLabels.length" class="flex gap-1.5 flex-wrap">
-                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Жанры:</dt>
-                <dd class="text-[var(--color-text-primary)]">
-                  {{ joinHumanRu(infoGenreLabels) }}.
-                </dd>
-              </div>
-              <div v-if="infoTypeLabels.length" class="flex gap-1.5 flex-wrap">
-                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Темы:</dt>
-                <dd class="text-[var(--color-text-primary)]">
-                  {{ joinHumanRu(infoTypeLabels) }}.
-                </dd>
-              </div>
-              <div v-if="infoYearsLine" class="flex gap-1.5 flex-wrap">
-                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Годы выпуска:</dt>
-                <dd class="text-[var(--color-text-primary)]">{{ infoYearsLine }}.</dd>
-              </div>
-              <div v-if="infoResult.originalTitle" class="flex gap-1.5 flex-wrap">
-                <dt class="text-[var(--color-text-muted)] flex-shrink-0">
-                  Оригинальное название:
-                </dt>
-                <dd class="text-[var(--color-text-primary)] font-semibold">
-                  {{ infoResult.originalTitle }}
-                </dd>
-              </div>
-              <div v-if="infoResult.ageRating" class="flex items-center gap-1.5 flex-wrap">
-                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Возрастной рейтинг:</dt>
-                <dd>
-                  <span
-                    :class="[
-                      'inline-block px-2 py-0.5 rounded text-[11px] font-mono font-semibold',
-                      ageRatingPillClass,
-                    ]"
-                  >
-                    {{ infoResult.ageRating }}
-                  </span>
-                </dd>
-              </div>
-            </dl>
-
-            <p
-              v-if="infoResult.synopsis"
-              class="text-sm text-[var(--color-text-muted)] mt-3 line-clamp-4 border-t border-white/10 pt-3"
-            >
+            <p v-if="infoResult.originalTitle" class="text-[var(--color-text-muted)]">
+              {{ infoResult.originalTitle }}
+            </p>
+            <p class="text-xs text-[var(--color-text-muted)] mt-2">
+              <span v-if="infoResult.year">{{ infoResult.year }}</span>
+              <span v-if="infoResult.year"> · </span>
+              <span class="font-mono">slug={{ infoResult.slug }}</span>
+              <span> · {{ infoResult.totalEpisodeCount }} total episode anchors</span>
+            </p>
+            <p v-if="infoResult.synopsis" class="text-sm text-[var(--color-text-muted)] mt-3 line-clamp-4">
               {{ infoResult.synopsis }}
             </p>
-
-            <!-- Technical breadcrumb at the bottom of the card. slug + episode anchor
-                 count are useful for power users debugging through the API; we keep
-                 them out of the labelled block above so it stays visually parallel
-                 with what jut.su itself renders. -->
-            <p class="text-[10px] text-[var(--color-text-muted)] mt-3 font-mono flex items-center gap-2 flex-wrap">
-              <span>slug={{ infoResult.slug }}</span>
-              <span>·</span>
-              <span>{{ infoResult.totalEpisodeCount }} total episode anchors</span>
-              <template v-if="infoResult.totalFilmCount > 0">
-                <span>·</span>
-                <span>{{ infoResult.totalFilmCount }} {{ filmsCountSuffix(infoResult.totalFilmCount) }}</span>
-              </template>
-              <span v-if="infoResult.genres.length || infoResult.types.length">·</span>
-              <span
-                v-for="g in infoResult.genres"
-                :key="'g-' + g"
-                class="badge bg-[var(--color-neon-pink)]/10 text-[var(--color-neon-pink)] text-[10px] font-mono"
-                :title="genreLabel(g)"
-              >
+            <div class="flex flex-wrap gap-1 mt-3">
+              <span v-for="g in infoResult.genres" :key="'g-' + g"
+                class="badge bg-[var(--color-neon-pink)]/15 text-[var(--color-neon-pink)] text-[10px] font-mono">
                 {{ g }}
               </span>
-              <span
-                v-for="t in infoResult.types"
-                :key="'t-' + t"
-                class="badge bg-[var(--color-neon-blue)]/10 text-[var(--color-neon-blue)] text-[10px] font-mono"
-                :title="typeLabel(t)"
-              >
+              <span v-for="t in infoResult.types" :key="'t-' + t"
+                class="badge bg-[var(--color-neon-blue)]/15 text-[var(--color-neon-blue)] text-[10px] font-mono">
                 {{ t }}
               </span>
-            </p>
+            </div>
           </div>
         </div>
 
@@ -921,35 +762,6 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             >
               <div class="font-mono">S{{ ep.season }}E{{ ep.episode }}</div>
               <div class="text-[10px] text-[var(--color-text-muted)] truncate">{{ ep.label }}</div>
-            </button>
-          </div>
-        </div>
-
-        <!--
-          Films block: rendered under the seasons grid when the API returns any. Mirrors jut.su's
-          own "Полнометражные фильмы" heading. Films share the episode-meta endpoint via
-          `jumpToEpisode(...)` because the per-film URL (`/{slug}/film-N.html`) is what the
-          backend resolves to a player chrome / decode session.
-        -->
-        <div
-          v-if="infoResult.films && infoResult.films.length > 0"
-          class="glass-card p-4 border-[var(--color-neon-purple)]/40"
-        >
-          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <h3 class="font-semibold">Полнометражные фильмы</h3>
-            <span class="text-[10px] text-[var(--color-text-muted)] font-mono">
-              {{ infoResult.totalFilmCount }} {{ filmsCountSuffix(infoResult.totalFilmCount) }}
-            </span>
-          </div>
-          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-            <button
-              v-for="film in infoResult.films"
-              :key="`film-${film.index}`"
-              class="px-2 py-1.5 rounded text-xs bg-white/5 hover:bg-[var(--color-neon-purple)]/20 hover:text-[var(--color-neon-purple)] transition-colors text-left"
-              @click="jumpToEpisode(film.url)"
-            >
-              <div class="font-mono">F{{ film.index }}</div>
-              <div class="text-[10px] text-[var(--color-text-muted)] truncate">{{ film.label }}</div>
             </button>
           </div>
         </div>
@@ -1005,13 +817,7 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             </p>
             <div class="flex flex-wrap items-center gap-2 mt-2">
               <span class="badge bg-white/5 text-[var(--color-neon-blue)] font-mono text-[10px]">
-                {{ episodeBadge }}
-              </span>
-              <span
-                v-if="episodeResult.kind === 'film'"
-                class="badge bg-[var(--color-neon-purple)]/15 text-[var(--color-neon-purple)] text-[10px]"
-              >
-                🎬 {{ episodeKindLabel }}
+                S{{ episodeResult.season }}E{{ episodeResult.episode }}
               </span>
               <span
                 v-if="episodeResult.premiumGated"
@@ -1053,22 +859,22 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
               📋
             </button>
           </div>
-          <div v-if="episodePrevUrl" class="flex items-center gap-2">
+          <div v-if="episodeResult.prevEpisodeUrl" class="flex items-center gap-2">
             <span class="text-[var(--color-text-muted)]">Prev:</span>
             <button
               class="font-mono text-[var(--color-neon-blue)] hover:underline truncate"
-              @click="jumpToEpisode(episodePrevUrl!)"
+              @click="jumpToEpisode(episodeResult!.prevEpisodeUrl!)"
             >
-              {{ episodePrevUrl }}
+              {{ episodeResult.prevEpisodeUrl }}
             </button>
           </div>
-          <div v-if="episodeNextUrl" class="flex items-center gap-2">
+          <div v-if="episodeResult.nextEpisodeUrl" class="flex items-center gap-2">
             <span class="text-[var(--color-text-muted)]">Next:</span>
             <button
               class="font-mono text-[var(--color-neon-blue)] hover:underline truncate"
-              @click="jumpToEpisode(episodeNextUrl!)"
+              @click="jumpToEpisode(episodeResult!.nextEpisodeUrl!)"
             >
-              {{ episodeNextUrl }}
+              {{ episodeResult.nextEpisodeUrl }}
             </button>
           </div>
           <div v-if="episodeResult.allEpisodesUrl" class="flex items-center gap-2">
