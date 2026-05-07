@@ -1,7 +1,6 @@
 package com.orinuno.jutsu.catalog;
 
 import com.orinuno.jutsu.JutsuConfig;
-import com.orinuno.jutsu.auth.JutsuSessionManager;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.drift.JutsuDriftSignal;
 import com.orinuno.jutsu.drift.JutsuParserContext;
@@ -26,13 +25,24 @@ import reactor.core.publisher.Mono;
  * The website always returns the partial HTML for that filter+page+query combo (≤ 30 cards), with a
  * {@code var anime_page_next} marker telling us whether to fetch the next page.
  *
- * <p>This client owns its own {@link WebClient} (built once in the constructor) but shares the
- * {@link JutsuRateLimiter}, {@link JutsuSessionManager} and {@link JutsuDriftDetector} with the
- * rest of the SDK so RPS budgeting + cookie jar + drift events stay coherent across endpoints.
+ * <p>This client owns its own {@link WebClient} (built once in the constructor) and shares the
+ * {@link JutsuRateLimiter} and {@link JutsuDriftDetector} with the rest of the SDK so RPS budgeting
+ * + drift events stay coherent across endpoints.
  *
- * <p>Authentication is optional: anonymous catalog calls work fine. The client still attaches the
- * session cookie when the manager has one (catalog responses contain identical entries either way,
- * but the cookie keeps Cloudflare from rate-limiting us harder).
+ * <p><strong>Catalog calls intentionally fly anonymous</strong> — the {@link
+ * com.orinuno.jutsu.auth.JutsuSessionManager} is deliberately NOT injected here. jut.su is built on
+ * DataLife Engine, which persists the user's last clicked sort order on the account and serves
+ * <em>that</em> ordering on every subsequent request bearing the user's cookies — even when the URL
+ * has no sort segment ({@code POST /anime/}). Attaching the SDK's logged-in session to catalog
+ * calls would therefore make the response order depend on whatever a human (or an earlier
+ * automation run) last clicked under the same account, breaking the SDK's "default sort =
+ * by-rating" contract for everyone sharing those credentials. Episode decode and premium-meta calls
+ * still go through the session manager — they NEED auth — but listing endpoints stay anonymous by
+ * construction. This invariant is statically enforced: the constructor doesn't accept a session
+ * manager, so a future refactor cannot accidentally re-introduce the leak. (Cloudflare-friendliness
+ * was the original justification for sending cookies here; in practice anonymous calls are not
+ * throttled harder, and the personalised-sort regression observed in production outweighs the
+ * hypothetical benefit.)
  */
 @Slf4j
 public final class JutsuCatalogClient {
@@ -45,20 +55,15 @@ public final class JutsuCatalogClient {
 
     private final WebClient client;
     private final JutsuRateLimiter rateLimiter;
-    private final JutsuSessionManager sessionManager;
     private final JutsuDriftDetector driftDetector;
 
     public JutsuCatalogClient(
             JutsuConfig config,
             JutsuRateLimiter rateLimiter,
-            JutsuSessionManager sessionManager,
             JutsuDriftDetector driftDetector,
             WebClient.Builder webClientBuilder) {
         if (config == null) throw new IllegalArgumentException("config must not be null");
         if (rateLimiter == null) throw new IllegalArgumentException("rateLimiter must not be null");
-        if (sessionManager == null) {
-            throw new IllegalArgumentException("sessionManager must not be null");
-        }
         if (driftDetector == null) {
             throw new IllegalArgumentException("driftDetector must not be null");
         }
@@ -75,36 +80,28 @@ public final class JutsuCatalogClient {
                         .defaultHeader("X-Requested-With", "XMLHttpRequest")
                         .build();
         this.rateLimiter = rateLimiter;
-        this.sessionManager = sessionManager;
         this.driftDetector = driftDetector;
     }
 
-    /** Fetch one catalog page. */
+    /** Fetch one catalog page. Always anonymous — see class doc for the rationale. */
     public Mono<JutsuCatalogPage> browse(JutsuCatalogRequest request) {
         if (request == null) {
             return Mono.error(new IllegalArgumentException("request must not be null"));
         }
         return rateLimiter
                 .acquire()
-                .then(sessionManager.cookieHeader().defaultIfEmpty(""))
-                .flatMap(cookie -> performPost(request, cookie))
+                .then(performPost(request))
                 .map(html -> parsePage(html, request));
     }
 
-    private Mono<String> performPost(JutsuCatalogRequest request, String cookieHeader) {
+    private Mono<String> performPost(JutsuCatalogRequest request) {
         String absolutePath = "https://jut.su" + request.resolvePath();
         String body = composeFormBody(request);
         String parserSource = "JutsuCatalogClient";
         JutsuParserContext httpCtx = JutsuParserContext.lenient(driftDetector, parserSource);
         return client.post()
                 .uri(absolutePath)
-                .headers(
-                        h -> {
-                            h.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-                            if (!cookieHeader.isEmpty()) {
-                                h.add(HttpHeaders.COOKIE, cookieHeader);
-                            }
-                        })
+                .headers(h -> h.setContentType(MediaType.APPLICATION_FORM_URLENCODED))
                 .body(BodyInserters.fromValue(body))
                 .exchangeToMono(
                         resp -> {

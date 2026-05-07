@@ -321,8 +321,10 @@ public final class JutsuClient {
             JutsuDriftDetector detector =
                     driftDetector == null ? new JutsuDriftDetector() : driftDetector;
             JutsuDecoder decoder = new JutsuDecoder(config, limiter, session, builder);
+            // catalog calls intentionally fly anonymous — no sessionManager here.
+            // See JutsuCatalogClient class javadoc for the rationale.
             JutsuCatalogClient catalogClient =
-                    new JutsuCatalogClient(config, limiter, session, detector, builder);
+                    new JutsuCatalogClient(config, limiter, detector, builder);
             JutsuAnimeInfoClient animeInfoClient =
                     new JutsuAnimeInfoClient(config, limiter, session, detector, builder);
             JutsuEpisodeMetaClient episodeMetaClient =
