@@ -132,6 +132,13 @@ orinuno:
           interval-hours: ${JUTSU_SYNC_FULL_CRAWL_INTERVAL_HOURS:24}
           initial-delay-seconds: ${JUTSU_SYNC_FULL_CRAWL_INITIAL_DELAY_SECONDS:300}
           max-pages-per-tick: ${JUTSU_SYNC_FULL_CRAWL_MAX_PAGES_PER_TICK:30}
+        notice-walk:
+          enabled: ${JUTSU_SYNC_NOTICE_WALK_ENABLED:false}
+          interval-minutes: ${JUTSU_SYNC_NOTICE_WALK_INTERVAL_MINUTES:15}
+          initial-delay-seconds: ${JUTSU_SYNC_NOTICE_WALK_INITIAL_DELAY_SECONDS:60}
+          max-feeds-per-tick: ${JUTSU_SYNC_NOTICE_WALK_MAX_FEEDS_PER_TICK:5}
+          fetch-info-on-discovery: ${JUTSU_SYNC_NOTICE_WALK_FETCH_INFO_ON_DISCOVERY:false}
+          max-info-fetches-per-tick: ${JUTSU_SYNC_NOTICE_WALK_MAX_INFO_FETCHES_PER_TICK:10}
   dumps:
     enabled: ${ORINUNO_DUMPS_ENABLED:false}
     base-url: ${ORINUNO_DUMPS_BASE_URL:https://dumps.kodikres.com}

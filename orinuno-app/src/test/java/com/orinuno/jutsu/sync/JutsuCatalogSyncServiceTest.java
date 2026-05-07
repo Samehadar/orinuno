@@ -17,6 +17,7 @@ import com.orinuno.jutsu.filter.JutsuType;
 import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.model.JutsuSyncState;
 import com.orinuno.jutsu.model.JutsuTitle;
+import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
 import com.orinuno.jutsu.repository.JutsuSyncStateRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import java.time.LocalDateTime;
@@ -41,6 +42,7 @@ class JutsuCatalogSyncServiceTest {
 
     @Mock private JutsuClient client;
     @Mock private JutsuTitleRepository titleRepository;
+    @Mock private JutsuEpisodeRepository episodeRepository;
     @Mock private JutsuSyncStateRepository syncStateRepository;
 
     private OrinunoProperties properties;
@@ -54,7 +56,11 @@ class JutsuCatalogSyncServiceTest {
         properties.getProviders().getJutsu().getSync().getFullCrawl().setMaxPagesPerTick(50);
         service =
                 new JutsuCatalogSyncService(
-                        client, titleRepository, syncStateRepository, properties);
+                        client,
+                        titleRepository,
+                        episodeRepository,
+                        syncStateRepository,
+                        properties);
     }
 
     @Test
