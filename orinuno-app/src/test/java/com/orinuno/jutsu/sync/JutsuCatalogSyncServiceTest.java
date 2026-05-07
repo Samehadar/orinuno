@@ -17,8 +17,6 @@ import com.orinuno.jutsu.filter.JutsuType;
 import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.model.JutsuSyncState;
 import com.orinuno.jutsu.model.JutsuTitle;
-import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
-import com.orinuno.jutsu.repository.JutsuFilmRepository;
 import com.orinuno.jutsu.repository.JutsuSyncStateRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import java.time.LocalDateTime;
@@ -43,10 +41,7 @@ class JutsuCatalogSyncServiceTest {
 
     @Mock private JutsuClient client;
     @Mock private JutsuTitleRepository titleRepository;
-    @Mock private JutsuEpisodeRepository episodeRepository;
-    @Mock private JutsuFilmRepository filmRepository;
     @Mock private JutsuSyncStateRepository syncStateRepository;
-    @Mock private JutsuCatalogIngestion catalogIngestion;
 
     private OrinunoProperties properties;
     private JutsuCatalogSyncService service;
@@ -59,13 +54,7 @@ class JutsuCatalogSyncServiceTest {
         properties.getProviders().getJutsu().getSync().getFullCrawl().setMaxPagesPerTick(50);
         service =
                 new JutsuCatalogSyncService(
-                        client,
-                        titleRepository,
-                        episodeRepository,
-                        filmRepository,
-                        syncStateRepository,
-                        properties,
-                        catalogIngestion);
+                        client, titleRepository, syncStateRepository, properties);
     }
 
     @Test
@@ -253,7 +242,7 @@ class JutsuCatalogSyncServiceTest {
                         Set.of(JutsuType.SHONEN),
                         Optional.of(JutsuYear.Y_2000_2007));
 
-        JutsuTitle row = JutsuCatalogSyncService.toTitle(entry, /* page= */ 3, /* slot= */ 7, now);
+        JutsuTitle row = JutsuCatalogSyncService.toTitle(entry, now);
 
         assertThat(row.getSlug()).isEqualTo("naruto");
         assertThat(row.getSiteId()).isEqualTo(29);
@@ -265,9 +254,6 @@ class JutsuCatalogSyncServiceTest {
                 .as("genre CSV must be sorted (alphabetical) for deterministic upsert payloads")
                 .isEqualTo("action,adventure,comedy");
         assertThat(row.getTypesCsv()).isEqualTo("shonen");
-        assertThat(row.getCatalogPosition())
-                .as("catalogPosition = (page-1)*30 + slot — drives the read side's by-rating sort")
-                .isEqualTo((3 - 1) * 30 + 7);
         assertThat(row.getCatalogFetchedAt()).isEqualTo(now);
         assertThat(row.getFirstSeenAt()).isEqualTo(now);
         assertThat(row.getLastSeenAt()).isEqualTo(now);
@@ -293,45 +279,12 @@ class JutsuCatalogSyncServiceTest {
                                 Set.of(),
                                 Set.of(),
                                 Optional.empty()),
-                        1,
-                        1,
                         LocalDateTime.now());
 
         assertThat(row.getSiteId()).isNull();
         assertThat(row.getGenresCsv()).isNull();
         assertThat(row.getTypesCsv()).isNull();
         assertThat(row.getYearBucket()).isNull();
-        assertThat(row.getCatalogPosition()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("full-crawl tick stamps catalog_position monotonically across pages and slots")
-    void fullCrawlAssignsMonotonicCatalogPositions() {
-        when(syncStateRepository.findSingleton())
-                .thenReturn(Optional.of(JutsuSyncState.empty(LocalDateTime.now())));
-        // Page 1 has 3 entries (slots 1..3 → positions 1..3). Page 2 has 2 entries (slots 1..2 →
-        // positions 31, 32). hasMore=false on page 2 closes the crawl.
-        JutsuCatalogEntry e1 = entry("a", "A");
-        JutsuCatalogEntry e2 = entry("b", "B");
-        JutsuCatalogEntry e3 = entry("c", "C");
-        JutsuCatalogEntry e4 = entry("d", "D");
-        JutsuCatalogEntry e5 = entry("e", "E");
-        when(client.browseCatalog(any(JutsuCatalogRequest.class)))
-                .thenReturn(Mono.just(new JutsuCatalogPage(List.of(e1, e2, e3), 1, true)))
-                .thenReturn(Mono.just(new JutsuCatalogPage(List.of(e4, e5), 2, false)));
-
-        service.runFullCrawlOnce(10);
-
-        ArgumentCaptor<JutsuTitle> upserts = ArgumentCaptor.forClass(JutsuTitle.class);
-        verify(titleRepository, times(5)).upsert(upserts.capture());
-        List<JutsuTitle> rows = upserts.getAllValues();
-        assertThat(rows.get(0).getSlug()).isEqualTo("a");
-        assertThat(rows.get(0).getCatalogPosition()).isEqualTo(1);
-        assertThat(rows.get(1).getCatalogPosition()).isEqualTo(2);
-        assertThat(rows.get(2).getCatalogPosition()).isEqualTo(3);
-        assertThat(rows.get(3).getSlug()).isEqualTo("d");
-        assertThat(rows.get(3).getCatalogPosition()).isEqualTo(31);
-        assertThat(rows.get(4).getCatalogPosition()).isEqualTo(32);
     }
 
     private static JutsuCatalogPage pageOf(int page, boolean hasMore, JutsuCatalogEntry... rows) {

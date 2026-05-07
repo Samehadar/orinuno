@@ -8,25 +8,12 @@ import com.orinuno.jutsu.catalog.JutsuCatalogRequest;
 import com.orinuno.jutsu.filter.JutsuGenre;
 import com.orinuno.jutsu.filter.JutsuType;
 import com.orinuno.jutsu.filter.JutsuYear;
-import com.orinuno.jutsu.info.JutsuAgeRating;
-import com.orinuno.jutsu.info.JutsuAnimeInfo;
-import com.orinuno.jutsu.info.JutsuEpisodeListing;
-import com.orinuno.jutsu.info.JutsuFilmListing;
-import com.orinuno.jutsu.info.JutsuSeason;
-import com.orinuno.jutsu.model.JutsuEpisode;
-import com.orinuno.jutsu.model.JutsuFilm;
 import com.orinuno.jutsu.model.JutsuSyncState;
 import com.orinuno.jutsu.model.JutsuTitle;
-import com.orinuno.jutsu.notice.JutsuNoticeEntry;
-import com.orinuno.jutsu.notice.JutsuNoticeFeed;
-import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
-import com.orinuno.jutsu.repository.JutsuFilmRepository;
 import com.orinuno.jutsu.repository.JutsuSyncStateRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -80,27 +67,18 @@ public class JutsuCatalogSyncService {
 
     private final JutsuClient client;
     private final JutsuTitleRepository titleRepository;
-    private final JutsuEpisodeRepository episodeRepository;
-    private final JutsuFilmRepository filmRepository;
     private final JutsuSyncStateRepository syncStateRepository;
     private final OrinunoProperties properties;
-    private final JutsuCatalogIngestion catalogIngestion;
 
     public JutsuCatalogSyncService(
             JutsuClient client,
             JutsuTitleRepository titleRepository,
-            JutsuEpisodeRepository episodeRepository,
-            JutsuFilmRepository filmRepository,
             JutsuSyncStateRepository syncStateRepository,
-            OrinunoProperties properties,
-            JutsuCatalogIngestion catalogIngestion) {
+            OrinunoProperties properties) {
         this.client = client;
         this.titleRepository = titleRepository;
-        this.episodeRepository = episodeRepository;
-        this.filmRepository = filmRepository;
         this.syncStateRepository = syncStateRepository;
         this.properties = properties;
-        this.catalogIngestion = catalogIngestion;
     }
 
     /**
@@ -163,12 +141,8 @@ public class JutsuCatalogSyncService {
 
             pagesFetched++;
             lastPage = page;
-            int slot = 0;
             for (JutsuCatalogEntry entry : response.entries()) {
-                slot++;
-                JutsuTitle row = toTitle(entry, page, slot, now);
-                titleRepository.upsert(row);
-                catalogIngestion.ingest(row);
+                titleRepository.upsert(toTitle(entry, now));
                 titlesUpserted++;
             }
             if (!response.hasMore()) {
@@ -206,236 +180,6 @@ public class JutsuCatalogSyncService {
                 pagesFetched, titlesUpserted, completed, lastPage, resumingPreviousCrawl, error);
     }
 
-    /**
-     * Run one notice-walk tick (Step 2.B). Polls jut.su's "upcoming releases" notice feed to
-     * discover newly-published slugs between full-crawl ticks; on a quiet site this costs exactly
-     * one homepage GET + one feed POST per tick.
-     *
-     * <p>State machine on the persistent {@code noticeCursor}:
-     *
-     * <ul>
-     *   <li>{@code noticeCursor == null} (very first tick after a fresh DB / a cursor reset): we
-     *       only record the latest cursor and return without walking. Backfilling jut.su's entire
-     *       notice history (potentially thousands of entries) on first boot is never what callers
-     *       want — once the full crawl populates the cache, the notice walker only needs to track
-     *       deltas going forward.
-     *   <li>{@code noticeCursor &lt; latest} (the common case on a busy day): walk feeds newest-
-     *       first up to {@code maxFeedsPerTick}, stopping early when the oldest entry of the
-     *       current feed is at or below the saved cursor. Save {@code latest} as the new cursor.
-     *   <li>{@code noticeCursor &gt;= latest}: idle — homepage hasn't published anything new since
-     *       the last tick. Touch {@code noticeLastWalkedAt} for ops monitoring and exit.
-     * </ul>
-     *
-     * <p>Discovered slugs are deduplicated; for each one we already have in the L1 cache (catalog
-     * already saw it) we touch {@code last_seen_at} but leave the title untouched. For previously-
-     * unseen slugs the behaviour depends on {@code fetch-info-on-discovery}: when enabled (and
-     * within {@code maxInfoFetchesPerTick}) we fetch the full anime info page synchronously and
-     * upsert both the title and its episode list; when disabled we record the slug with a
-     * lightweight title-from-notice marker so the next full-crawl tick can hydrate the rest.
-     *
-     * <p>Notice entries' {@code title} field is the rendered "Anime Name: Episode N" form, NOT a
-     * clean anime title. We deliberately never overwrite an existing {@code jutsu_title.title} with
-     * a notice-derived value — only fresh slugs that have no row yet get the notice title as a
-     * placeholder, and even then it's superseded by the next catalog tick.
-     */
-    public NoticeWalkResult runNoticeWalkOnce(int maxFeeds, int maxInfoFetches) {
-        OrinunoProperties.JutsuProperties.SyncProperties cfg =
-                properties.getProviders().getJutsu().getSync();
-        OrinunoProperties.JutsuProperties.SyncProperties.NoticeWalkProperties nwCfg =
-                cfg.getNoticeWalk();
-        if (!cfg.isEnabled() || !nwCfg.isEnabled()) {
-            log.debug("jutsu-sync: notice-walk disabled, skipping tick");
-            return NoticeWalkResult.skipped();
-        }
-        int feedCap = maxFeeds > 0 ? maxFeeds : nwCfg.getMaxFeedsPerTick();
-        int infoCap = maxInfoFetches >= 0 ? maxInfoFetches : nwCfg.getMaxInfoFetchesPerTick();
-        if (feedCap <= 0) {
-            log.warn("jutsu-sync: notice-walk maxFeedsPerTick={} ≤ 0, skipping", feedCap);
-            return NoticeWalkResult.skipped();
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        JutsuSyncState state = ensureSingleton(now);
-        Integer savedCursor = state.getNoticeCursor();
-
-        JutsuNoticeFeed firstFeed;
-        try {
-            firstFeed = client.getLatestNoticeFeed().block(PAGE_TIMEOUT);
-        } catch (RuntimeException ex) {
-            String error = ex.getClass().getSimpleName() + ": " + ex.getMessage();
-            log.warn("jutsu-sync: notice-walk failed to discover latest cursor ({})", error);
-            recordNoticeError(state, error);
-            return NoticeWalkResult.failed(error);
-        }
-        if (firstFeed == null) {
-            String error = "getLatestNoticeFeed returned null";
-            log.warn("jutsu-sync: {}", error);
-            recordNoticeError(state, error);
-            return NoticeWalkResult.failed(error);
-        }
-        int discoveredCursor = firstFeed.requestedCursor();
-
-        if (savedCursor == null) {
-            log.info(
-                    "jutsu-sync: notice-walk first tick — recording latest cursor {} without"
-                            + " backfilling history",
-                    discoveredCursor);
-            state.setNoticeCursor(discoveredCursor);
-            state.setNoticeCursorUpdatedAt(LocalDateTime.now());
-            state.setNoticeLastWalkedAt(LocalDateTime.now());
-            state.setLastError(null);
-            state.setLastErrorAt(null);
-            state.setUpdatedAt(LocalDateTime.now());
-            syncStateRepository.update(state);
-            return NoticeWalkResult.firstTick(discoveredCursor);
-        }
-        if (discoveredCursor <= savedCursor) {
-            state.setNoticeLastWalkedAt(LocalDateTime.now());
-            state.setUpdatedAt(LocalDateTime.now());
-            syncStateRepository.update(state);
-            return NoticeWalkResult.idle(savedCursor);
-        }
-
-        LinkedHashSet<String> uniqueSlugs = new LinkedHashSet<>();
-        int feedsWalked = 0;
-        JutsuNoticeFeed feed = firstFeed;
-        String walkError = null;
-        try {
-            while (feedsWalked < feedCap && feed != null && feed.hasEntries()) {
-                feedsWalked++;
-                int oldestIdInFeed = feed.requestedCursor() - feed.entries().size() + 1;
-                for (JutsuNoticeEntry entry : feed.entries()) {
-                    uniqueSlugs.add(entry.slug());
-                }
-                if (oldestIdInFeed <= savedCursor + 1) {
-                    break;
-                }
-                Optional<Integer> next = feed.nextCursor();
-                if (next.isEmpty()) break;
-                feed = client.getNoticeFeed(next.get()).block(PAGE_TIMEOUT);
-            }
-        } catch (RuntimeException ex) {
-            walkError = ex.getClass().getSimpleName() + ": " + ex.getMessage();
-            log.warn(
-                    "jutsu-sync: notice-walk feed iteration failed ({}), processing {} slugs"
-                            + " collected so far",
-                    walkError,
-                    uniqueSlugs.size());
-        }
-
-        // Resolve which discovered slugs are already in L1 vs brand new. Bulk lookup avoids N+1.
-        Set<String> existingSlugs = Set.of();
-        if (!uniqueSlugs.isEmpty()) {
-            existingSlugs =
-                    titleRepository.findBySlugs(new ArrayList<>(uniqueSlugs)).stream()
-                            .map(JutsuTitle::getSlug)
-                            .collect(Collectors.toUnmodifiableSet());
-        }
-
-        int infoFetched = 0;
-        int placeholderUpserts = 0;
-        for (String slug : uniqueSlugs) {
-            if (existingSlugs.contains(slug)) continue;
-            if (nwCfg.isFetchInfoOnDiscovery() && infoFetched < infoCap) {
-                JutsuAnimeInfo info;
-                try {
-                    info = client.getAnimeInfo(slug).block(PAGE_TIMEOUT);
-                } catch (RuntimeException ex) {
-                    log.warn(
-                            "jutsu-sync: notice-walk getAnimeInfo({}) failed ({}), skipping slug",
-                            slug,
-                            ex.toString());
-                    continue;
-                }
-                if (info == null) continue;
-                JutsuTitle infoRow = infoToTitle(info, LocalDateTime.now());
-                titleRepository.upsert(infoRow);
-                catalogIngestion.ingest(infoRow);
-                List<JutsuEpisode> episodes = infoToEpisodes(info, LocalDateTime.now());
-                if (!episodes.isEmpty()) {
-                    episodeRepository.upsertAll(episodes);
-                }
-                List<JutsuFilm> films = infoToFilms(info, LocalDateTime.now());
-                if (!films.isEmpty()) {
-                    filmRepository.upsertAll(films);
-                }
-                infoFetched++;
-            } else {
-                JutsuNoticeEntry sample = findFirstEntryForSlug(uniqueSlugs, firstFeed, slug);
-                JutsuTitle placeholder =
-                        noticeToPlaceholderTitle(sample, slug, LocalDateTime.now());
-                titleRepository.upsert(placeholder);
-                catalogIngestion.ingest(placeholder);
-                placeholderUpserts++;
-            }
-        }
-
-        state.setNoticeCursor(discoveredCursor);
-        state.setNoticeCursorUpdatedAt(LocalDateTime.now());
-        state.setNoticeLastWalkedAt(LocalDateTime.now());
-        if (walkError == null) {
-            state.setLastError(null);
-            state.setLastErrorAt(null);
-        } else {
-            state.setLastError(truncate(walkError, 1024));
-            state.setLastErrorAt(LocalDateTime.now());
-        }
-        state.setUpdatedAt(LocalDateTime.now());
-        syncStateRepository.update(state);
-
-        log.info(
-                "jutsu-sync: notice-walk tick — feedsWalked={}, uniqueSlugs={}, newInfoFetched={},"
-                        + " newPlaceholders={}, savedCursor {} → {}, error={}",
-                feedsWalked,
-                uniqueSlugs.size(),
-                infoFetched,
-                placeholderUpserts,
-                savedCursor,
-                discoveredCursor,
-                walkError == null ? "none" : walkError);
-        return new NoticeWalkResult(
-                feedsWalked,
-                uniqueSlugs.size(),
-                infoFetched,
-                placeholderUpserts,
-                savedCursor,
-                discoveredCursor,
-                walkError);
-    }
-
-    /**
-     * Convenience overload that reads the configured caps from {@code OrinunoProperties}. Used by
-     * the scheduler; callers that want to override the caps (manual triggers, tests) should use
-     * {@link #runNoticeWalkOnce(int, int)} directly.
-     */
-    public NoticeWalkResult runNoticeWalkOnce() {
-        OrinunoProperties.JutsuProperties.SyncProperties.NoticeWalkProperties nwCfg =
-                properties.getProviders().getJutsu().getSync().getNoticeWalk();
-        return runNoticeWalkOnce(nwCfg.getMaxFeedsPerTick(), nwCfg.getMaxInfoFetchesPerTick());
-    }
-
-    private void recordNoticeError(JutsuSyncState state, String error) {
-        state.setNoticeLastWalkedAt(LocalDateTime.now());
-        state.setLastError(truncate(error, 1024));
-        state.setLastErrorAt(LocalDateTime.now());
-        state.setUpdatedAt(LocalDateTime.now());
-        syncStateRepository.update(state);
-    }
-
-    /**
-     * Find a representative notice entry for the given slug. We only have the first feed in memory
-     * (subsequent feeds may have been fetched in the loop and discarded), so this is a best-effort
-     * lookup — when no entry matches we fall back to a slug-only placeholder.
-     */
-    private static JutsuNoticeEntry findFirstEntryForSlug(
-            LinkedHashSet<String> walkedSlugs, JutsuNoticeFeed firstFeed, String slug) {
-        if (!walkedSlugs.contains(slug)) return null;
-        for (JutsuNoticeEntry entry : firstFeed.entries()) {
-            if (slug.equals(entry.slug())) return entry;
-        }
-        return null;
-    }
-
     private JutsuSyncState ensureSingleton(LocalDateTime now) {
         Optional<JutsuSyncState> existing = syncStateRepository.findSingleton();
         if (existing.isPresent()) {
@@ -456,22 +200,7 @@ public class JutsuCatalogSyncService {
         return state.getFullCrawlCompletedAt().isBefore(state.getFullCrawlStartedAt());
     }
 
-    /**
-     * Catalog page size jut.su returns per AJAX call ({@code anime_page_next} kicks in after 30
-     * cards). Pinned by upstream's pagination, so it stays a constant — if jut.su ever changes the
-     * page size, the SDK's {@code JutsuCatalogPage.size()} returns the actual value and this
-     * constant becomes stale; the read service notices because {@code catalog_position} stops
-     * increasing monotonically.
-     */
-    static final int CATALOG_PAGE_SIZE = 30;
-
-    /**
-     * Build a {@link JutsuTitle} row from a catalog entry, attaching the 1-based crawl position
-     * derived from the entry's {@code (page, slot)} coordinate. The position drives the read side's
-     * default "by rating" sort because jut.su returns its default ranking as the page order itself.
-     */
-    static JutsuTitle toTitle(JutsuCatalogEntry entry, int page, int slot, LocalDateTime now) {
-        int catalogPosition = (page - 1) * CATALOG_PAGE_SIZE + slot;
+    static JutsuTitle toTitle(JutsuCatalogEntry entry, LocalDateTime now) {
         return JutsuTitle.builder()
                 .slug(entry.slug())
                 .siteId(entry.siteId() > 0 ? entry.siteId() : null)
@@ -483,7 +212,6 @@ public class JutsuCatalogSyncService {
                 .typesCsv(joinSlugs(entry.types(), JutsuType::slug))
                 .catalogEpisodeCount(entry.episodeCount())
                 .catalogMovieCount(entry.movieCount())
-                .catalogPosition(catalogPosition)
                 .catalogFetchedAt(now)
                 .firstSeenAt(now)
                 .lastSeenAt(now)
@@ -494,125 +222,6 @@ public class JutsuCatalogSyncService {
             Set<T> values, java.util.function.Function<T, String> slug) {
         if (values == null || values.isEmpty()) return null;
         return values.stream().map(slug).sorted().collect(Collectors.joining(","));
-    }
-
-    /**
-     * Build a {@link JutsuTitle} row from a fully-parsed anime info page. Catalog-only fields
-     * ({@code catalogEpisodeCount}, {@code catalogMovieCount}, {@code catalogFetchedAt}) stay NULL
-     * — those belong to the catalog tick and are protected by COALESCE on the way in. Info-only
-     * fields ({@code synopsis}, {@code infoTotalSeasons}, {@code infoTotalEpisodes}, {@code
-     * infoFetchedAt}) ARE populated; this is the path that hydrates them on first discovery.
-     */
-    static JutsuTitle infoToTitle(JutsuAnimeInfo info, LocalDateTime now) {
-        return JutsuTitle.builder()
-                .slug(info.slug())
-                .title(info.title())
-                .originalTitle(info.originalTitle())
-                .synopsis(info.synopsis())
-                .thumbnailUrl(info.thumbnailUrl())
-                .yearBucket(info.year().map(JutsuYear::slug).orElse(null))
-                .yearsCsv(joinYears(info.years()))
-                .ageRating(info.ageRating().map(JutsuAgeRating::wire).orElse(null))
-                .genresCsv(joinSlugs(info.genres(), JutsuGenre::slug))
-                .typesCsv(joinSlugs(info.types(), JutsuType::slug))
-                .infoTotalSeasons(info.seasons().size())
-                .infoTotalEpisodes(info.totalEpisodeCount())
-                .infoFetchedAt(now)
-                .firstSeenAt(now)
-                .lastSeenAt(now)
-                .build();
-    }
-
-    /**
-     * Render a list of integer years into the comma-joined wire form ({@code "2014,2020,2024"}).
-     * Empty list → {@code null} so the COALESCE upsert preserves any previously-stored value.
-     */
-    private static String joinYears(List<Integer> years) {
-        if (years == null || years.isEmpty()) return null;
-        StringBuilder sb = new StringBuilder();
-        for (Integer y : years) {
-            if (y == null) continue;
-            if (sb.length() > 0) sb.append(',');
-            sb.append(y.intValue());
-        }
-        return sb.length() == 0 ? null : sb.toString();
-    }
-
-    /**
-     * Flatten the season → episode tree from an info page into the flat shape backing {@code
-     * jutsu_episode}. Order is stable (season ASC, episode ASC) so the bulk upsert produces a
-     * deterministic SQL payload.
-     */
-    static List<JutsuEpisode> infoToEpisodes(JutsuAnimeInfo info, LocalDateTime now) {
-        List<JutsuEpisode> out = new ArrayList<>();
-        for (JutsuSeason season : info.seasons()) {
-            for (JutsuEpisodeListing listing : season.episodes()) {
-                out.add(
-                        JutsuEpisode.builder()
-                                .slug(info.slug())
-                                .season(season.index())
-                                .episode(listing.episode())
-                                .label(listing.label())
-                                .relativeUrl(listing.url())
-                                .paywalled(null)
-                                .discoveredAt(now)
-                                .lastSeenAt(now)
-                                .build());
-            }
-        }
-        return out;
-    }
-
-    /**
-     * Flatten the films list from an info page into the shape backing {@code jutsu_film}. Films
-     * order matches {@link JutsuAnimeInfo#films()} (HTML order, which the parser keeps stable); the
-     * upsert payload is deterministic across runs as long as upstream doesn't reorder the
-     * "Полнометражные фильмы" anchor block.
-     */
-    static List<JutsuFilm> infoToFilms(JutsuAnimeInfo info, LocalDateTime now) {
-        List<JutsuFilm> out = new ArrayList<>();
-        for (JutsuFilmListing listing : info.films()) {
-            out.add(
-                    JutsuFilm.builder()
-                            .slug(info.slug())
-                            .filmIndex(listing.index())
-                            .label(listing.label())
-                            .relativeUrl(listing.url())
-                            .paywalled(null)
-                            .discoveredAt(now)
-                            .lastSeenAt(now)
-                            .build());
-        }
-        return out;
-    }
-
-    /**
-     * Build a placeholder {@link JutsuTitle} from a notice-feed entry. Used only when the slug is
-     * brand-new (not yet in L1) and {@code fetch-info-on-discovery} is disabled — we record the
-     * slug + thumbnail with a synthesised title (the notice title is in {@code "Anime Name: Episode
-     * N"} form, so we strip the trailing {@code ": ..."} fragment) so the next full-crawl tick can
-     * complete the row. {@code title} is intentionally written because the COALESCE- protected
-     * mapper will overwrite it on the next catalog upsert anyway — but a placeholder beats NULL for
-     * the moments between the notice walk and the next catalog tick.
-     */
-    static JutsuTitle noticeToPlaceholderTitle(
-            JutsuNoticeEntry entry, String slug, LocalDateTime now) {
-        String synthesisedTitle = slug;
-        String thumbnail = null;
-        if (entry != null) {
-            String raw = entry.title();
-            int colonIdx = raw.indexOf(':');
-            synthesisedTitle = colonIdx > 0 ? raw.substring(0, colonIdx).trim() : raw;
-            if (synthesisedTitle.isBlank()) synthesisedTitle = slug;
-            thumbnail = entry.thumbnailUrl();
-        }
-        return JutsuTitle.builder()
-                .slug(slug)
-                .title(synthesisedTitle)
-                .thumbnailUrl(thumbnail)
-                .firstSeenAt(now)
-                .lastSeenAt(now)
-                .build();
     }
 
     private static String truncate(String s, int max) {
@@ -657,67 +266,6 @@ public class JutsuCatalogSyncService {
                     "completed=" + completed,
                     "lastPage=" + lastPage,
                     "resumedPreviousCrawl=" + resumedPreviousCrawl,
-                    "error=" + (error == null ? "none" : error));
-        }
-    }
-
-    /**
-     * Outcome of one {@link #runNoticeWalkOnce(int, int)} tick.
-     *
-     * @param feedsWalked number of notice-feed pages successfully fetched this tick
-     * @param uniqueSlugsDiscovered number of distinct slugs seen across the walked feeds
-     * @param newInfoFetched number of newly-discovered slugs hydrated from {@code getAnimeInfo}
-     * @param newPlaceholdersWritten number of newly-discovered slugs written as catalog
-     *     placeholders (when {@code fetch-info-on-discovery=false} or the per-tick info budget was
-     *     exhausted)
-     * @param previousCursor cursor stored on the state row before this tick; {@code null} on the
-     *     very first tick
-     * @param newCursor cursor stored on the state row after this tick (always equal to the
-     *     discovered latest cursor from the homepage)
-     * @param error short error description if the walk stopped due to a fetch failure; {@code null}
-     *     on a clean tick
-     */
-    public record NoticeWalkResult(
-            int feedsWalked,
-            int uniqueSlugsDiscovered,
-            int newInfoFetched,
-            int newPlaceholdersWritten,
-            Integer previousCursor,
-            Integer newCursor,
-            String error) {
-
-        /** Marker used when the tick is configured-disabled and shouldn't run at all. */
-        public static NoticeWalkResult skipped() {
-            return new NoticeWalkResult(0, 0, 0, 0, null, null, null);
-        }
-
-        /** First-ever tick: only records the cursor, doesn't backfill. */
-        public static NoticeWalkResult firstTick(int cursor) {
-            return new NoticeWalkResult(0, 0, 0, 0, null, cursor, null);
-        }
-
-        /** Idle tick: homepage hasn't published anything new since the last tick. */
-        public static NoticeWalkResult idle(int cursor) {
-            return new NoticeWalkResult(0, 0, 0, 0, cursor, cursor, null);
-        }
-
-        /** Failed tick: discovery or feed fetch raised an exception. */
-        public static NoticeWalkResult failed(String error) {
-            return new NoticeWalkResult(0, 0, 0, 0, null, null, error);
-        }
-
-        public boolean wasSuccessful() {
-            return error == null;
-        }
-
-        public List<String> describe() {
-            return List.of(
-                    "feedsWalked=" + feedsWalked,
-                    "uniqueSlugsDiscovered=" + uniqueSlugsDiscovered,
-                    "newInfoFetched=" + newInfoFetched,
-                    "newPlaceholdersWritten=" + newPlaceholdersWritten,
-                    "previousCursor=" + previousCursor,
-                    "newCursor=" + newCursor,
                     "error=" + (error == null ? "none" : error));
         }
     }
