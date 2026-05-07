@@ -1,0 +1,7 @@
+orinuno:
+  jutsu:
+    live-fallback:
+      # ADR 0016 P1a — live-fallback is opt-out in prod by default. A misconfigured cache
+      # miss must NOT silently hammer jut.su upstream; flip ${JUTSU_LIVE_FALLBACK_ENABLED}
+      # only when you've validated the rate-limit + negative-cache + metrics are wired.
+      enabled: ${JUTSU_LIVE_FALLBACK_ENABLED:false}

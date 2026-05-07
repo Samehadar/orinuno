@@ -1,11 +1,14 @@
 ---
 title: Database
-description: MySQL schema — three tables, Liquibase migrations, composite upserts with COALESCE, and MyBatis XML mappers.
+description: MySQL schema — Kodik tables, jut.su L1 cache, parse-request log, multi-source pointers, Liquibase migrations and MyBatis XML mappers.
 ---
 
 Orinuno uses MySQL 8 with Liquibase-managed migrations and MyBatis XML
-mappers. The schema is small on purpose: three tables, all InnoDB, all
-`utf8mb4_unicode_ci`.
+mappers. Tables are grouped by [bounded context (ADR 0016)](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0016-architecture-trajectory.md):
+each context owns its own changelog directory under
+`com/orinuno/db/changelog/<context>/`, and cross-context FK constraints
+are deliberately forbidden (so a future per-source service split is a
+refactor, not a rewrite). All tables are InnoDB and `utf8mb4_unicode_ci`.
 
 ## Entity relationships
 
@@ -70,11 +73,21 @@ erDiagram
 
 ## Tables
 
-| Table | Purpose | Unique key |
-| --- | --- | --- |
-| `kodik_content` | Content metadata, one row per work | `kinopoisk_id` |
-| `kodik_episode_variant` | Per-episode, per-translation variants with decoded mp4 links, TTL tracking, and local file paths | `(content_id, season_number, episode_number, translation_id)` |
-| `kodik_proxy` | Proxy pool for rotation | `(host, port)` |
+| Context | Table | Purpose | Unique key |
+| --- | --- | --- | --- |
+| `kodik` | `kodik_content` | Content metadata, one row per work | `kinopoisk_id` |
+| `kodik` | `kodik_episode_variant` | Per-episode, per-translation variants with decoded mp4 links, TTL tracking, and local file paths | `(content_id, season_number, episode_number, translation_id)` |
+| `kodik` | `kodik_proxy` | Proxy pool for rotation | `(host, port)` |
+| `kodik` | `kodik_decoder_path_cache` | Persistent cache of decoder POST path per netloc | `netloc` |
+| `kodik` | `kodik_calendar_state` | Last calendar snapshot per `shikimori_id` (CAL-6) | `shikimori_id` |
+| `kodik` | `kodik_calendar_outbox` | Calendar deltas with watermark | auto-incrementing seq |
+| `kodik` | `kodik_content_enrichment` | Raw + enriched metadata (Shikimori / MAL / Kinopoisk) (META-1) | `kodik_content_id` |
+| `jutsu` | `jutsu_title` (P1a) | jut.su catalog mirror (L1 cache) — slug, titles, status, poster, last_synced_at | `slug` |
+| `jutsu` | `jutsu_episode` (P1a) | jut.su episode metadata + qualities — embedUrl, season, episode, last_synced_at | `(title_slug, season, episode)` |
+| `jutsu` | `jutsu_sync_state` (P1a) | Singleton row tracking the last full crawl + the notice walk cursor + an in-progress flag | singleton (`id=1`) |
+| `core` | `orinuno_parse_request` | Async parse-request log (Phase 2) | `request_hash` (active rows only) |
+| `core` | `episode_source` | Provider-agnostic source-per-episode (ADR 0005) | `(content_id, season, episode, source_type, source_id)` |
+| `core` | `episode_video` | Decoded URLs per quality with TTL (ADR 0005) | `(episode_source_id, quality)` |
 
 ## Critical conventions
 
@@ -87,6 +100,16 @@ erDiagram
   sorting by a fixed set of columns. The MyBatis XML uses `${...}`
   interpolation for those two fields only, and the controller validates the
   incoming values against a hard-coded whitelist before passing them in.
+- **No cross-context FK constraints.** Cross-context references are soft
+  (raw column with the other context's PK value, no FK). This makes a
+  future per-source service split a refactor instead of a rewrite — see
+  ADR 0016.
+- **`jutsu_sync_state` singleton row.** Acquired through
+  `JutsuNoticeLockService` with an atomic acquire-or-recover update
+  (`SET notice_walk_in_progress = TRUE WHERE id = 1 AND
+  (notice_walk_in_progress = FALSE OR updated_at < :staleBefore)`). Lock
+  acquisition is `@Transactional` and lives in its own `@Service` to dodge
+  the Spring AOP self-invocation pitfall.
 
 ## Migrations
 

@@ -31,3 +31,13 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260502050100_create_episode_video.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260502060000_create_kodik_content_enrichment.sql
+  # ADR 0016 P1a — jut.su L1 catalog mirror lives in its own changelog directory so
+  # the future catalog/aniboom/sibnet contexts can be added without contention.
+  - include:
+      file: com/orinuno/db/changelog/jutsu/scripts/20260507010000_create_jutsu_title.sql
+  - include:
+      file: com/orinuno/db/changelog/jutsu/scripts/20260507010100_create_jutsu_episode.sql
+  - include:
+      file: com/orinuno/db/changelog/jutsu/scripts/20260507010200_create_jutsu_sync_state.sql
+  - include:
+      file: com/orinuno/db/changelog/jutsu/scripts/20260508010000_add_facets_to_jutsu_title.sql

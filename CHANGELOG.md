@@ -8,6 +8,143 @@ authoritative log of every change.
 
 ## [Unreleased]
 
+### ARCH-0016 P1a — facets in L1 + poster proxy (2026-05-08)
+
+Restored full live-SDK card chrome on the demo UI catalog/search/anime tabs after
+P1a's DB-first switch.
+
+- **`jutsu_title` schema**: new columns `genres VARCHAR(500)`, `types
+  VARCHAR(200)`, `movie_count INT` (Liquibase migration
+  `20260508010000_add_facets_to_jutsu_title.sql`). `genres` / `types` are stored
+  as sorted CSV slugs because the L1 endpoints don't filter on them server-side
+  (filter requests force the live-fallback path; direct DB hits don't need a
+  join table).
+- **`JutsuCatalogSyncService`**: `catalogEntryToTitle` and `animeInfoToTitle`
+  now persist genre / type slugs (sorted, CSV-joined) and movie count. The
+  next full crawl backfills every existing row via the COALESCE upsert.
+- **`JutsuCatalogEntryDto.fromTitle` / `JutsuAnimeInfoDto.fromTitleWithEpisodes`**:
+  CSV → `List<String>` round-trip, so the wire shape now matches the live SDK
+  one-for-one (`genres[]`, `types[]`, `movieCount`).
+- **`JutsuPosterProxyController`** (new): `GET /api/v1/sources/jutsu/poster
+  ?url=…`. Pass-through proxy whitelisted to `gen.jut.su` / `static.jut.su` /
+  `jut.su` hosts. Adds `Cache-Control: public, max-age=86400`. Required because
+  some browsers / CDN regions reject jut.su poster URLs cross-origin (referer
+  / Cloudflare policy), so the demo UI was rendering cards without posters.
+- **Demo UI** (`demo/src/views/JutsuView.vue`): `posterSrc()` helper wraps
+  jut.su URLs through the proxy; non-jut.su URLs pass through unchanged.
+
+### ARCH-0016 P1a — wire-shape uniformity follow-up (2026-05-08)
+
+DB-first `jut.su` endpoints (`/catalog`, `/search`, `/anime/{slug}`, `/episode`)
+were temporarily returning a separate `JutsuTitle*Dto` family on cache hits,
+which broke the demo UI: posters disappeared (`thumbnailUrl` → `posterUrl`),
+titles flipped (`title` → `titleRu`), pagination broke (`hasMore` → `pageSize +
+totalElements`), and the anime info page lost its `seasons[]` block. The
+controller now projects every L1 row onto the same `JutsuCatalogPageDto`,
+`JutsuAnimeInfoDto`, and `JutsuEpisodeMetaDto` the live SDK already returns,
+so the wire shape is identical regardless of cache hit / fallback.
+
+- Removed the four transitional DTOs (`JutsuTitleDto`, `JutsuTitlePageDto`,
+  `JutsuTitleWithEpisodesDto`, `JutsuStoredEpisodeDto`).
+- Added factory methods `JutsuCatalogEntryDto.fromTitle(JutsuTitle)`,
+  `JutsuCatalogPageDto.fromTitlePage(...)`,
+  `JutsuAnimeInfoDto.fromTitleWithEpisodes(JutsuTitle, List<JutsuEpisode>)`,
+  and `JutsuEpisodeMetaDto.fromStored(JutsuEpisode, @Nullable JutsuTitle)`.
+  L1 does not currently store genre / type slugs, so they are emitted as
+  empty arrays — supply `genres` / `types` query params to force the
+  live-fallback path when those facets are required.
+- `JutsuApiControllerTest` updated to the unified contract.
+
+### ARCH-0016 P1a — jut.su L1 cache + hybrid live-fallback (2026-05-07)
+
+First implementation step of [ADR 0016](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0016-architecture-trajectory.md):
+the per-source raw cache (L1) for jut.su, an incremental sync worker driven by
+the upstream notice feed, and a hybrid request-time read path that serves from
+DB by default and falls back to the live SDK with full DDoS protection on
+cache misses.
+
+**Liquibase migrations** (`com/orinuno/db/changelog/jutsu/`):
+
+- `jutsu_title` — slug-keyed mirror of upstream catalogue rows (title_ru / title_en / status / poster URL / last_synced_at).
+- `jutsu_episode` — `(title_slug, season, episode)` PK; mirrors per-episode metadata (embedUrl, qualities, last_synced_at).
+- `jutsu_sync_state` — singleton (`id=1`) row tracking `last_full_crawl_at`, `last_notice_cursor`, and an in-progress flag for the notice walk.
+
+**`JutsuCatalogSyncService` (sync worker, `@Scheduled`)**:
+
+- Full crawl every `JUTSU_SYNC_FULL_CRAWL_INTERVAL_HOURS` (default 48h).
+  Walks the `JutsuClient.browseCatalog(...)` paginator, upserts `jutsu_title` /
+  `jutsu_episode`, then explicitly invalidates `JutsuStalenessTracker` so the
+  freshly-rebuilt cache reports `X-Sync-Stale-Seconds: 0`.
+- Incremental notice walk every `JUTSU_SYNC_NOTICE_INTERVAL_MINUTES` (default
+  5m). Reads `JutsuClient.getLatestNoticeFeed()`, compares the upstream cursor
+  against `jutsu_sync_state.last_notice_cursor`, processes only the delta, and
+  advances the saved cursor to the newest seen `notice_id`. Logs a warning
+  when the gap exceeds the upstream page size — the next full crawl reconciles
+  it.
+
+**`JutsuNoticeLockService` (new `@Service`)**:
+
+- Owns the `@Transactional` lock acquisition for the singleton `jutsu_sync_state`
+  row. Lives in its own bean so Spring AOP applies the transactional proxy
+  (avoids the self-invocation pitfall a single-class implementation hits).
+- Atomic acquire-or-recover: `UPDATE jutsu_sync_state SET notice_walk_in_progress = TRUE
+  WHERE id = 1 AND (notice_walk_in_progress = FALSE OR updated_at < :staleBefore)`.
+  `JUTSU_SYNC_NOTICE_LOCK_TTL_MINUTES` (default 30m) defines the staleness
+  window — orinuno automatically takes back a lock left by a crashed worker
+  after that.
+
+**`JutsuLiveFallbackService` (request-time DDoS guards)**:
+
+- `dispatchReactive(slug, consumerKey, refresh, apiKey, Supplier<Mono<T>>)`:
+  fully reactive entry point used by every `JutsuApiController` cache-miss /
+  `?refresh=true` branch. No `.block()` ever runs on the WebFlux event loop.
+- Bucket4j RPS rate limit per consumer (`JUTSU_LIVE_FALLBACK_RPS`, default
+  0.2 rps). Buckets are stored in a Caffeine cache (`JUTSU_LIVE_FALLBACK_BUCKETS_*`)
+  with `expireAfterAccess` to bound memory growth on public traffic.
+- Caffeine negative cache (`JUTSU_LIVE_FALLBACK_NEGATIVE_CACHE_TTL_HOURS`,
+  default 24h). Populated **only** for HTTP 404 / 410 / null upstream — 5xx,
+  IOException, TimeoutException, and `JutsuDriftException` surface as 502 with
+  the `UPSTREAM_ERROR` outcome and never poison the cache.
+- Kill-switch (`JUTSU_LIVE_FALLBACK_ENABLED`). Default `false` in
+  `JutsuLiveFallbackProperties` (prod-safe by default), explicitly set to `true`
+  in dev `application.yml`.
+- Outcome metric `jutsu.live_fallback.outcome.total` (counter, tag
+  `outcome=DB_HIT|LIVE_HIT|NEGATIVE_CACHE|RATE_LIMITED|KILL_SWITCH|UPSTREAM_ERROR`)
+  scrapeable via `/actuator/prometheus`.
+
+**`JutsuStalenessTracker` (new `@Component`)**:
+
+- Caffeine-backed cache (30s TTL) for `(now - jutsu_sync_state.last_full_crawl_at).seconds`,
+  surfaced as `X-Sync-Stale-Seconds` on every jut.su API response. Removes the
+  per-request SQL roundtrip a naive implementation would incur. Invalidated by
+  `JutsuCatalogSyncService.fullCrawl()` on success.
+
+**`JutsuApiController` (request path)**:
+
+- `GET /api/v1/sources/jutsu/catalog` and `/search` are DB-first against
+  `jutsu_title`. `?refresh=true` (and unsupported filter combinations) bypass
+  the DB and go through the live-fallback dispatcher.
+- `GET /api/v1/sources/jutsu/anime/{slug}` and `/episode` are DB-first;
+  cache miss triggers `JutsuClient.getAnimeInfo` / `getEpisodeMeta` via the
+  live-fallback, and successful fallbacks are upserted into `jutsu_title` /
+  `jutsu_episode` so the next caller hits the cache.
+- `GET /api/v1/sources/jutsu/notice` and `/notice/stream` stay live-only on
+  purpose — the notice feed *is* the change feed, caching it provides no value.
+- `GET /api/v1/sources/jutsu/drift` stays live as before.
+- Every cached/live response carries `X-Sync-Stale-Seconds`. Every error
+  response from the live-fallback adds a `Retry-After` header when applicable.
+
+**Operational notes:**
+
+- New env vars: `JUTSU_SYNC_FULL_CRAWL_INTERVAL_HOURS`, `JUTSU_SYNC_NOTICE_INTERVAL_MINUTES`,
+  `JUTSU_SYNC_NOTICE_LOCK_TTL_MINUTES`, `JUTSU_LIVE_FALLBACK_ENABLED`,
+  `JUTSU_LIVE_FALLBACK_RPS`, `JUTSU_LIVE_FALLBACK_NEGATIVE_CACHE_TTL_HOURS`,
+  `JUTSU_LIVE_FALLBACK_BUCKETS_EXPIRE_HOURS`, `JUTSU_LIVE_FALLBACK_BUCKETS_MAX_SIZE`.
+  See `docs-site/.../getting-started/configuration.md` for the full reference.
+- One known follow-up: `TD-JUTSU-XFF` (consumerKey doesn't honour
+  `X-Forwarded-For`) — irrelevant for single-instance deployments, but worth
+  adding once orinuno is fronted by a load balancer.
+
 ## [SDK-SPLIT 2026-05-03] — API tier + per-provider standalone SDKs
 
 The "SDK split" is a five-step refactor that moved every video provider out of

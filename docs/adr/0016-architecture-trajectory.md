@@ -243,10 +243,12 @@ Nothing — this ADR fixes direction. Code work (`catalog_*` migrations, `Catalo
 | `AGENTS.md` "Bounded contexts" section | ✅ this PR |
 | `BACKLOG.md` P1/P2/P3 entries | ✅ this PR |
 | `TECH_DEBT.md` kodik L1+L2 hybrid entry | ✅ this PR |
-| P1a — `jutsu_title` / `jutsu_episode` / `jutsu_sync_state` migrations + repo | ⏳ pending |
-| P1a — `JutsuCatalogSyncService` (full + incremental) | ⏳ pending |
-| P1a — hybrid-fallback guards (rate limit + negative cache + kill-switch + metrics) | ⏳ pending |
-| P1a — `JutsuApiController` cutover to DB-first reads | ⏳ pending |
+| P1a — `jutsu_title` / `jutsu_episode` / `jutsu_sync_state` migrations + repo | ✅ done |
+| P1a — `JutsuCatalogSyncService` (full + incremental, real cursor advance) | ✅ done |
+| P1a — `JutsuNoticeLockService` (extracted to avoid Spring `@Transactional` self-invocation; stale-lock TTL recovery) | ✅ done |
+| P1a — `JutsuStalenessTracker` (Caffeine cache → 1 SQL round-trip per 30 s, not per request) | ✅ done |
+| P1a — hybrid-fallback guards (rate limit + Caffeine-bounded buckets, negative cache, kill-switch, transient/permanent classification, metrics) | ✅ done |
+| P1a — `JutsuApiController` fully reactive (DB reads on `boundedElastic`, no `.block()` on the event loop) | ✅ done |
 | P1b — `catalog_content` / `catalog_content_external_id` / `catalog_episode` / `catalog_episode_source_link` migrations | ⏳ pending |
 | P1b — `CatalogIdentityResolver` + tests | ⏳ pending |
 | P1b — `CatalogIngestionService` + sync hooks from Kodik / jut.su contexts | ⏳ pending |

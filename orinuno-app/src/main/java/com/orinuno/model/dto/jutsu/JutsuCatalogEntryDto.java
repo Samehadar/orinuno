@@ -1,6 +1,7 @@
 package com.orinuno.model.dto.jutsu;
 
 import com.orinuno.jutsu.catalog.JutsuCatalogEntry;
+import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 import java.util.List;
@@ -44,5 +45,45 @@ public record JutsuCatalogEntryDto(
                 e.types().stream().map(t -> t.slug()).toList(),
                 e.year().map(y -> y.slug()).orElse(null),
                 e.detailUrl());
+    }
+
+    /**
+     * Project a {@code jutsu_title} L1 row onto the same wire shape the live SDK returns. ADR 0016
+     * P1a relies on this so the demo UI and downstream consumers see one uniform contract
+     * regardless of whether the response was served from MySQL or via a hybrid fallback to jut.su.
+     *
+     * <p>The L1 mirror does not currently store genres / types / movie counts, so those are emitted
+     * as empty / null. {@code year} is rendered as a string to match the live SDK shape.
+     */
+    public static JutsuCatalogEntryDto fromTitle(JutsuTitle t) {
+        String detailUrl = "https://jut.su/" + t.getSlug() + "/";
+        String year = t.getYear() == null ? null : Integer.toString(t.getYear());
+        return new JutsuCatalogEntryDto(
+                t.getSlug(),
+                t.getTitleRu(),
+                t.getTitleEn(),
+                t.getPosterUrl(),
+                t.getEpisodesTotal(),
+                t.getMovieCount(),
+                splitCsv(t.getGenres()),
+                splitCsv(t.getTypes()),
+                year,
+                detailUrl);
+    }
+
+    /**
+     * Split a CSV slug list (as stored in {@code jutsu_title.genres / types}) into a list of
+     * trimmed slugs. Returns an empty list for null / blank input — never null, so the wire shape
+     * stays stable.
+     */
+    static List<String> splitCsv(@Nullable String csv) {
+        if (csv == null || csv.isBlank()) return List.of();
+        String[] parts = csv.split(",");
+        java.util.ArrayList<String> out = new java.util.ArrayList<>(parts.length);
+        for (String p : parts) {
+            String trimmed = p.trim();
+            if (!trimmed.isEmpty()) out.add(trimmed);
+        }
+        return java.util.Collections.unmodifiableList(out);
     }
 }

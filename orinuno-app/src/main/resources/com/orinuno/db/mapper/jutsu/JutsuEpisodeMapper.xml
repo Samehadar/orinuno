@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.jutsu.repository.JutsuEpisodeRepository">
+
+    <resultMap id="episodeResultMap" type="com.orinuno.jutsu.model.JutsuEpisode">
+        <id property="titleSlug" column="title_slug"/>
+        <id property="season" column="season"/>
+        <id property="episode" column="episode"/>
+        <result property="embedUrl" column="embed_url"/>
+        <result property="videoQualities" column="video_qualities"/>
+        <result property="lastSyncedAt" column="last_synced_at"/>
+    </resultMap>
+
+    <select id="findByTitleAndPosition" resultMap="episodeResultMap">
+        SELECT * FROM jutsu_episode
+        WHERE title_slug = #{titleSlug}
+          AND season     = #{season}
+          AND episode    = #{episode}
+    </select>
+
+    <select id="listForTitle" resultMap="episodeResultMap">
+        SELECT * FROM jutsu_episode
+        WHERE title_slug = #{titleSlug}
+        ORDER BY season ASC, episode ASC
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM jutsu_episode
+    </select>
+
+    <insert id="upsertBatch">
+        INSERT INTO jutsu_episode (
+            title_slug, season, episode, embed_url, video_qualities, last_synced_at
+        ) VALUES
+        <foreach collection="episodes" item="ep" separator=",">
+            (#{ep.titleSlug}, #{ep.season}, #{ep.episode}, #{ep.embedUrl}, #{ep.videoQualities}, #{ep.lastSyncedAt})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            embed_url       = COALESCE(VALUES(embed_url), embed_url),
+            video_qualities = COALESCE(VALUES(video_qualities), video_qualities),
+            last_synced_at  = COALESCE(VALUES(last_synced_at), last_synced_at)
+    </insert>
+
+</mapper>

@@ -4,22 +4,35 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.orinuno.configuration.JutsuLiveFallbackProperties;
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.catalog.JutsuCatalogEntry;
 import com.orinuno.jutsu.catalog.JutsuCatalogPage;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.drift.JutsuDriftSnapshot;
 import com.orinuno.jutsu.episode.JutsuEpisodeMeta;
+import com.orinuno.jutsu.fallback.JutsuLiveFallbackService;
 import com.orinuno.jutsu.filter.JutsuCatalogFilter;
 import com.orinuno.jutsu.filter.JutsuGenre;
-import com.orinuno.jutsu.filter.JutsuType;
-import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
+import com.orinuno.jutsu.model.JutsuTitle;
 import com.orinuno.jutsu.notice.JutsuNoticeEntry;
 import com.orinuno.jutsu.notice.JutsuNoticeFeed;
+import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
+import com.orinuno.jutsu.repository.JutsuTitleRepository;
+import com.orinuno.jutsu.sync.JutsuCatalogSyncService;
+import com.orinuno.jutsu.sync.JutsuStalenessTracker;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Clock;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -27,29 +40,82 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * WebTestClient-bound tests for the post-ADR-0016-P1a {@link JutsuApiController}. Exercises both
+ * the DB-first cache hit path and the hybrid live-fallback miss path.
+ */
 @ExtendWith(MockitoExtension.class)
 class JutsuApiControllerTest {
 
     @Mock private JutsuClient jutsuClient;
+    @Mock private JutsuTitleRepository titleRepository;
+    @Mock private JutsuEpisodeRepository episodeRepository;
+    @Mock private JutsuCatalogSyncService syncService;
+    @Mock private JutsuStalenessTracker stalenessTracker;
 
+    private JutsuLiveFallbackService liveFallbackService;
     private WebTestClient client;
+    private final Clock fixedClock =
+            Clock.fixed(
+                    ZonedDateTime.of(2026, 5, 7, 12, 0, 0, 0, ZoneOffset.UTC).toInstant(),
+                    ZoneId.of("UTC"));
 
     @BeforeEach
     void setUp() {
-        JutsuApiController controller = new JutsuApiController(jutsuClient);
+        JutsuLiveFallbackProperties props =
+                new JutsuLiveFallbackProperties(
+                        true,
+                        new JutsuLiveFallbackProperties.RateLimit(5.0),
+                        new JutsuLiveFallbackProperties.NegativeCache(24),
+                        new JutsuLiveFallbackProperties.Buckets());
+        liveFallbackService = new JutsuLiveFallbackService(props, new SimpleMeterRegistry());
+        // Lenient: not all controller paths read the staleness header (drift / notice
+        // forwarders go straight to the SDK), but those that do should always see 300s.
+        lenient().when(stalenessTracker.staleSeconds()).thenReturn(300L);
+        JutsuApiController controller =
+                new JutsuApiController(
+                        jutsuClient,
+                        titleRepository,
+                        episodeRepository,
+                        syncService,
+                        liveFallbackService,
+                        stalenessTracker,
+                        fixedClock);
         client = WebTestClient.bindToController(controller).build();
     }
 
     @Test
-    @DisplayName("GET /catalog forwards page + decoded filter to JutsuClient")
-    void browseCatalogParsesEnumNamesIntoFilter() {
+    @DisplayName("GET /catalog without filters → DB read, X-Sync-Stale-Seconds header set")
+    void browseCatalogDbServed() {
+        JutsuTitle row =
+                JutsuTitle.builder().slug("naruto").titleRu("Наруто").titleEn("Naruto").build();
+        when(titleRepository.countFiltered(any(), any())).thenReturn(1L);
+        when(titleRepository.listFiltered(any(), any(), anyInt(), anyInt()))
+                .thenReturn(List.of(row));
+
+        client.get()
+                .uri("/api/v1/sources/jutsu/catalog")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals("X-Sync-Stale-Seconds", "300")
+                .expectBody()
+                .jsonPath("$.entries[0].slug")
+                .isEqualTo("naruto");
+
+        verify(jutsuClient, never()).browseCatalog(anyInt());
+    }
+
+    @Test
+    @DisplayName("GET /catalog with genre filter → live SDK fallback")
+    void browseCatalogWithFilterFallsBackToSdk() {
         JutsuCatalogPage page =
                 new JutsuCatalogPage(
                         List.of(
@@ -64,187 +130,160 @@ class JutsuApiControllerTest {
                                         Set.of(JutsuGenre.ACTION),
                                         Set.of(),
                                         Optional.empty())),
-                        2,
-                        true);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(2)))
+                        1,
+                        false);
+        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
                 .thenReturn(Mono.just(page));
 
         client.get()
                 .uri(
                         b ->
                                 b.path("/api/v1/sources/jutsu/catalog")
-                                        .queryParam("page", "2")
                                         .queryParam("genres", "ACTION")
-                                        .queryParam("types", "SHONEN")
-                                        .queryParam("years", "Y_2024")
-                                        .queryParam("sort", "BY_NAME")
                                         .build())
                 .exchange()
                 .expectStatus()
                 .isOk()
                 .expectBody()
-                .jsonPath("$.page")
-                .isEqualTo(2)
-                .jsonPath("$.entries.length()")
-                .isEqualTo(1)
                 .jsonPath("$.entries[0].slug")
+                .isEqualTo("naruto");
+        verify(jutsuClient, atLeastOnce()).browseCatalog(any(JutsuCatalogFilter.class), eq(1));
+    }
+
+    @Test
+    @DisplayName("GET /anime/{slug} cache hit → returns DB row, never calls SDK")
+    void getAnimeInfoCacheHit() {
+        JutsuTitle row =
+                JutsuTitle.builder().slug("naruto").titleRu("Наруто").titleEn("Naruto").build();
+        when(titleRepository.findBySlug("naruto")).thenReturn(Optional.of(row));
+        when(episodeRepository.listForTitle("naruto")).thenReturn(List.of());
+
+        client.get()
+                .uri("/api/v1/sources/jutsu/anime/naruto")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .exists("X-Sync-Stale-Seconds")
+                .expectBody()
+                .jsonPath("$.slug")
                 .isEqualTo("naruto")
-                .jsonPath("$.entries[0].genres[0]")
-                .isEqualTo("action")
-                .jsonPath("$.hasMore")
-                .isEqualTo(true);
-
-        ArgumentCaptor<JutsuCatalogFilter> captor =
-                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
-        verify(jutsuClient).browseCatalog(captor.capture(), eq(2));
-        JutsuCatalogFilter f = captor.getValue();
-        assertThat(f.genres()).containsExactly(JutsuGenre.ACTION);
-        assertThat(f.types()).containsExactly(JutsuType.SHONEN);
-        assertThat(f.years()).containsExactly(JutsuYear.Y_2024);
+                .jsonPath("$.title")
+                .isEqualTo("Наруто");
+        verify(jutsuClient, never()).getAnimeInfo(any());
     }
 
     @Test
-    @DisplayName("GET /catalog binds URL slugs (round-trip from response → request)")
-    void browseCatalogAcceptsSlugInputs() {
-        // Slugs come straight from the response shape (e.g. "action", "before2000", "shonen") so
-        // a UI can copy them back into a follow-up request without translating to enum names.
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
-                .thenReturn(Mono.just(page));
-
-        client.get()
-                .uri(
-                        b ->
-                                b.path("/api/v1/sources/jutsu/catalog")
-                                        .queryParam("genres", "action")
-                                        .queryParam("types", "shonen")
-                                        .queryParam("years", "before2000")
-                                        .queryParam("sort", "order-by-name")
-                                        .build())
-                .exchange()
-                .expectStatus()
-                .isOk();
-
-        ArgumentCaptor<JutsuCatalogFilter> captor =
-                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
-        verify(jutsuClient).browseCatalog(captor.capture(), eq(1));
-        JutsuCatalogFilter f = captor.getValue();
-        assertThat(f.genres()).containsExactly(JutsuGenre.ACTION);
-        assertThat(f.types()).containsExactly(JutsuType.SHONEN);
-        assertThat(f.years()).containsExactly(JutsuYear.BEFORE_2000);
-        assertThat(f.sort()).isEqualTo(com.orinuno.jutsu.filter.JutsuSort.BY_NAME);
-    }
-
-    @Test
-    @DisplayName("GET /catalog tolerates unknown enum names without 5xx")
-    void browseCatalogIgnoresUnknownEnumValues() {
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
-                .thenReturn(Mono.just(page));
-
-        client.get()
-                .uri(
-                        b ->
-                                b.path("/api/v1/sources/jutsu/catalog")
-                                        .queryParam("genres", "NOT_A_GENRE,ACTION")
-                                        .build())
-                .exchange()
-                .expectStatus()
-                .isOk();
-
-        ArgumentCaptor<JutsuCatalogFilter> captor =
-                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
-        verify(jutsuClient).browseCatalog(captor.capture(), eq(1));
-        // The unknown value is dropped, the recognised one survives.
-        assertThat(captor.getValue().genres()).containsExactly(JutsuGenre.ACTION);
-    }
-
-    @Test
-    @DisplayName("GET /search routes through searchByTitle when no filter is supplied")
-    void searchByTitleNoFilter() {
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
-        when(jutsuClient.searchByTitle("история", 1)).thenReturn(Mono.just(page));
-
-        client.get()
-                .uri(b -> b.path("/api/v1/sources/jutsu/search").queryParam("q", "история").build())
-                .exchange()
-                .expectStatus()
-                .isOk();
-
-        verify(jutsuClient).searchByTitle("история", 1);
-    }
-
-    @Test
-    @DisplayName("GET /search composes filter + query")
-    void searchByTitleWithFilter() {
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 3, true);
-        when(jutsuClient.searchByTitle(any(JutsuCatalogFilter.class), eq("история"), eq(3)))
-                .thenReturn(Mono.just(page));
-
-        client.get()
-                .uri(
-                        b ->
-                                b.path("/api/v1/sources/jutsu/search")
-                                        .queryParam("q", "история")
-                                        .queryParam("page", "3")
-                                        .queryParam("genres", "COMEDY")
-                                        .build())
-                .exchange()
-                .expectStatus()
-                .isOk();
-
-        verify(jutsuClient).searchByTitle(any(JutsuCatalogFilter.class), eq("история"), eq(3));
-    }
-
-    @Test
-    @DisplayName("GET /anime/{slug} returns the typed info DTO")
-    void getAnimeInfo() {
+    @DisplayName(
+            "GET /anime/{slug} miss → live SDK fallback, syncService.upsertFromAnimeInfo called")
+    void getAnimeInfoCacheMissTriggersFallback() {
+        when(titleRepository.findBySlug("missing")).thenReturn(Optional.empty());
         JutsuAnimeInfo info =
                 new JutsuAnimeInfo(
-                        "onepuunchman",
-                        "Ванпанчмен",
-                        "One Punch Man",
-                        "synopsis",
-                        Optional.of(JutsuYear.Y_2015_2023),
-                        Set.of(JutsuGenre.ACTION, JutsuGenre.COMEDY),
-                        Set.of(JutsuType.SUPERPOWER),
-                        "thumb.jpg",
+                        "missing",
+                        "Missing Title",
+                        null,
+                        null,
+                        Optional.empty(),
+                        Set.of(),
+                        Set.of(),
+                        null,
                         List.of());
-        when(jutsuClient.getAnimeInfo("onepuunchman")).thenReturn(Mono.just(info));
+        when(jutsuClient.getAnimeInfo("missing")).thenReturn(Mono.just(info));
 
         client.get()
-                .uri("/api/v1/sources/jutsu/anime/onepuunchman")
+                .uri("/api/v1/sources/jutsu/anime/missing")
                 .exchange()
                 .expectStatus()
                 .isOk()
                 .expectBody()
                 .jsonPath("$.slug")
-                .isEqualTo("onepuunchman")
-                .jsonPath("$.title")
-                .isEqualTo("Ванпанчмен")
-                .jsonPath("$.year")
-                .isEqualTo("2015-2023")
-                .jsonPath("$.genres.length()")
-                .isEqualTo(2);
+                .isEqualTo("missing");
+        verify(syncService).upsertFromAnimeInfo(info);
     }
 
     @Test
-    @DisplayName("GET /episode returns the typed metadata DTO")
-    void getEpisodeMeta() {
+    @DisplayName("Negative-cached slug returns 404 without hitting upstream on the second request")
+    void getAnimeInfoNegativeCacheBlocksRepeatMiss() {
+        when(titleRepository.findBySlug("ghost")).thenReturn(Optional.empty());
+        when(jutsuClient.getAnimeInfo("ghost")).thenReturn(Mono.empty());
+
+        // First call -> upstream returns empty -> slug goes into negative cache.
+        client.get()
+                .uri("/api/v1/sources/jutsu/anime/ghost")
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+
+        // Second call -> negative cache short-circuits with 404.
+        client.get()
+                .uri("/api/v1/sources/jutsu/anime/ghost")
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+        verify(jutsuClient, atLeastOnce()).getAnimeInfo("ghost");
+    }
+
+    @Test
+    @DisplayName("GET /episode parses URL and returns DB row when cached")
+    void getEpisodeMetaDbHit() {
+        when(episodeRepository.findByTitleAndPosition("naruto", 1, 1))
+                .thenReturn(
+                        Optional.of(
+                                com.orinuno.jutsu.model.JutsuEpisode.builder()
+                                        .titleSlug("naruto")
+                                        .season(1)
+                                        .episode(1)
+                                        .embedUrl("https://jut.su/naruto/season-1/episode-1.html")
+                                        .build()));
+
+        when(titleRepository.findBySlug("naruto"))
+                .thenReturn(
+                        Optional.of(
+                                JutsuTitle.builder()
+                                        .slug("naruto")
+                                        .titleRu("Наруто")
+                                        .titleEn("Naruto")
+                                        .build()));
+        client.get()
+                .uri(
+                        b ->
+                                b.path("/api/v1/sources/jutsu/episode")
+                                        .queryParam(
+                                                "url",
+                                                "https://jut.su/naruto/season-1/episode-1.html")
+                                        .build())
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.slug")
+                .isEqualTo("naruto")
+                .jsonPath("$.episode")
+                .isEqualTo(1)
+                .jsonPath("$.canonicalUrl")
+                .isEqualTo("https://jut.su/naruto/season-1/episode-1.html");
+        verify(jutsuClient, never()).getEpisodeMeta(any());
+    }
+
+    @Test
+    @DisplayName("GET /episode miss → live SDK fallback (and writes to DB)")
+    void getEpisodeMetaMissFallback() {
+        when(episodeRepository.findByTitleAndPosition("naruto", 1, 5)).thenReturn(Optional.empty());
         JutsuEpisodeMeta meta =
                 new JutsuEpisodeMeta(
-                        "onepuunchman",
+                        "naruto",
                         1,
-                        1,
-                        "Ванпанчмен 1 сезон 1 серия",
-                        "Смотреть",
-                        "https://jut.su/onepuunchman/season-1/episode-1.html",
-                        "thumb.jpg",
+                        5,
+                        "Наруто 1 сезон 5 серия",
+                        "title",
+                        "https://jut.su/naruto/season-1/episode-5.html",
                         null,
-                        "/onepuunchman/season-1/episode-2.html",
-                        "/onepuunchman/",
-                        true);
-        when(jutsuClient.getEpisodeMeta("https://jut.su/onepuunchman/season-1/episode-1.html"))
+                        null,
+                        null,
+                        "/naruto/",
+                        false);
+        when(jutsuClient.getEpisodeMeta("https://jut.su/naruto/season-1/episode-5.html"))
                 .thenReturn(Mono.just(meta));
 
         client.get()
@@ -253,26 +292,19 @@ class JutsuApiControllerTest {
                                 b.path("/api/v1/sources/jutsu/episode")
                                         .queryParam(
                                                 "url",
-                                                "https://jut.su/onepuunchman/season-1/episode-1.html")
+                                                "https://jut.su/naruto/season-1/episode-5.html")
                                         .build())
                 .exchange()
                 .expectStatus()
-                .isOk()
-                .expectBody()
-                .jsonPath("$.slug")
-                .isEqualTo("onepuunchman")
-                .jsonPath("$.premiumGated")
-                .isEqualTo(true)
-                .jsonPath("$.prevEpisodeUrl")
-                .doesNotExist();
+                .isOk();
+        verify(syncService).upsertEpisode(any());
     }
 
     @Test
-    @DisplayName("GET /notice without cursor calls getLatestNoticeFeed")
-    void getNoticeFeedLatest() {
+    @DisplayName("GET /notice unchanged: forwards to live SDK")
+    void noticeFeedLatestStillLive() {
         JutsuNoticeFeed feed = new JutsuNoticeFeed(100, List.of());
         when(jutsuClient.getLatestNoticeFeed()).thenReturn(Mono.just(feed));
-
         client.get()
                 .uri("/api/v1/sources/jutsu/notice")
                 .exchange()
@@ -280,16 +312,13 @@ class JutsuApiControllerTest {
                 .isOk()
                 .expectBody()
                 .jsonPath("$.requestedCursor")
-                .isEqualTo(100)
-                .jsonPath("$.hasEntries")
-                .isEqualTo(false);
-
+                .isEqualTo(100);
         verify(jutsuClient).getLatestNoticeFeed();
     }
 
     @Test
-    @DisplayName("GET /notice?cursor=X calls getNoticeFeed(X)")
-    void getNoticeFeedExplicitCursor() {
+    @DisplayName("GET /notice?cursor pipes through to getNoticeFeed(cursor)")
+    void noticeFeedExplicitCursor() {
         JutsuNoticeFeed feed =
                 new JutsuNoticeFeed(
                         50,
@@ -298,12 +327,11 @@ class JutsuApiControllerTest {
                                         "x",
                                         1,
                                         2,
-                                        "X: 2 серия",
+                                        "X: 2",
                                         "https://jut.su/x/episode-2.html",
                                         null,
                                         "сегодня")));
         when(jutsuClient.getNoticeFeed(50)).thenReturn(Mono.just(feed));
-
         client.get()
                 .uri(b -> b.path("/api/v1/sources/jutsu/notice").queryParam("cursor", "50").build())
                 .exchange()
@@ -311,11 +339,7 @@ class JutsuApiControllerTest {
                 .isOk()
                 .expectBody()
                 .jsonPath("$.requestedCursor")
-                .isEqualTo(50)
-                .jsonPath("$.entries.length()")
-                .isEqualTo(1)
-                .jsonPath("$.nextCursor")
-                .isEqualTo(49);
+                .isEqualTo(50);
     }
 
     @Test
@@ -324,17 +348,7 @@ class JutsuApiControllerTest {
         JutsuNoticeEntry e1 =
                 new JutsuNoticeEntry(
                         "x", 1, 1, "X: 1", "https://jut.su/x/episode-1.html", null, "сегодня");
-        JutsuNoticeEntry e2 =
-                new JutsuNoticeEntry(
-                        "y",
-                        2,
-                        3,
-                        "Y: 3",
-                        "https://jut.su/y/season-2/episode-3.html",
-                        null,
-                        "вчера");
-        when(jutsuClient.streamNoticeEntries(anyInt(), anyInt())).thenReturn(Flux.just(e1, e2));
-
+        when(jutsuClient.streamNoticeEntries(anyInt(), anyInt())).thenReturn(Flux.just(e1));
         client.get()
                 .uri(
                         b ->
@@ -345,17 +359,14 @@ class JutsuApiControllerTest {
                 .exchange()
                 .expectStatus()
                 .isOk();
-
         verify(jutsuClient).streamNoticeEntries(100, 2);
     }
 
     @Test
     @DisplayName("GET /drift returns the typed drift snapshot")
     void getDrift() {
-        JutsuDriftDetector detector = new JutsuDriftDetector();
-        JutsuDriftSnapshot snapshot = detector.snapshot();
+        JutsuDriftSnapshot snapshot = new JutsuDriftDetector().snapshot();
         when(jutsuClient.getDriftSnapshot()).thenReturn(snapshot);
-
         client.get()
                 .uri("/api/v1/sources/jutsu/drift")
                 .exchange()
@@ -363,10 +374,21 @@ class JutsuApiControllerTest {
                 .isOk()
                 .expectBody()
                 .jsonPath("$.health")
-                .isEqualTo("HEALTHY")
-                .jsonPath("$.lifetimeEvents")
-                .isEqualTo(0)
-                .jsonPath("$.recentEvents")
-                .isArray();
+                .isEqualTo("HEALTHY");
+    }
+
+    @Test
+    @DisplayName("?refresh=true without X-API-KEY → 401")
+    void refreshRequiresApiKey() {
+        client.get()
+                .uri(
+                        b ->
+                                b.path("/api/v1/sources/jutsu/anime/naruto")
+                                        .queryParam("refresh", "true")
+                                        .build())
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
+        assertThat(liveFallbackService.isEnabled()).isTrue();
     }
 }

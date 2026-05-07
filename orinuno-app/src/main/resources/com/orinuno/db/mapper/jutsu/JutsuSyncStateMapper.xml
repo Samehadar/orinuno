@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.jutsu.repository.JutsuSyncStateRepository">
+
+    <resultMap id="syncStateResultMap" type="com.orinuno.jutsu.model.JutsuSyncState">
+        <id property="id" column="id"/>
+        <result property="lastFullCrawlAt" column="last_full_crawl_at"/>
+        <result property="lastNoticeCursor" column="last_notice_cursor"/>
+        <result property="noticeWalkInProgress" column="notice_walk_in_progress"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="load" resultMap="syncStateResultMap">
+        SELECT * FROM jutsu_sync_state WHERE id = 1
+    </select>
+
+    <update id="updateFullCrawlCursor">
+        UPDATE jutsu_sync_state
+        SET last_full_crawl_at = COALESCE(#{at}, last_full_crawl_at)
+        WHERE id = 1
+    </update>
+
+    <update id="updateNoticeCursor">
+        UPDATE jutsu_sync_state
+        SET last_notice_cursor = #{cursor}
+        WHERE id = 1
+    </update>
+
+    <!--
+        Atomic acquire-or-recover. Touches updated_at (CURRENT_TIMESTAMP via the column's
+        ON UPDATE clause) so the next caller can detect a stale lock.
+    -->
+    <update id="tryLockNoticeWalk">
+        UPDATE jutsu_sync_state
+        SET notice_walk_in_progress = TRUE
+        WHERE id = 1
+          AND (notice_walk_in_progress = FALSE OR updated_at &lt; #{staleBefore})
+    </update>
+
+    <update id="releaseNoticeWalk">
+        UPDATE jutsu_sync_state
+        SET notice_walk_in_progress = FALSE
+        WHERE id = 1
+    </update>
+
+    <insert id="seedIfMissing">
+        INSERT INTO jutsu_sync_state (id, last_full_crawl_at, last_notice_cursor, notice_walk_in_progress)
+        VALUES (1, NULL, NULL, FALSE)
+        ON DUPLICATE KEY UPDATE id = id
+    </insert>
+
+</mapper>

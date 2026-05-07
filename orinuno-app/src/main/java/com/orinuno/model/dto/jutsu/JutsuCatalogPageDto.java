@@ -1,6 +1,7 @@
 package com.orinuno.model.dto.jutsu;
 
 import com.orinuno.jutsu.catalog.JutsuCatalogPage;
+import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
@@ -21,5 +22,16 @@ public record JutsuCatalogPageDto(
                 p.page(),
                 p.entries().stream().map(JutsuCatalogEntryDto::from).toList(),
                 p.hasMore());
+    }
+
+    /**
+     * Build a wire page from an L1 query result. {@code hasMore} is computed against {@code
+     * totalElements} so callers don't need a separate "next" flag.
+     */
+    public static JutsuCatalogPageDto fromTitlePage(
+            int page, int pageSize, long totalElements, List<JutsuTitle> rows) {
+        boolean hasMore = (long) page * Math.max(1, pageSize) < totalElements;
+        return new JutsuCatalogPageDto(
+                page, rows.stream().map(JutsuCatalogEntryDto::fromTitle).toList(), hasMore);
     }
 }

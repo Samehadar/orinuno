@@ -494,7 +494,32 @@ Sibnet — крупнейший сибирский видеохостинг с *
 
 **Контекст:** ADR 0016 фиксирует архитектурное направление — остаёмся modular monolith, добавляем universal canonical catalog (L3) как отдельный bounded context внутри `orinuno-app`, а jut.su получает L1-кеш (`jutsu_*` таблицы) с фоновой синхронизацией. Полное обоснование, классификация источников, триггеры будущего расщепления и принципы bounded contexts — в [`docs/adr/0016-architecture-trajectory.md`](docs/adr/0016-architecture-trajectory.md).
 
-#### P1a: jut.su L1 (per-source raw cache + sync worker + hybrid fallback)
+#### P1a: jut.su L1 (per-source raw cache + sync worker + hybrid fallback) — **DONE (2026-05-07)**
+
+**Статус:** Реализовано.
+**Файлы:** `orinuno-app/src/main/java/com/orinuno/jutsu/{model,repository,sync,fallback,configuration}/**`, `orinuno-app/src/main/resources/com/orinuno/db/changelog/jutsu/scripts/**`, `orinuno-app/src/main/resources/com/orinuno/db/mapper/jutsu/**`, `JutsuApiController.java`.
+
+**Что сделано:**
+- Liquibase: `jutsu_title`, `jutsu_episode`, `jutsu_sync_state` (singleton, `CHECK (id = 1)`).
+- `JutsuCatalogSyncService` — full crawl (every 48h, floor 24h) + notice incremental (every 5min) с **реальным advance курсора** через `feed.requestedCursor()` и dedup `subList(0, delta)`.
+- `JutsuNoticeLockService` — отдельный `@Service` (избегает self-invocation pitfall, см. `ParseRequestQueueService`); `tryAcquire()` — атомарный UPDATE с recovery на crashed worker'ах через `notice-lock-ttl-minutes` (default 30).
+- `JutsuStalenessTracker` — Caffeine cache 30s, чтобы `X-Sync-Stale-Seconds` не делал SQL roundtrip на каждом запросе.
+- `JutsuLiveFallbackService` — все пять guards + классификация ошибок (404/410 → negative cache, drift / 5xx / IO / timeout → upstream-error 502 БЕЗ negative cache); `dispatch` (sync) + `dispatchReactive(Supplier<Mono<T>>)` для контроллера; buckets хранятся в Caffeine `expireAfterAccess` чтобы публичный IP-скан не растил heap.
+- `JutsuApiController` — fully reactive, DB reads на `Schedulers.boundedElastic()`, никаких `.block()` на event loop.
+- Default `enabled=false` в проде; dev профиль (`application.yml`) включает live-fallback.
+
+**Acceptance criteria выполнены:**
+- ✅ Rate limit (Bucket4j, default 1 req / 5s, per X-API-KEY или IP).
+- ✅ Negative cache (Caffeine 24h, **только** для 404/410/null upstream).
+- ✅ Kill-switch (`JUTSU_LIVE_FALLBACK_ENABLED`).
+- ✅ Force-refresh (`?refresh=true` требует non-anonymous `X-API-KEY`).
+- ✅ Метрики `jutsu_live_fallback_total{outcome=hit|miss|upstream_error|rate_limited|disabled|negative_cache}`.
+- ✅ Тесты: 16 для sync-сервиса/lock-service/staleness, 14 для fallback, 13 для контроллера, 1 e2e migration smoke.
+
+**Не закрыто (вынесено в TD):**
+- `TD-JUTSU-XFF` — `consumerKey` смотрит только на `request.getRemoteAddress()`. За балансировщиком (HAProxy / nginx) все запросы выглядят как один IP, и rate-limit на ranges ломается. Решение — добавить `ForwardedHeaderTransformer` глобально либо первоклассный X-Forwarded-For-aware extractor в `JutsuApiController.consumerKey()`. Низкий приоритет до момента, когда orinuno встанет за реверс-прокси с уважением `Forwarded` headers.
+
+#### P1a-historical: оригинальный план (для справки)
 
 **Приоритет:** Высокий
 **Сложность:** Средняя
@@ -1274,7 +1299,7 @@ Kodik применяет многоуровневую защиту. Это зн�
 | 24b | IDEA-SDK-2: Extract client + dto | Средний | Высокая | IDEA-SDK-1, KodikSdkConfig POJO |
 | 24c | IDEA-SDK-3: Extract token | Средний | Средняя | IDEA-SDK-2 |
 | 24d | IDEA-SDK-4: Publish to Maven Central | Низкий | Высокая | IDEA-SDK-1..3 stable |
-| 25a | ARCH-0016 P1a: jut.su L1 (`jutsu_*` tables + sync worker + hybrid-fallback guards) | **Высокий** | Средняя | jutsu-sdk (ADR 0015) |
+| 25a | ARCH-0016 P1a: jut.su L1 (`jutsu_*` tables + sync worker + hybrid-fallback guards) | **Высокий** | Средняя | jutsu-sdk (ADR 0015) | **DONE 2026-05-07** |
 | 25b | ARCH-0016 P1b: catalog L3 (`catalog_*` tables + `CatalogIdentityResolver` + `CatalogIngestionService`) | **Высокий** | Средняя | — (можно параллельно с 25a) |
 | 25c | ARCH-0016 P2: canonical REST `/api/v1/catalog/*` + unified `GET /api/v1/sources/{provider}/content/{externalId}` | **Высокий** | Низкая | 25a + 25b |
 | 25d | ARCH-0016 P3: ArchUnit + Liquibase zoning checks | Средний | Низкая | 25a + 25b (контексты должны существовать) |

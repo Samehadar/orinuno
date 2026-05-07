@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.jutsu.repository.JutsuTitleRepository">
+
+    <resultMap id="titleResultMap" type="com.orinuno.jutsu.model.JutsuTitle">
+        <id property="slug" column="slug"/>
+        <result property="titleRu" column="title_ru"/>
+        <result property="titleEn" column="title_en"/>
+        <result property="status" column="status"
+                typeHandler="com.orinuno.jutsu.repository.JutsuTitleStatusTypeHandler"
+                javaType="com.orinuno.jutsu.model.JutsuTitleStatus"/>
+        <result property="year" column="year"/>
+        <result property="episodesTotal" column="episodes_total"/>
+        <result property="genres" column="genres"/>
+        <result property="types" column="types"/>
+        <result property="movieCount" column="movie_count"/>
+        <result property="shikimoriId" column="shikimori_id"/>
+        <result property="malId" column="mal_id"/>
+        <result property="description" column="description"/>
+        <result property="posterUrl" column="poster_url"/>
+        <result property="lastSyncedAt" column="last_synced_at"/>
+        <result property="sourceEtag" column="source_etag"/>
+    </resultMap>
+
+    <select id="findBySlug" resultMap="titleResultMap">
+        SELECT * FROM jutsu_title WHERE slug = #{slug}
+    </select>
+
+    <select id="listFiltered" resultMap="titleResultMap">
+        SELECT * FROM jutsu_title
+        <where>
+            <if test="titleQuery != null and titleQuery != ''">
+                (title_ru LIKE CONCAT('%', #{titleQuery}, '%')
+                 OR title_en LIKE CONCAT('%', #{titleQuery}, '%'))
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        ORDER BY title_ru ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countFiltered" resultType="long">
+        SELECT COUNT(*) FROM jutsu_title
+        <where>
+            <if test="titleQuery != null and titleQuery != ''">
+                (title_ru LIKE CONCAT('%', #{titleQuery}, '%')
+                 OR title_en LIKE CONCAT('%', #{titleQuery}, '%'))
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM jutsu_title
+    </select>
+
+    <select id="findStaleSlugs" resultType="java.lang.String">
+        SELECT slug FROM jutsu_title
+        WHERE last_synced_at IS NULL OR last_synced_at &lt; #{threshold}
+        ORDER BY last_synced_at IS NULL DESC, last_synced_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO jutsu_title (
+            slug, title_ru, title_en, status, year, episodes_total,
+            genres, types, movie_count,
+            shikimori_id, mal_id, description, poster_url, last_synced_at, source_etag
+        ) VALUES (
+            #{title.slug},
+            #{title.titleRu},
+            #{title.titleEn},
+            #{title.status,typeHandler=com.orinuno.jutsu.repository.JutsuTitleStatusTypeHandler,javaType=com.orinuno.jutsu.model.JutsuTitleStatus},
+            #{title.year},
+            #{title.episodesTotal},
+            #{title.genres},
+            #{title.types},
+            #{title.movieCount},
+            #{title.shikimoriId},
+            #{title.malId},
+            #{title.description},
+            #{title.posterUrl},
+            #{title.lastSyncedAt},
+            #{title.sourceEtag}
+        )
+        ON DUPLICATE KEY UPDATE
+            title_ru        = COALESCE(VALUES(title_ru), title_ru),
+            title_en        = COALESCE(VALUES(title_en), title_en),
+            status          = COALESCE(VALUES(status), status),
+            year            = COALESCE(VALUES(year), year),
+            episodes_total  = COALESCE(VALUES(episodes_total), episodes_total),
+            genres          = COALESCE(VALUES(genres), genres),
+            types           = COALESCE(VALUES(types), types),
+            movie_count     = COALESCE(VALUES(movie_count), movie_count),
+            shikimori_id    = COALESCE(VALUES(shikimori_id), shikimori_id),
+            mal_id          = COALESCE(VALUES(mal_id), mal_id),
+            description     = COALESCE(VALUES(description), description),
+            poster_url      = COALESCE(VALUES(poster_url), poster_url),
+            last_synced_at  = COALESCE(VALUES(last_synced_at), last_synced_at),
+            source_etag     = COALESCE(VALUES(source_etag), source_etag)
+    </insert>
+
+</mapper>

@@ -1,5 +1,23 @@
 # Technical Debt
 
+## TD-JUTSU-XFF: `consumerKey()` ignores `X-Forwarded-For`
+
+**Priority:** Low (informational — only matters once orinuno is fronted by a load balancer or shared egress proxy)
+**Discovered:** 2026-05-07 (ADR 0016 P1a review)
+**Reference:** [`docs/adr/0016-architecture-trajectory.md`](docs/adr/0016-architecture-trajectory.md) §"P1a — jut.su"
+
+**Context:** `JutsuApiController.consumerKey(ServerHttpRequest)` derives a rate-limit / negative-cache key from `X-API-KEY` first, falling back to `request.getRemoteAddress()`. When orinuno runs behind a shared LB / cluster ingress (e.g. an nginx reverse proxy or a Kubernetes Service), every request lands with the same `RemoteAddress` (the LB itself), so all anonymous traffic shares one Bucket4j bucket. The live-fallback rate-limit (`JUTSU_LIVE_FALLBACK_RPS`, default 0.2 rps) collapses to a single global cap regardless of how many distinct end-users hit the box.
+
+For now we ship a single-instance deployment behind `localhost`/Docker, so the public IP is the user IP and the bucket math is correct. The leak only materialises in a multi-tenant gateway topology.
+
+**Resolution sketch:**
+
+1. Wire Spring's `ForwardedHeaderTransformer` as a `@Bean` and trust it conditionally on `orinuno.proxy.trusted-forwarded-headers=true` (default `false`).
+2. Refactor `consumerKey(ServerHttpRequest)` to consult `request.getHeaders().getFirst("X-Forwarded-For")` (first non-private hop) before falling back to the socket address.
+3. Add a unit test mounting a mocked `ServerHttpRequest` with `X-Forwarded-For: 1.2.3.4, 10.0.0.1` and asserting the resolved bucket key.
+
+Defer until an actual deployment puts orinuno behind a real LB. The placeholder comment in `JutsuApiController.consumerKey()` already names this debt item so a future maintainer finds the rationale.
+
 ## ARCH-0016: `kodik_episode_variant` is an L1+L2 hybrid
 
 **Priority:** Low (informational — recorded for the future split)

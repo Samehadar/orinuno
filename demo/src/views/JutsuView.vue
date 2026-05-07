@@ -397,6 +397,28 @@ onMounted(() => {
 function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
   return p?.entries ?? []
 }
+
+// Wrap raw gen.jut.su / static.jut.su URLs through the backend's poster proxy
+// (`GET /api/v1/sources/jutsu/poster?url=...`). The browser cannot always reach
+// jut.su's CDN cross-origin (referer / Cloudflare policy), so going through the
+// backend with the right Referer + UA is the only way to keep posters visible
+// from the demo origin. Anything off-host is returned as-is.
+function posterSrc(rawUrl: string | null | undefined): string | null {
+  if (!rawUrl) return null
+  try {
+    const u = new URL(rawUrl)
+    const host = u.host.toLowerCase()
+    const isJutsu =
+      host === 'jut.su' ||
+      host.endsWith('.jut.su') ||
+      host === 'gen.jut.su' ||
+      host === 'static.jut.su'
+    if (!isJutsu) return rawUrl
+    return `/api/v1/sources/jutsu/poster?url=${encodeURIComponent(rawUrl)}`
+  } catch {
+    return rawUrl
+  }
+}
 </script>
 
 <template>
@@ -621,12 +643,11 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             class="glass-card p-4 flex gap-3"
           >
             <img
-              v-if="entry.thumbnailUrl"
-              :src="entry.thumbnailUrl"
+              v-if="posterSrc(entry.thumbnailUrl)"
+              :src="posterSrc(entry.thumbnailUrl)!"
               loading="lazy"
               class="w-20 h-28 object-cover rounded bg-black/40 flex-shrink-0"
               alt=""
-              referrerpolicy="no-referrer"
               @error="($event.target as HTMLImageElement).style.display = 'none'"
             />
             <div class="flex-1 min-w-0">
@@ -711,12 +732,11 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
       <div v-if="infoResult" class="max-w-4xl mx-auto space-y-4">
         <div class="glass-card p-6 flex gap-4">
           <img
-            v-if="infoResult.thumbnailUrl"
-            :src="infoResult.thumbnailUrl"
+            v-if="posterSrc(infoResult.thumbnailUrl)"
+            :src="posterSrc(infoResult.thumbnailUrl)!"
             loading="lazy"
             class="w-32 h-44 object-cover rounded bg-black/40 flex-shrink-0"
             alt=""
-            referrerpolicy="no-referrer"
             @error="($event.target as HTMLImageElement).style.display = 'none'"
           />
           <div class="flex-1">
@@ -802,12 +822,11 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
       <div v-if="episodeResult" class="glass-card p-6 max-w-3xl mx-auto">
         <div class="flex gap-4">
           <img
-            v-if="episodeResult.thumbnailUrl"
-            :src="episodeResult.thumbnailUrl"
+            v-if="posterSrc(episodeResult.thumbnailUrl)"
+            :src="posterSrc(episodeResult.thumbnailUrl)!"
             loading="lazy"
             class="w-32 h-20 object-cover rounded bg-black/40 flex-shrink-0"
             alt=""
-            referrerpolicy="no-referrer"
             @error="($event.target as HTMLImageElement).style.display = 'none'"
           />
           <div class="flex-1 min-w-0">
@@ -1159,12 +1178,11 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             class="glass-card p-3 flex gap-3"
           >
             <img
-              v-if="entry.thumbnailUrl"
-              :src="entry.thumbnailUrl"
+              v-if="posterSrc(entry.thumbnailUrl)"
+              :src="posterSrc(entry.thumbnailUrl)!"
               loading="lazy"
               class="w-16 h-16 object-cover rounded bg-black/40 flex-shrink-0"
               alt=""
-              referrerpolicy="no-referrer"
               @error="($event.target as HTMLImageElement).style.display = 'none'"
             />
             <div class="flex-1 min-w-0">

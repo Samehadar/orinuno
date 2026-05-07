@@ -31,8 +31,9 @@ spring:
     contexts: ${LIQUIBASE_CONTEXTS:default}
 
 mybatis:
-  mapper-locations: classpath:com/orinuno/db/mapper/*.xml
+  mapper-locations: classpath:com/orinuno/db/mapper/*.xml,classpath:com/orinuno/db/mapper/**/*.xml
   type-aliases-package: com.orinuno.model
+  type-handlers-package: com.orinuno.jutsu.repository
   configuration:
     map-underscore-to-camel-case: true
 
@@ -122,6 +123,23 @@ orinuno:
       rate-limit-rps: ${JUTSU_RATE_LIMIT_RPS:1.0}
       session-ttl-minutes: ${JUTSU_SESSION_TTL_MINUTES:240}
       login-timeout-seconds: ${JUTSU_LOGIN_TIMEOUT_SECONDS:15}
+  jutsu:
+    sync:
+      full-crawl-interval-hours: ${JUTSU_SYNC_FULL_CRAWL_INTERVAL_HOURS:48}
+      notice-interval-minutes: ${JUTSU_SYNC_NOTICE_INTERVAL_MINUTES:5}
+      notice-lock-ttl-minutes: ${JUTSU_SYNC_NOTICE_LOCK_TTL_MINUTES:30}
+    live-fallback:
+      # Default profile leaves live-fallback ON for the demo UI dev experience.
+      # The prod profile (application-prod.yml) flips this OFF until operators
+      # explicitly opt in via JUTSU_LIVE_FALLBACK_ENABLED=true.
+      enabled: ${JUTSU_LIVE_FALLBACK_ENABLED:true}
+      rate-limit:
+        requests-per-second: ${JUTSU_LIVE_FALLBACK_RPS:0.2}
+      negative-cache:
+        ttl-hours: ${JUTSU_LIVE_FALLBACK_NEGATIVE_CACHE_TTL_HOURS:24}
+      buckets:
+        expire-after-access-hours: ${JUTSU_LIVE_FALLBACK_BUCKETS_EXPIRE_HOURS:1}
+        max-size: ${JUTSU_LIVE_FALLBACK_BUCKETS_MAX_SIZE:50000}
   dumps:
     enabled: ${ORINUNO_DUMPS_ENABLED:false}
     base-url: ${ORINUNO_DUMPS_BASE_URL:https://dumps.kodikres.com}

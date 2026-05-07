@@ -133,6 +133,7 @@ by the repository's PlantUML workflow.
 3. **HLS manifest** — `GET /api/v1/hls/{id}/manifest` → fresh decode → fetch m3u8 → absolutize URLs → return playlist. See [HLS manifest](/orinuno/architecture/hls-manifest/).
 4. **Export** — `GET /api/v1/export/{id}` → structured JSON grouped by season → episode → variant. Schema is stable and intended for downstream consumers.
 5. **TTL refresh** — `@Scheduled` re-decodes mp4 links older than `link-ttl-hours`. See [TTL refresh](/orinuno/operations/ttl-refresh/).
+6. **jut.su L1 catalog cache (ADR 0016 P1a)** — `JutsuCatalogSyncService` keeps `jutsu_title` / `jutsu_episode` in sync with upstream: full crawl every `JUTSU_SYNC_FULL_CRAWL_INTERVAL_HOURS` (default 48h) plus an incremental notice walk every `JUTSU_SYNC_NOTICE_INTERVAL_MINUTES` (default 5m). The notice walk takes a transactional lock through `JutsuNoticeLockService` (atomic acquire-or-recover, recovers crashed workers after `JUTSU_SYNC_NOTICE_LOCK_TTL_MINUTES`). `JutsuApiController` reads `/catalog`, `/search`, `/anime/{slug}`, `/episode` DB-first; cache misses (and explicit `?refresh=true`) go through `JutsuLiveFallbackService` — Bucket4j RPS rate limit, Caffeine negative cache (only on 404/410/null upstream — 5xx/IO surface as 502 without poisoning the cache), and a kill-switch. Successful live calls are upserted into the L1 tables. Every response carries `X-Sync-Stale-Seconds` from `JutsuStalenessTracker`. See [Sources & Multi-Provider API](/orinuno/api/sources/).
 
 ## Related
 

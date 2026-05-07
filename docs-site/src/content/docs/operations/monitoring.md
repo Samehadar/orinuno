@@ -40,6 +40,21 @@ logs.
 | `orinuno_parse_request_processing_seconds` | timer | `outcome=DONE\|FAILED`, `quantile=…` | Time from claim to terminal status, split by outcome. |
 | `orinuno_parse_requests_completed_total` | counter | `outcome=DONE\|FAILED` | Lifetime terminal-state transitions (use `rate()` for throughput). |
 
+### jut.su L1 cache + live-fallback (ADR 0016 P1a)
+
+Added with the jut.su L1 cache rollout. Surfaced from
+`JutsuLiveFallbackService` (`/api/v1/sources/jutsu/{anime,episode,catalog,search}`)
+and the staleness header.
+
+| Series | Type | Labels | What it tells you |
+| --- | --- | --- | --- |
+| `jutsu_live_fallback_total` | counter | `outcome=hit\|miss\|upstream_error\|rate_limited\|disabled\|negative_cache` | Live-fallback dispatcher outcome counts. Use `rate(jutsu_live_fallback_total{outcome="upstream_error"}[5m])` to spot a jut.su outage; sustained `outcome="rate_limited"` means a noisy consumer or too-tight `JUTSU_LIVE_FALLBACK_RPS`. |
+
+Also reflected in response shape: every jut.su API response carries an
+`X-Sync-Stale-Seconds` header (seconds since the last successful full
+crawl). Watch it in dashboards or browser devtools as a quick "is the
+sync worker still ticking?" signal.
+
 ### Other interesting series
 
 - `kodik_tokens_count{tier=stable|unstable|legacy|dead}` — token-pool depth per tier.
