@@ -531,25 +531,35 @@ Sibnet — крупнейший сибирский видеохостинг с *
    - Hybrid-fallback тесты: rate limit, negative cache, kill-switch, force-refresh — `WebTestClient` + Bucket4j real instance.
    - Schema sanity: `JutsuMigrationSmokeTest` — проверяет наличие таблиц/индексов.
 
-#### P1b: Catalog L3 (universal canonical catalog + identity resolver) — **Частично готово**
+#### P1b: Catalog L3 (universal canonical catalog + identity resolver)
 
 **Приоритет:** Высокий
 **Сложность:** Средняя
 **Зависимости:** Liquibase (уже есть). **Не зависит от P1a** — можно делать параллельно.
 
-**Что сделано (P1b Step 1.A / 1.B / 1.C.A / 1.C.B + IT):** — **DONE**
+**Что нужно сделать:**
 
-1. **Liquibase changeset** ✅ DONE — 4 миграции в `com/orinuno/db/changelog/scripts/20260508030*.sql`: `catalog_content` + `catalog_content_external_id` + `catalog_episode` + `catalog_episode_source_link`. Identity columns на `catalog_content` (sparse indexes), UNIQUE на `(source_type, external_id)`, M:N link к `episode_source` без FK (ADR 0016 zoning rules).
+1. **Liquibase changeset** в `com/orinuno/db/changelog/catalog/`:
+   - `catalog_content` — `id` (PK), `kind` (`movie`/`series`/`anime`), `title_ru`, `title_en`, `year`, `kinopoisk_id` (nullable), `imdb_id` (nullable), `shikimori_id` (nullable), `mal_id` (nullable), `mdl_id` (nullable), `tmdb_id` (nullable), `created_at`, `updated_at`. Уникальные индексы по каждому `*_id` (sparse).
+   - `catalog_content_external_id` — `(source_type, external_id, content_id)` с UNIQUE на `(source_type, external_id)` для O(1) lookup.
+   - `catalog_episode` — `(content_id, season, episode)` PK.
+   - `catalog_episode_source_link` — M:N link canonical episode ↔ `episode_source`. Soft-reference на `episode_source.id` (no FK, кросс-контекстное).
 
-2. **`CatalogIdentityResolver`** ✅ DONE — `com.orinuno.catalog.internal.CatalogIdentityResolver` за `CatalogPublicApi` interface. Lookup order: `shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId)`. Идемпотентность; "first writer wins" для chrome backfill и identity columns; binding conflicts логируются WARN без auto-merge (auto-merge → TECH_DEBT). 10 unit-тестов покрывают все ветки.
+2. **`CatalogIdentityResolver`** в `com.orinuno.catalog`:
+   - `findOrCreate(sourceType, sourceId, externalIds…)`. Lookup order: `shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId)`.
+   - Аналог `CatalogContentFindOrCreateService` из meter, но без бизнес-логики Kin.
+   - Идемпотентность: повторный вызов с теми же external IDs возвращает существующий `catalog_content`.
 
-3. **`CatalogPublicApi`** ✅ DONE — единственная точка входа в catalog контекст для других bounded contexts. Methods: `findOrCreateContent`, `attachExternalId`, `findContentById`, `findContentByExternalId`, `findAttachedExternalIds`. Concrete classes остаются package-private в `com.orinuno.catalog.internal`.
+3. **`CatalogIngestionService`** + `CatalogPublicApi`:
+   - `CatalogPublicApi.attachSource(sourceType, sourceId, externalIds, episodes)` — единственная точка входа из других контекстов (`kodik`, `jutsu`).
+   - На P1b — синхронный вызов в той же транзакции, что и source-upsert. Без Rabbit/Kafka.
 
-4. **Hook из `jutsu` контекста (Step 1.C.A)** ✅ DONE — `JutsuCatalogIngestion` adapter в `com.orinuno.jutsu.sync`. Wired в `JutsuCatalogSyncService` для full-crawl + notice-walk info-fetch + notice-walk placeholder paths. Resolver exceptions ловятся → лог WARN, sync продолжается. Kill-switch: `orinuno.providers.jutsu.sync.catalog-ingestion.enabled` (default `false`).
+4. **Hooks из `kodik` контекста:** в `KodikContentService.upsert(...)` после успешной записи `kodik_content` — синхронный `CatalogIngestionService.attachSource(KODIK, kodikId, externalIds, ...)`. Защита: не падать на ошибке canonical-sync, только log warning.
 
-5. **Hook из `kodik` контекста (Step 1.C.B)** ✅ DONE — `KodikCatalogIngestion` adapter в `com.orinuno.service`. Wired в `ContentService.findOrCreateContent(KodikContent)` после insert/update; пропускает kodikId (или `kp:<kinopoiskId>` fallback) и external-DB ids (shikimori/imdb/kinopoisk). `mapKind(...)` транслирует свободные строки Kodik в `CatalogContentKind` (anime → ANIME, *-serial → SERIES, *-movie/film → MOVIE, иначе UNKNOWN). Resolver exceptions ловятся → лог WARN, kodik upsert не аффектится. Kill-switch: `orinuno.kodik.catalog-ingestion.enabled` (default `false`). 12 unit-тестов в `KodikCatalogIngestionTest`.
-
-6. **Полный Integration `CatalogIngestionIT`** ✅ DONE — Testcontainers MySQL + Liquibase + 4 e2e-теста: jut.su idempotent re-ingest (одна canonical-строка на N upsert'ов), Kodik cross-source merge через `shikimori_id` (две строки `kodik_content` с одинаковым shikimori_id → ОДНА canonical-строка + 4 binding'а), Kodik partial-refresh chrome protection (UNKNOWN не оверрайдит ANIME, COALESCE не блeнчит titleRu), jut.su+Kodik без overlap → две независимые canonical-строки. Запускается `mvn -pl orinuno-app -Pe2e test -Dtest=CatalogIngestionIT`.
+5. **Тесты:**
+   - `CatalogIdentityResolverTest` — все 7 lookup paths, идемпотентность, cross-source merge (shikimori_id matches existing catalog_content created from kinopoisk_id).
+   - `CatalogIngestionServiceTest` — sync hook from kodik / jutsu контекстов.
+   - Integration `CatalogIngestionIT` — Testcontainers + полный цикл.
 
 #### P2: Canonical REST API + unified per-source content lookup
 
@@ -596,47 +606,6 @@ Sibnet — крупнейший сибирский видеохостинг с *
 #### P4–P5 (информационно — не задачи)
 
 P4 — жить в monolith, пока не сработает один из триггеров расщепления (см. ADR 0016 §"Triggers for moving to Layout B"). P5 — точечный split (вынести один источник в свой деплой) только при срабатывании триггера, не массово.
-
----
-
-### ARCH-0017: `orinuno-source-contract` — producer-side event contract как отдельный артефакт — **DONE** (2026-05-10)
-
-**Статус:** Реализовано в этом PR.
-**ADR:** [`docs/adr/0017-source-event-contract.md`](docs/adr/0017-source-event-contract.md)
-
-**Контекст:** ADR 0016 закрепил modular monolith как трajectory; ADR 0017 закрывает оставшийся пробел в boundary-discipline — producer-side wire format между source bounded context и любым consumer'ом (in-process L3 sink, the external meter через будущий `external bridge`, OSS aggregator). До этого PR контракт был типизирован catalog-internal записями (`CatalogIdentityRequest`), что блокировало Maven Central публикацию и делало любую внешнюю интеграцию (downstream consumer shrinking, OSS подписчики) обходом catalog'а напрямую.
-
-**Что сделано:**
-- Новый Maven-модуль `orinuno-source-contract` (sibling рядом с SDK-модулями): pure DTOs (`SourceIdentifier`, `ExternalIds`, `Provenance`, `ContentKindHint`, `SourceContentInfo`, `SourceSeason`, `SourceEpisode`, `SourceEpisodeVariant`), sealed `SourceCatalogEvent` с пятью вариантами (`TitleObserved` / `MovieDiscovered` / `SeriesDiscovered` / `EpisodesUpdated` / `SourceRemoved`), функциональный интерфейс `SourceEventEmitter`. Зависимости: `jackson-annotations`, `jakarta.annotation-api`, `lombok` (provided). **Без Spring, без jsoup, без slf4j, без consumer-coupled типов.** Готов к публикации на Maven Central через тот же pipeline, что планируется для SDK-модулей (см. `IDEA-SDK-4`).
-- Golden-file JSON shape stability test (`JsonShapeStabilityTest` + 5 fixture-файлов в `src/test/resources/com/orinuno/contract/source/golden/`) — фиксирует wire format. Любая случайная переиначка контракта (rename, reorder, type change) ломает тест до merge. Discriminator: `@JsonTypeInfo(NAME)` с `kind` property (kebab-case значения `title-observed` / `movie-discovered` / …).
-- В `orinuno-app`: новый `CatalogSinkEventEmitter` (`com.orinuno.catalog.ingestion`) — default in-process `@Component`, реализующий `SourceEventEmitter`. Переводит `SourceCatalogEvent` обратно в `CatalogIdentityRequest` и зовёт `CatalogPublicApi.findOrCreateContent(...)`. Failure isolation сместилась с per-bridge try/catch на one-shot inside emitter.
-- Рефакторинг `KodikCatalogIngestion` (`com.orinuno.service`) и `JutsuCatalogIngestion` (`com.orinuno.jutsu.sync`): теперь зависят от `SourceEventEmitter` (а не от `CatalogPublicApi`); строят `SourceCatalogEvent.TitleObserved` (с `Provenance`, открыто-string `sourceType`, `ExternalIds` builder) и эмитят. Helper-методы `mapKind(...)`, `parseYear(...)`, `resolveSourceId(...)` остались статическими и продолжают тестироваться unit-тестами.
-- Адаптация unit-тестов: `KodikCatalogIngestionTest` и `JutsuCatalogIngestionTest` теперь мокают `SourceEventEmitter` и проверяют форму эмитированного события. Добавлен `CatalogSinkEventEmitterTest` (10 кейсов: kodik / jutsu happy paths, all 5 variants handling, unknown sourceType drop, resolver-exception swallow, null event, kindHint mapping).
-- `CatalogIngestionIT` (e2e Testcontainers MySQL) **остаётся зелёным без правок** — Spring подтягивает default emitter автоматически, поведение byte-identical.
-- ADR 0017 описал audit table meter `ContentExportRequest` → `SourceCatalogEvent` (consumer-coupled hot spots: closed `SourceType` enum → open-string, value-object id wrappers → plain `@Nullable String`, `filepath` → `mediaUrl`, consumer-coupled enums → open strings); добавлено правило #7 в boundary discipline ADR 0016.
-
-**Что осталось (out of scope этого PR):**
-- **Maven Central publish** — переиспользует pipeline от `IDEA-SDK-4` (всё ещё PENDING на нашей стороне). Когда первый OSS consumer материализуется — публикуем артефакт.
-- **`OutboxEventEmitter` + `<context>_event_outbox` таблица** — deferred. Пишем outbox-implementation только когда появится второй consumer (the external aggregator's `external bridge` или remote OSS aggregator). До тех пор default in-process emitter — единственный.
-- **Episode-level emit** (`MovieDiscovered`, `SeriesDiscovered`, `EpisodesUpdated` с реальными вариантами) — пока default emitter форвардит только chrome через `findOrCreateContent`, эпизоды игнорируются. Реализуется когда P2 (canonical REST API) расширит resolver на canonical episodes.
-
----
-
-### ARCH-0017-FOLLOWUP-POSTER: posters в SourceContentInfo — **DONE** (2026-05-10)
-
-**Статус:** Реализовано в этом PR (Stages 1–5). Закрывает регрессию, которую внёс ARCH-0017 Stage C (cutover the downstream consumer): новый pipeline на `SourceCatalogEvent` отбрасывал `posterFilepath` (передавал `null` в `MeterSourceBridge`), и свежие meter-записи приходили без обложек. Возврат к старому контракту (`KodikContentExportDto.posterUrl()`) был отвергнут — он consumer-specific и не годится для OSS-consumer'ов; вместо этого расширили wire-format.
-
-**Что сделано:**
-- В `orinuno-source-contract::SourceContentInfo` добавлены поля `posterUrl`, `bigPosterUrl`, `screenshotUrls` (`List<String>`), `trailerUrls` (`List<String>`). Все nullable / non-empty; `@JsonInclude(NON_EMPTY)` гарантирует, что отсутствующие значения не появятся в JSON и старые fixtures (`title-observed.json`, `series-discovered.json`, …) остаются bit-identical. Builder получил соответствующие методы.
-- `JsonShapeStabilityTest` дополнен новым кейсом `movieDiscoveredWithPostersShape()` + новым golden-файлом `movie-discovered-with-posters.json` — locking shape для wire-format с заполненными poster-полями. Существующие fixtures **не менялись** (NON_EMPTY режет пустые коллекции).
-- В `orinuno-app::SourceEventMapper` (Stage 3) `buildInfo(...)` теперь парсит `KodikContent.materialData` (через `Jackson`) и вытягивает `poster_url_original` (приоритет) → `poster_url` → `anime_poster_url` → `drama_poster_url` для `posterUrl`; `poster_url_original` отдельно для `bigPosterUrl`; колонку `screenshots` (отдельный JSON-array) — для `screenshotUrls`. `trailerUrls` пока пустой (Kodik не отдаёт). Добавлены 4 новых unit-теста.
-- В `external aggregator::external bridge` (Stage 4) введён record `PosterAttachments(posterFilepath, bigPosterFilepath, trailerFilepaths)` с `empty()` / `posterOnly(...)` factories. Сигнатуры `MeterSourceBridge.bridge(event, attachments)` и `SourceCatalogEventMapper.toExportRequest(event, attachments)` теперь принимают `PosterAttachments` вместо `String posterFilepath`. `commonInfoOf(...)` пробрасывает `bigPosterFilepath` и `trailerFilepaths` (если не пусто) в meter's `ContentCommonInfo`. +5 новых тестов.
-- В `external aggregator::downstream consumer::KodikExportScheduler` (Stage 5) восстановлен poster pipeline: новый метод `downloadPostersIfAvailable(event, kodikId)` читает URLs из `event.info()` (`posterUrl` + screenshots fallback, отдельно `bigPosterUrl`), скачивает через `KodikMediaDownloader.downloadAndStorePoster(...)` (тот же сервис, что использовался до cutover'а), оборачивает результат в `PosterAttachments` и передаёт в `bridge(...)`. Failure-tolerant: download error → `PosterAttachments.empty()`, экспорт продолжается. +3 новых теста.
-
-**Архитектурный смысл:**
-- `SourceCatalogEvent` теперь несёт **producer-side URLs** (что сорс показал). OSS-consumer (Telegram-бот, indexer) рендерит их напрямую.
-- `external bridge::PosterAttachments` — consumer-side **MinIO object keys** (что консьюмер сложил у себя). Boundary между URL-семантикой и filepath-семантикой явный — никто не путает их в одном поле.
-- Мы НЕ ввели `meterapi.dto.ContentCommonInfo.previewImageFilepath` — этого поля в meter не существует (audit-table в ADR 0017 ошибочно его упоминал). Реальный набор: `posterFilepath` + `bigPosterFilepath` + `trailerFilepaths`.
 
 ---
 
