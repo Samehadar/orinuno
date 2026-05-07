@@ -200,6 +200,7 @@ public class OrinunoProperties {
         public static class SyncProperties {
             private boolean enabled = false;
             private FullCrawlProperties fullCrawl = new FullCrawlProperties();
+            private NoticeWalkProperties noticeWalk = new NoticeWalkProperties();
 
             @Data
             public static class FullCrawlProperties {
@@ -217,6 +218,50 @@ public class OrinunoProperties {
                  * 900 titles per tick.
                  */
                 private int maxPagesPerTick = 30;
+            }
+
+            /**
+             * Notice-feed incremental walker (Step 2.B). Polls jut.su's "upcoming releases" notice
+             * feed at a fast cadence to discover newly-published slugs between the slow full-crawl
+             * ticks.
+             *
+             * <p>The walker maintains a persistent {@code noticeCursor} on {@code jutsu_sync_state}
+             * and only walks feeds newer than the saved cursor; on a quiet site it costs exactly
+             * one homepage GET + one feed fetch per tick. On the very first tick (cursor null) the
+             * walker just records the latest cursor and exits without walking any feeds — we never
+             * want to backfill the entire notice history retroactively.
+             */
+            @Data
+            public static class NoticeWalkProperties {
+                private boolean enabled = false;
+
+                /** Minutes between notice-walk ticks. Default 15min. */
+                private long intervalMinutes = 15;
+
+                /** Initial delay before the first tick, in seconds. */
+                private long initialDelaySeconds = 60;
+
+                /**
+                 * Hard cap on the number of notice-feed pages walked per tick. The site keeps
+                 * roughly 50 entries per page; default 5 pages = 250 entries (≈ a busy week of
+                 * episode releases on jut.su). Tighten if the site backfills aggressively.
+                 */
+                private int maxFeedsPerTick = 5;
+
+                /**
+                 * When {@code true}, every previously-unseen slug discovered in the notice feed
+                 * triggers a synchronous {@code getAnimeInfo(slug)} call so the L1 row gets full
+                 * info-page metadata immediately. When {@code false} (the default), the walker just
+                 * remembers the slug exists and lets the next full-crawl tick pick it up.
+                 */
+                private boolean fetchInfoOnDiscovery = false;
+
+                /**
+                 * Hard cap on the number of {@code getAnimeInfo} calls fired per tick. Only honored
+                 * when {@link #fetchInfoOnDiscovery} is true; protects the rate-limit budget on
+                 * busy days.
+                 */
+                private int maxInfoFetchesPerTick = 10;
             }
         }
     }
