@@ -13,7 +13,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 @SpringBootApplication
 @EnableScheduling
 @ConfigurationPropertiesScan("com.orinuno")
-@MapperScan("com.orinuno.repository")
+@MapperScan(basePackages = {"com.orinuno.repository", "com.orinuno.jutsu.repository"})
 public class OrinunoApplication {
 
     public static void main(String[] args) {

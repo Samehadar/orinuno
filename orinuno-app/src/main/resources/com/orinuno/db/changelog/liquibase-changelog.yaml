@@ -31,3 +31,9 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260502050100_create_episode_video.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260502060000_create_kodik_content_enrichment.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508010000_create_jutsu_title.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508010100_create_jutsu_episode.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508010200_create_jutsu_sync_state.sql
