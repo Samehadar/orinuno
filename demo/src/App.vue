@@ -9,6 +9,7 @@ const navItems = [
   { to: '/', label: 'Search', icon: '🔍' },
   { to: '/content', label: 'Library', icon: '📚' },
   { to: '/sources', label: 'Sources', icon: '🌐' },
+  { to: '/jutsu', label: 'JutSu', icon: '⛩️' },
   { to: '/calendar', label: 'Calendar', icon: '📅' },
   { to: '/reference', label: 'Reference', icon: '📖' },
   { to: '/health', label: 'Health', icon: '💊' },
