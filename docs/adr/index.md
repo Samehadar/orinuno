@@ -21,6 +21,7 @@ This directory holds the architectural decision records (ADRs) for orinuno. Each
 | [0013](0013-sibnet-and-aniboom-sdk-extraction.md) | Sibnet and Aniboom SDK extraction into `sibnet-sdk` + `aniboom-sdk` modules | Accepted | architecture |
 | [0014](0014-controllers-on-sdk-facades.md) | Controllers wired directly on SDK facades (`*DecoderService` adapters removed) | Accepted | architecture |
 | [0015](0015-jutsu-full-browser-parity.md) | jut.su SDK: full browser parity (catalog, search, anime info, episode meta, notice feed) + drift detection | Accepted | architecture |
+| [0016](0016-architecture-trajectory.md) | Architecture trajectory: modular monolith now, per-source split on triggers (L1 per-source cache + L3 universal canonical catalog inside `orinuno-app`) | Accepted | architecture |
 
 ## Status legend
 
