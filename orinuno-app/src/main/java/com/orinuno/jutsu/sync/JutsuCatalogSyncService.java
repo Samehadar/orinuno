@@ -153,8 +153,10 @@ public class JutsuCatalogSyncService {
 
             pagesFetched++;
             lastPage = page;
+            int slot = 0;
             for (JutsuCatalogEntry entry : response.entries()) {
-                titleRepository.upsert(toTitle(entry, now));
+                slot++;
+                titleRepository.upsert(toTitle(entry, page, slot, now));
                 titlesUpserted++;
             }
             if (!response.hasMore()) {
@@ -433,7 +435,22 @@ public class JutsuCatalogSyncService {
         return state.getFullCrawlCompletedAt().isBefore(state.getFullCrawlStartedAt());
     }
 
-    static JutsuTitle toTitle(JutsuCatalogEntry entry, LocalDateTime now) {
+    /**
+     * Catalog page size jut.su returns per AJAX call ({@code anime_page_next} kicks in after 30
+     * cards). Pinned by upstream's pagination, so it stays a constant — if jut.su ever changes the
+     * page size, the SDK's {@code JutsuCatalogPage.size()} returns the actual value and this
+     * constant becomes stale; the read service notices because {@code catalog_position} stops
+     * increasing monotonically.
+     */
+    static final int CATALOG_PAGE_SIZE = 30;
+
+    /**
+     * Build a {@link JutsuTitle} row from a catalog entry, attaching the 1-based crawl position
+     * derived from the entry's {@code (page, slot)} coordinate. The position drives the read side's
+     * default "by rating" sort because jut.su returns its default ranking as the page order itself.
+     */
+    static JutsuTitle toTitle(JutsuCatalogEntry entry, int page, int slot, LocalDateTime now) {
+        int catalogPosition = (page - 1) * CATALOG_PAGE_SIZE + slot;
         return JutsuTitle.builder()
                 .slug(entry.slug())
                 .siteId(entry.siteId() > 0 ? entry.siteId() : null)
@@ -445,6 +462,7 @@ public class JutsuCatalogSyncService {
                 .typesCsv(joinSlugs(entry.types(), JutsuType::slug))
                 .catalogEpisodeCount(entry.episodeCount())
                 .catalogMovieCount(entry.movieCount())
+                .catalogPosition(catalogPosition)
                 .catalogFetchedAt(now)
                 .firstSeenAt(now)
                 .lastSeenAt(now)

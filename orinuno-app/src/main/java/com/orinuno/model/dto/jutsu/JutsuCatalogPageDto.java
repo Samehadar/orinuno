@@ -1,6 +1,7 @@
 package com.orinuno.model.dto.jutsu;
 
 import com.orinuno.jutsu.catalog.JutsuCatalogPage;
+import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
@@ -21,5 +22,17 @@ public record JutsuCatalogPageDto(
                 p.page(),
                 p.entries().stream().map(JutsuCatalogEntryDto::from).toList(),
                 p.hasMore());
+    }
+
+    /**
+     * Build a DTO from cached rows plus the total row count of the underlying query. {@code
+     * hasMore} is computed from {@code page * pageSize < totalCount} — the L1 schema gives us an
+     * exact count via a paired SELECT COUNT(*), so we don't need an over-fetch trick.
+     */
+    public static JutsuCatalogPageDto fromCache(
+            int page, int pageSize, long totalCount, List<JutsuTitle> rows) {
+        boolean hasMore = (long) page * pageSize < totalCount;
+        return new JutsuCatalogPageDto(
+                page, rows.stream().map(JutsuCatalogEntryDto::fromCache).toList(), hasMore);
     }
 }
