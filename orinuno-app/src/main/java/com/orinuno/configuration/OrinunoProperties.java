@@ -37,6 +37,25 @@ public class OrinunoProperties {
          * automatically.
          */
         private long deadRevalidationIntervalMinutes = 1440;
+
+        private CatalogIngestionProperties catalogIngestion = new CatalogIngestionProperties();
+
+        /**
+         * Bridge between Kodik {@code kodik_content} writes and the L3 universal canonical catalog
+         * (ARCH-0016 P1b Step 1.C.B). When enabled, every successful {@code
+         * ContentService.findOrCreateContent(KodikContent)} call triggers a synchronous {@code
+         * CatalogPublicApi.findOrCreateContent} carrying the row's external ids ({@code
+         * kinopoiskId} / {@code imdbId} / {@code shikimoriId}). This is what produces the
+         * cross-source merges — once enabled together with the jut.su bridge, a jut.su slug and a
+         * Kodik raw id that share a Shikimori id collapse into a single canonical row.
+         *
+         * <p>Off by default while L3 is being shaken out. Failures inside the resolver are caught
+         * and logged WARN; the Kodik upsert that triggered the call is never affected.
+         */
+        @Data
+        public static class CatalogIngestionProperties {
+            private boolean enabled = false;
+        }
     }
 
     @Data
