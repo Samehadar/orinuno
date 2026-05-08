@@ -40,7 +40,8 @@ public record JutsuEpisodeMeta(
         @Nullable String prevEpisodeUrl,
         @Nullable String nextEpisodeUrl,
         @Nullable String allEpisodesUrl,
-        boolean premiumGated) {
+        boolean premiumGated)
+        implements JutsuPageMeta {
 
     public JutsuEpisodeMeta {
         if (slug == null || slug.isBlank()) {
@@ -67,5 +68,17 @@ public record JutsuEpisodeMeta(
     /** True when the page advertises a previous-episode arrow. */
     public boolean hasPrev() {
         return prevEpisodeUrl != null && !prevEpisodeUrl.isBlank();
+    }
+
+    @Override
+    @Nullable
+    public String prevUrl() {
+        return prevEpisodeUrl;
+    }
+
+    @Override
+    @Nullable
+    public String nextUrl() {
+        return nextEpisodeUrl;
     }
 }

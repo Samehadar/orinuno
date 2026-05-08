@@ -12,9 +12,9 @@ import type {
   JutsuCatalogEntry,
   JutsuCatalogPage,
   JutsuDriftSnapshot,
-  JutsuEpisodeMeta,
   JutsuNoticeEntry,
   JutsuNoticeFeed,
+  JutsuPageMeta,
 } from '../api/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,7 +298,7 @@ function jumpToInfo(slug: string) {
 const episodeUrl = ref('https://jut.su/onepuunchman/season-1/episode-1.html')
 const episodeLoading = ref(false)
 const episodeError = ref('')
-const episodeResult = ref<JutsuEpisodeMeta | null>(null)
+const episodeResult = ref<JutsuPageMeta | null>(null)
 
 const jutsuVideo = useJutsuVideo()
 const {
@@ -352,6 +352,34 @@ function jumpToEpisode(url: string) {
   tab.value = 'episode'
   loadEpisodeMeta()
 }
+
+// Discriminated-union helpers for the episode/film result card. Films use
+// `filmIndex` instead of season/episode, and a different prev/next cohort
+// (sibling films, not sibling episodes), so the badge label and the
+// prev/next bindings have to switch on `kind`.
+const episodeBadge = computed(() => {
+  const r = episodeResult.value
+  if (!r) return ''
+  return r.kind === 'film' ? `F${r.filmIndex}` : `S${r.season}E${r.episode}`
+})
+
+const episodePrevUrl = computed(() => {
+  const r = episodeResult.value
+  if (!r) return null
+  return r.kind === 'film' ? r.prevFilmUrl : r.prevEpisodeUrl
+})
+
+const episodeNextUrl = computed(() => {
+  const r = episodeResult.value
+  if (!r) return null
+  return r.kind === 'film' ? r.nextFilmUrl : r.nextEpisodeUrl
+})
+
+const episodeKindLabel = computed(() => {
+  const r = episodeResult.value
+  if (!r) return ''
+  return r.kind === 'film' ? 'Полнометражный фильм' : 'Серия'
+})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Notice feed tab
@@ -977,7 +1005,13 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             </p>
             <div class="flex flex-wrap items-center gap-2 mt-2">
               <span class="badge bg-white/5 text-[var(--color-neon-blue)] font-mono text-[10px]">
-                S{{ episodeResult.season }}E{{ episodeResult.episode }}
+                {{ episodeBadge }}
+              </span>
+              <span
+                v-if="episodeResult.kind === 'film'"
+                class="badge bg-[var(--color-neon-purple)]/15 text-[var(--color-neon-purple)] text-[10px]"
+              >
+                🎬 {{ episodeKindLabel }}
               </span>
               <span
                 v-if="episodeResult.premiumGated"
@@ -1019,22 +1053,22 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
               📋
             </button>
           </div>
-          <div v-if="episodeResult.prevEpisodeUrl" class="flex items-center gap-2">
+          <div v-if="episodePrevUrl" class="flex items-center gap-2">
             <span class="text-[var(--color-text-muted)]">Prev:</span>
             <button
               class="font-mono text-[var(--color-neon-blue)] hover:underline truncate"
-              @click="jumpToEpisode(episodeResult!.prevEpisodeUrl!)"
+              @click="jumpToEpisode(episodePrevUrl!)"
             >
-              {{ episodeResult.prevEpisodeUrl }}
+              {{ episodePrevUrl }}
             </button>
           </div>
-          <div v-if="episodeResult.nextEpisodeUrl" class="flex items-center gap-2">
+          <div v-if="episodeNextUrl" class="flex items-center gap-2">
             <span class="text-[var(--color-text-muted)]">Next:</span>
             <button
               class="font-mono text-[var(--color-neon-blue)] hover:underline truncate"
-              @click="jumpToEpisode(episodeResult!.nextEpisodeUrl!)"
+              @click="jumpToEpisode(episodeNextUrl!)"
             >
-              {{ episodeResult.nextEpisodeUrl }}
+              {{ episodeNextUrl }}
             </button>
           </div>
           <div v-if="episodeResult.allEpisodesUrl" class="flex items-center gap-2">

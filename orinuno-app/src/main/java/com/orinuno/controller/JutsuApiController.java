@@ -12,8 +12,8 @@ import com.orinuno.jutsu.read.JutsuCatalogReadService;
 import com.orinuno.model.dto.jutsu.JutsuAnimeInfoDto;
 import com.orinuno.model.dto.jutsu.JutsuCatalogPageDto;
 import com.orinuno.model.dto.jutsu.JutsuDriftSnapshotDto;
-import com.orinuno.model.dto.jutsu.JutsuEpisodeMetaDto;
 import com.orinuno.model.dto.jutsu.JutsuNoticeFeedDto;
+import com.orinuno.model.dto.jutsu.JutsuPageMetaDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -287,22 +287,23 @@ public class JutsuApiController {
 
     @GetMapping("/episode")
     @Operation(
-            summary = "Fetch one episode's chrome metadata without invoking the decoder",
+            summary = "Fetch one viewer page's chrome metadata without invoking the decoder",
             description =
-                    "Use when you only need title / thumbnail / prev-next / paywall flag for a"
-                            + " catalogue UI. Use POST /api/v1/sources/jutsu/decode (on"
-                            + " SourcesController) when you also need the actual mp4 URLs.")
-    public Mono<ResponseEntity<JutsuEpisodeMetaDto>> getEpisodeMeta(
+                    "Accepts both episode URLs (`/{slug}/(season-N/)?episode-M.html`) and"
+                            + " full-length-film URLs (`/{slug}/film-N.html`). The response carries"
+                            + " a `kind` discriminator (`episode` | `film`) so consumers can"
+                            + " switch on it before reading kind-specific fields. Use POST"
+                            + " /api/v1/sources/jutsu/decode (on SourcesController) when you also"
+                            + " need the actual mp4 URLs.")
+    public Mono<ResponseEntity<JutsuPageMetaDto>> getEpisodeMeta(
             @Parameter(
-                            description = "Full episode URL on jut.su",
+                            description =
+                                    "Full episode or film URL on jut.su (both shapes accepted)",
                             example = "https://jut.su/onepuunchman/season-1/episode-1.html",
                             required = true)
                     @RequestParam
                     String url) {
-        return jutsuClient
-                .getEpisodeMeta(url)
-                .map(JutsuEpisodeMetaDto::from)
-                .map(ResponseEntity::ok);
+        return jutsuClient.getEpisodeMeta(url).map(JutsuPageMetaDto::from).map(ResponseEntity::ok);
     }
 
     // -------------------------------------------------------------------------

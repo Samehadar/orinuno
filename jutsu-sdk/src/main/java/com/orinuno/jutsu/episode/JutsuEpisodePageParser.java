@@ -11,18 +11,26 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 /**
- * Parses {@code GET /{slug}/(season-N/)?episode-M.html} into a {@link JutsuEpisodeMeta}.
+ * Parses {@code GET /{slug}/(season-N/)?episode-M.html} or {@code GET /{slug}/film-N.html} into a
+ * {@link JutsuPageMeta}.
  *
- * <p>The episode page is a fully rendered viewer page; this parser extracts the cheap chrome
- * (title, thumbnail, prev/next arrows, paywall flag) without invoking the heavier video-decoder
- * pipeline. The decoder regex-based path in {@code JutsuDecoder} remains the single source of truth
- * for actual video URL extraction.
+ * <p>The viewer page is the same template for episodes and full-length movies — same chrome,
+ * paywall mechanic, navigation arrows and "all episodes" link — and only the URL grammar
+ * discriminates the two. This parser extracts the cheap chrome (title, thumbnail, prev/next arrows,
+ * paywall flag) without invoking the heavier video-decoder pipeline. The decoder regex-based path
+ * in {@code JutsuDecoder} remains the single source of truth for actual video URL extraction.
  */
 public final class JutsuEpisodePageParser {
 
     /** Episode URL grammar — same shape as {@code JutsuAnimeInfoParser}. */
-    private static final Pattern URL_PATTERN =
+    private static final Pattern EPISODE_URL_PATTERN =
             Pattern.compile("/([a-z0-9-]+)/(?:season-(\\d+)/)?episode-(\\d+)\\.html");
+
+    /**
+     * Full-length movie URL grammar; aligned with {@code JutsuAnimeInfoParser.FILM_URL_PATTERN}.
+     */
+    private static final Pattern FILM_URL_PATTERN =
+            Pattern.compile("/([a-z0-9-]+)/film-(\\d+)\\.html");
 
     static final String CANONICAL_SELECTOR = "link[rel='canonical']";
 
@@ -50,11 +58,14 @@ public final class JutsuEpisodePageParser {
     /**
      * Parse the response body. {@code expectedUrl} is the relative URL the SDK requested; the
      * parser cross-checks it against the page's canonical link to detect URL drift (different
-     * slug/season/episode would mean jut.su silently redirected us to a different page). When
-     * {@code expectedUrl} is {@code null}, no cross-check is performed.
+     * slug/season/episode/film index would mean jut.su silently redirected us to a different page).
+     * When {@code expectedUrl} is {@code null}, no cross-check is performed.
+     *
+     * <p>Returns {@code null} when chrome essentials are missing or the canonical URL doesn't match
+     * either episode or film grammars (drift signal observed).
      */
     @Nullable
-    public JutsuEpisodeMeta parse(String html, @Nullable String expectedUrl) {
+    public JutsuPageMeta parse(String html, @Nullable String expectedUrl) {
         if (html == null || html.isBlank()) {
             ctx.observe(JutsuDriftSignal.EMPTY_RESPONSE, "episode page is empty/null");
             return null;
@@ -80,32 +91,15 @@ public final class JutsuEpisodePageParser {
             return null;
         }
 
-        Matcher m = URL_PATTERN.matcher(canonical);
-        if (!m.find()) {
+        Matcher episodeMatch = EPISODE_URL_PATTERN.matcher(canonical);
+        Matcher filmMatch = FILM_URL_PATTERN.matcher(canonical);
+        boolean isEpisode = episodeMatch.find();
+        boolean isFilm = !isEpisode && filmMatch.find();
+        if (!isEpisode && !isFilm) {
             ctx.observe(
                     JutsuDriftSignal.SCHEMA_VIOLATION,
-                    "canonical URL doesn't match episode pattern: " + canonical);
+                    "canonical URL doesn't match episode or film pattern: " + canonical);
             return null;
-        }
-        String slug = m.group(1).toLowerCase(Locale.ROOT);
-        int season = m.group(2) == null ? 1 : Integer.parseInt(m.group(2));
-        int episode = Integer.parseInt(m.group(3));
-
-        if (expectedUrl != null && !expectedUrl.isBlank()) {
-            Matcher em = URL_PATTERN.matcher(expectedUrl);
-            if (em.find()) {
-                String expSlug = em.group(1).toLowerCase(Locale.ROOT);
-                int expSeason = em.group(2) == null ? 1 : Integer.parseInt(em.group(2));
-                int expEpisode = Integer.parseInt(em.group(3));
-                if (!expSlug.equals(slug) || expSeason != season || expEpisode != episode) {
-                    ctx.observe(
-                            JutsuDriftSignal.SCHEMA_VIOLATION,
-                            "expected episode "
-                                    + expectedUrl
-                                    + " but canonical resolved to "
-                                    + canonical);
-                }
-            }
         }
 
         Element h1 = ctx.requireSelector(doc, H1_SELECTOR, "episode page missing <h1>");
@@ -132,10 +126,32 @@ public final class JutsuEpisodePageParser {
 
         boolean gated = doc.selectFirst(PAYWALL_SELECTOR) != null;
 
-        return new JutsuEpisodeMeta(
+        if (isEpisode) {
+            String slug = episodeMatch.group(1).toLowerCase(Locale.ROOT);
+            int season =
+                    episodeMatch.group(2) == null ? 1 : Integer.parseInt(episodeMatch.group(2));
+            int episode = Integer.parseInt(episodeMatch.group(3));
+            crossCheckEpisode(expectedUrl, slug, season, episode, canonical);
+            return new JutsuEpisodeMeta(
+                    slug,
+                    season,
+                    episode,
+                    displayTitle,
+                    pageTitle,
+                    canonical,
+                    thumbnailUrl,
+                    prevUrl,
+                    nextUrl,
+                    allUrl,
+                    gated);
+        }
+
+        String slug = filmMatch.group(1).toLowerCase(Locale.ROOT);
+        int filmIndex = Integer.parseInt(filmMatch.group(2));
+        crossCheckFilm(expectedUrl, slug, filmIndex, canonical);
+        return new JutsuFilmMeta(
                 slug,
-                season,
-                episode,
+                filmIndex,
                 displayTitle,
                 pageTitle,
                 canonical,
@@ -144,6 +160,62 @@ public final class JutsuEpisodePageParser {
                 nextUrl,
                 allUrl,
                 gated);
+    }
+
+    private void crossCheckEpisode(
+            @Nullable String expectedUrl, String slug, int season, int episode, String canonical) {
+        if (expectedUrl == null || expectedUrl.isBlank()) return;
+        Matcher em = EPISODE_URL_PATTERN.matcher(expectedUrl);
+        if (em.find()) {
+            String expSlug = em.group(1).toLowerCase(Locale.ROOT);
+            int expSeason = em.group(2) == null ? 1 : Integer.parseInt(em.group(2));
+            int expEpisode = Integer.parseInt(em.group(3));
+            if (!expSlug.equals(slug) || expSeason != season || expEpisode != episode) {
+                ctx.observe(
+                        JutsuDriftSignal.SCHEMA_VIOLATION,
+                        "expected episode "
+                                + expectedUrl
+                                + " but canonical resolved to "
+                                + canonical);
+            }
+            return;
+        }
+        // Caller asked for a film-shaped URL but jut.su redirected us to an episode (or vice
+        // versa). That's worth observing — silent kind-flip would otherwise mislead consumers.
+        Matcher fm = FILM_URL_PATTERN.matcher(expectedUrl);
+        if (fm.find()) {
+            ctx.observe(
+                    JutsuDriftSignal.SCHEMA_VIOLATION,
+                    "expected film "
+                            + expectedUrl
+                            + " but canonical resolved to episode "
+                            + canonical);
+        }
+    }
+
+    private void crossCheckFilm(
+            @Nullable String expectedUrl, String slug, int filmIndex, String canonical) {
+        if (expectedUrl == null || expectedUrl.isBlank()) return;
+        Matcher fm = FILM_URL_PATTERN.matcher(expectedUrl);
+        if (fm.find()) {
+            String expSlug = fm.group(1).toLowerCase(Locale.ROOT);
+            int expFilm = Integer.parseInt(fm.group(2));
+            if (!expSlug.equals(slug) || expFilm != filmIndex) {
+                ctx.observe(
+                        JutsuDriftSignal.SCHEMA_VIOLATION,
+                        "expected film " + expectedUrl + " but canonical resolved to " + canonical);
+            }
+            return;
+        }
+        Matcher em = EPISODE_URL_PATTERN.matcher(expectedUrl);
+        if (em.find()) {
+            ctx.observe(
+                    JutsuDriftSignal.SCHEMA_VIOLATION,
+                    "expected episode "
+                            + expectedUrl
+                            + " but canonical resolved to film "
+                            + canonical);
+        }
     }
 
     @Nullable

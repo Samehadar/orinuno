@@ -15,6 +15,8 @@ import com.orinuno.jutsu.catalog.JutsuCatalogRequest;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.drift.JutsuDriftSnapshot;
 import com.orinuno.jutsu.episode.JutsuEpisodeMeta;
+import com.orinuno.jutsu.episode.JutsuFilmMeta;
+import com.orinuno.jutsu.episode.JutsuPageMeta;
 import com.orinuno.jutsu.fallback.JutsuFallbackCircuitBreaker;
 import com.orinuno.jutsu.fallback.JutsuLiveFallbackService;
 import com.orinuno.jutsu.filter.JutsuCatalogFilter;
@@ -391,7 +393,7 @@ class JutsuApiControllerTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("GET /episode returns the typed metadata DTO")
+    @DisplayName("GET /episode returns the typed metadata DTO with kind=episode")
     void getEpisodeMeta() {
         JutsuEpisodeMeta meta =
                 new JutsuEpisodeMeta(
@@ -407,7 +409,7 @@ class JutsuApiControllerTest {
                         "/onepuunchman/",
                         true);
         when(jutsuClient.getEpisodeMeta("https://jut.su/onepuunchman/season-1/episode-1.html"))
-                .thenReturn(Mono.just(meta));
+                .thenReturn(Mono.<JutsuPageMeta>just(meta));
 
         client.get()
                 .uri(
@@ -421,11 +423,64 @@ class JutsuApiControllerTest {
                 .expectStatus()
                 .isOk()
                 .expectBody()
+                .jsonPath("$.kind")
+                .isEqualTo("episode")
                 .jsonPath("$.slug")
                 .isEqualTo("onepuunchman")
+                .jsonPath("$.season")
+                .isEqualTo(1)
+                .jsonPath("$.episode")
+                .isEqualTo(1)
                 .jsonPath("$.premiumGated")
                 .isEqualTo(true)
                 .jsonPath("$.prevEpisodeUrl")
+                .doesNotExist();
+    }
+
+    @Test
+    @DisplayName("GET /episode returns kind=film for full-length-movie URLs")
+    void getEpisodeMetaForFilm() {
+        JutsuFilmMeta film =
+                new JutsuFilmMeta(
+                        "life-no-game",
+                        1,
+                        "Смотреть 1 фильм Нет игры - нет жизни",
+                        "Смотреть Нет игры - нет жизни 1 фильм на Jut.su",
+                        "https://jut.su/life-no-game/film-1.html",
+                        "thumb.jpg",
+                        null,
+                        null,
+                        "/life-no-game/",
+                        true);
+        when(jutsuClient.getEpisodeMeta("https://jut.su/life-no-game/film-1.html"))
+                .thenReturn(Mono.<JutsuPageMeta>just(film));
+
+        client.get()
+                .uri(
+                        b ->
+                                b.path("/api/v1/sources/jutsu/episode")
+                                        .queryParam(
+                                                "url", "https://jut.su/life-no-game/film-1.html")
+                                        .build())
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.kind")
+                .isEqualTo("film")
+                .jsonPath("$.slug")
+                .isEqualTo("life-no-game")
+                .jsonPath("$.filmIndex")
+                .isEqualTo(1)
+                .jsonPath("$.allEpisodesUrl")
+                .isEqualTo("/life-no-game/")
+                .jsonPath("$.premiumGated")
+                .isEqualTo(true)
+                .jsonPath("$.season")
+                .doesNotExist()
+                .jsonPath("$.episode")
+                .doesNotExist()
+                .jsonPath("$.prevFilmUrl")
                 .doesNotExist();
     }
 
