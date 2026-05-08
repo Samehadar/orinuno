@@ -11,13 +11,16 @@ import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.info.JutsuAgeRating;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
 import com.orinuno.jutsu.info.JutsuEpisodeListing;
+import com.orinuno.jutsu.info.JutsuFilmListing;
 import com.orinuno.jutsu.info.JutsuSeason;
 import com.orinuno.jutsu.model.JutsuEpisode;
+import com.orinuno.jutsu.model.JutsuFilm;
 import com.orinuno.jutsu.model.JutsuSyncState;
 import com.orinuno.jutsu.model.JutsuTitle;
 import com.orinuno.jutsu.notice.JutsuNoticeEntry;
 import com.orinuno.jutsu.notice.JutsuNoticeFeed;
 import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
+import com.orinuno.jutsu.repository.JutsuFilmRepository;
 import com.orinuno.jutsu.repository.JutsuSyncStateRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import java.time.Duration;
@@ -78,6 +81,7 @@ public class JutsuCatalogSyncService {
     private final JutsuClient client;
     private final JutsuTitleRepository titleRepository;
     private final JutsuEpisodeRepository episodeRepository;
+    private final JutsuFilmRepository filmRepository;
     private final JutsuSyncStateRepository syncStateRepository;
     private final OrinunoProperties properties;
     private final JutsuCatalogIngestion catalogIngestion;
@@ -86,12 +90,14 @@ public class JutsuCatalogSyncService {
             JutsuClient client,
             JutsuTitleRepository titleRepository,
             JutsuEpisodeRepository episodeRepository,
+            JutsuFilmRepository filmRepository,
             JutsuSyncStateRepository syncStateRepository,
             OrinunoProperties properties,
             JutsuCatalogIngestion catalogIngestion) {
         this.client = client;
         this.titleRepository = titleRepository;
         this.episodeRepository = episodeRepository;
+        this.filmRepository = filmRepository;
         this.syncStateRepository = syncStateRepository;
         this.properties = properties;
         this.catalogIngestion = catalogIngestion;
@@ -349,6 +355,10 @@ public class JutsuCatalogSyncService {
                 if (!episodes.isEmpty()) {
                     episodeRepository.upsertAll(episodes);
                 }
+                List<JutsuFilm> films = infoToFilms(info, LocalDateTime.now());
+                if (!films.isEmpty()) {
+                    filmRepository.upsertAll(films);
+                }
                 infoFetched++;
             } else {
                 JutsuNoticeEntry sample = findFirstEntryForSlug(uniqueSlugs, firstFeed, slug);
@@ -549,6 +559,29 @@ public class JutsuCatalogSyncService {
                                 .lastSeenAt(now)
                                 .build());
             }
+        }
+        return out;
+    }
+
+    /**
+     * Flatten the films list from an info page into the shape backing {@code jutsu_film}. Films
+     * order matches {@link JutsuAnimeInfo#films()} (HTML order, which the parser keeps stable); the
+     * upsert payload is deterministic across runs as long as upstream doesn't reorder the
+     * "Полнометражные фильмы" anchor block.
+     */
+    static List<JutsuFilm> infoToFilms(JutsuAnimeInfo info, LocalDateTime now) {
+        List<JutsuFilm> out = new ArrayList<>();
+        for (JutsuFilmListing listing : info.films()) {
+            out.add(
+                    JutsuFilm.builder()
+                            .slug(info.slug())
+                            .filmIndex(listing.index())
+                            .label(listing.label())
+                            .relativeUrl(listing.url())
+                            .paywalled(null)
+                            .discoveredAt(now)
+                            .lastSeenAt(now)
+                            .build());
         }
         return out;
     }

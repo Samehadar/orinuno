@@ -85,6 +85,16 @@ public final class JutsuAnimeInfoParser {
     private static final Pattern URL_PATTERN =
             Pattern.compile("/([a-z0-9-]+)/(?:season-(\\d+)/)?episode-(\\d+)\\.html");
 
+    /**
+     * Full-length movie URL pattern. Films don't live under a season segment on jut.su — they're
+     * always rendered at {@code /{slug}/film-N.html} regardless of how many seasons the parent
+     * anime has. The {@code class="...films_title"} {@code <h2>} above the film anchors is a
+     * presentational hint we don't rely on for parsing because the URL pattern alone is
+     * unambiguous.
+     */
+    private static final Pattern FILM_URL_PATTERN =
+            Pattern.compile("/([a-z0-9-]+)/film-(\\d+)\\.html");
+
     private static final Pattern PARENTHESISED_ROMAJI = Pattern.compile("\\(([^()]{2,80})\\)");
 
     private static final Pattern FOUR_DIGIT_YEAR = Pattern.compile("\\b(19|20)\\d{2}\\b");
@@ -139,7 +149,7 @@ public final class JutsuAnimeInfoParser {
             extractCategoriesFromBody(doc, genres, types);
         }
 
-        List<JutsuSeason> seasons = extractSeasons(doc, slug);
+        SeasonsAndFilms anchorsResult = extractSeasonsAndFilms(doc, slug);
 
         return new JutsuAnimeInfo(
                 slug,
@@ -152,7 +162,8 @@ public final class JutsuAnimeInfoParser {
                 genres,
                 types,
                 thumbnail,
-                seasons);
+                anchorsResult.seasons,
+                anchorsResult.films);
     }
 
     @Nullable
@@ -388,35 +399,74 @@ public final class JutsuAnimeInfoParser {
         }
     }
 
-    private List<JutsuSeason> extractSeasons(Document doc, String slug) {
+    /**
+     * Walk the page's episode/film anchor list once and split it into season blocks and films.
+     * Films and episodes share the {@link #EPISODE_LINK_SELECTOR} CSS but live under different URL
+     * shapes ({@code /{slug}/episode-N.html} vs {@code /{slug}/film-N.html}); we discriminate by
+     * URL alone so a future template tweak (rearranging the {@code <h2 class="films_title">}
+     * heading, dropping the {@code films_title} CSS class, etc.) doesn't break the split.
+     */
+    private SeasonsAndFilms extractSeasonsAndFilms(Document doc, String slug) {
         Elements anchors = doc.select(EPISODE_LINK_SELECTOR);
         if (anchors.isEmpty()) {
             // Anonymous viewer with premium-only series: no playable links visible. Not drift —
             // the page rendered fine, episodes are just gated.
-            return List.of();
+            return SeasonsAndFilms.empty();
         }
-        // Group by season; preserve the order in which season indices first appear so single-
-        // season anime keep their natural ordering.
+        // Group episodes by season; preserve the order in which season indices first appear so
+        // single-season anime keep their natural ordering. Films stay in HTML order — they're
+        // rendered as a flat list under the "Полнометражные фильмы" heading.
         Map<Integer, JutsuSeason.Builder> seasonBuilders = new TreeMap<>();
+        List<JutsuFilmListing> films = new ArrayList<>();
         for (Element a : anchors) {
             String url = a.attr("href").trim();
-            JutsuEpisodeListing listing = parseEpisodeAnchor(url, a.text(), slug);
-            if (listing == null) continue;
-            seasonBuilders
-                    .computeIfAbsent(
-                            listing.season(),
-                            idx -> new JutsuSeason.Builder(idx, defaultSeasonName(idx)))
-                    .add(listing);
+            String label = a.text();
+            if (url.isBlank()) continue;
+
+            Matcher epM = URL_PATTERN.matcher(url);
+            if (epM.find()) {
+                String urlSlug = epM.group(1).toLowerCase(Locale.ROOT);
+                if (!slug.equalsIgnoreCase(urlSlug)) {
+                    // Cross-promo / related-anime link. Silent skip — not drift.
+                    continue;
+                }
+                int season = epM.group(2) == null ? 1 : Integer.parseInt(epM.group(2));
+                int episode = Integer.parseInt(epM.group(3));
+                seasonBuilders
+                        .computeIfAbsent(
+                                season, idx -> new JutsuSeason.Builder(idx, defaultSeasonName(idx)))
+                        .add(new JutsuEpisodeListing(urlSlug, season, episode, label, url));
+                continue;
+            }
+
+            Matcher filmM = FILM_URL_PATTERN.matcher(url);
+            if (filmM.find()) {
+                String urlSlug = filmM.group(1).toLowerCase(Locale.ROOT);
+                if (!slug.equalsIgnoreCase(urlSlug)) {
+                    // Cross-promo film from a related anime — silent skip.
+                    continue;
+                }
+                int filmIndex = Integer.parseInt(filmM.group(2));
+                films.add(new JutsuFilmListing(urlSlug, filmIndex, label, url));
+                continue;
+            }
+
+            // Anchor matched the selector but neither the episode nor the film URL shape: report
+            // drift so the parser owners hear about a new template variant before users do.
+            ctx.observe(
+                    JutsuDriftSignal.SCHEMA_VIOLATION,
+                    "anime info anchor href doesn't match episode/film pattern: " + url);
         }
-        List<JutsuSeason> result = new ArrayList<>(seasonBuilders.size());
+
+        List<JutsuSeason> seasons = new ArrayList<>(seasonBuilders.size());
         for (Map.Entry<Integer, JutsuSeason.Builder> entry : seasonBuilders.entrySet()) {
             // Resolve the season name: prefer the captured h2 text when available.
             String configured = configuredSeasonName(doc, entry.getKey());
             JutsuSeason.Builder b = entry.getValue();
             if (configured != null) b.name(configured);
-            result.add(b.build());
+            seasons.add(b.build());
         }
-        return result;
+        return new SeasonsAndFilms(seasons, films);
     }
 
     @Nullable
@@ -436,26 +486,12 @@ public final class JutsuAnimeInfoParser {
         return index + " сезон";
     }
 
-    @Nullable
-    private JutsuEpisodeListing parseEpisodeAnchor(String url, String label, String expectedSlug) {
-        if (url == null || url.isBlank()) return null;
-        Matcher m = URL_PATTERN.matcher(url);
-        if (!m.find()) {
-            ctx.observe(
-                    JutsuDriftSignal.SCHEMA_VIOLATION,
-                    "anime info episode anchor href doesn't match pattern: " + url);
-            return null;
+    /** Plain holder used to ferry the season/film split out of one anchor walk. */
+    private record SeasonsAndFilms(List<JutsuSeason> seasons, List<JutsuFilmListing> films) {
+
+        static SeasonsAndFilms empty() {
+            return new SeasonsAndFilms(List.of(), List.of());
         }
-        String slug = m.group(1).toLowerCase(Locale.ROOT);
-        int season = m.group(2) == null ? 1 : Integer.parseInt(m.group(2));
-        int episode = Integer.parseInt(m.group(3));
-        if (!expectedSlug.equalsIgnoreCase(slug)) {
-            // jut.su's anime info pages occasionally cross-link to "related anime" episodes; the
-            // parser drops those silently rather than mixing them into the current anime's
-            // listing. NOT drift — it's expected behaviour on cross-promo blocks.
-            return null;
-        }
-        return new JutsuEpisodeListing(slug, season, episode, label, url);
     }
 
     /**

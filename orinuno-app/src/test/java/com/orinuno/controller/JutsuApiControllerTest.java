@@ -261,7 +261,9 @@ class JutsuApiControllerTest {
                         List.of("action"),
                         List.of(),
                         List.of(),
-                        220);
+                        List.of(),
+                        220,
+                        0);
         when(readService.findAnimeInfo("naruto")).thenReturn(Optional.of(cached));
 
         client.get()
@@ -298,6 +300,7 @@ class JutsuApiControllerTest {
                         Set.of(JutsuGenre.ACTION),
                         Set.of(),
                         "thumb",
+                        List.of(),
                         List.of());
         when(fallbackService.liveAnimeInfo("naruto")).thenReturn(Mono.just(info));
 

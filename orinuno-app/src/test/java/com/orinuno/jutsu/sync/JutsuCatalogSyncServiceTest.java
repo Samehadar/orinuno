@@ -18,6 +18,7 @@ import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.model.JutsuSyncState;
 import com.orinuno.jutsu.model.JutsuTitle;
 import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
+import com.orinuno.jutsu.repository.JutsuFilmRepository;
 import com.orinuno.jutsu.repository.JutsuSyncStateRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import java.time.LocalDateTime;
@@ -43,6 +44,7 @@ class JutsuCatalogSyncServiceTest {
     @Mock private JutsuClient client;
     @Mock private JutsuTitleRepository titleRepository;
     @Mock private JutsuEpisodeRepository episodeRepository;
+    @Mock private JutsuFilmRepository filmRepository;
     @Mock private JutsuSyncStateRepository syncStateRepository;
     @Mock private JutsuCatalogIngestion catalogIngestion;
 
@@ -60,6 +62,7 @@ class JutsuCatalogSyncServiceTest {
                         client,
                         titleRepository,
                         episodeRepository,
+                        filmRepository,
                         syncStateRepository,
                         properties,
                         catalogIngestion);

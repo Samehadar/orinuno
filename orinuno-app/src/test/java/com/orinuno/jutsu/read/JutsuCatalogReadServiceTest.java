@@ -15,6 +15,7 @@ import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.model.JutsuEpisode;
 import com.orinuno.jutsu.model.JutsuTitle;
 import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
+import com.orinuno.jutsu.repository.JutsuFilmRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import com.orinuno.model.dto.jutsu.JutsuAnimeInfoDto;
 import com.orinuno.model.dto.jutsu.JutsuCatalogPageDto;
@@ -35,12 +36,13 @@ class JutsuCatalogReadServiceTest {
 
     @Mock private JutsuTitleRepository titleRepository;
     @Mock private JutsuEpisodeRepository episodeRepository;
+    @Mock private JutsuFilmRepository filmRepository;
 
     private JutsuCatalogReadService service;
 
     @BeforeEach
     void setUp() {
-        service = new JutsuCatalogReadService(titleRepository, episodeRepository);
+        service = new JutsuCatalogReadService(titleRepository, episodeRepository, filmRepository);
     }
 
     @Test

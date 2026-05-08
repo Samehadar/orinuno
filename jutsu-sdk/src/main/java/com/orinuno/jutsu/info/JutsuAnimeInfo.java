@@ -29,6 +29,10 @@ import java.util.Set;
  * @param thumbnailUrl absolute thumbnail URL from {@code og:image}; may be null
  * @param seasons ordered season list; never empty for valid responses (single-season anime collapse
  *     into a single entry)
+ * @param films full-length movies attached to the same series, rendered by jut.su in a separate
+ *     {@code "Полнометражные фильмы"} block under URLs of the form {@code /{slug}/film-N.html};
+ *     never null but empty for anime without movies. Films are NOT included in {@link
+ *     #totalEpisodeCount()} — count them via {@link #totalFilmCount()} instead.
  */
 public record JutsuAnimeInfo(
         String slug,
@@ -41,7 +45,8 @@ public record JutsuAnimeInfo(
         Set<JutsuGenre> genres,
         Set<JutsuType> types,
         @Nullable String thumbnailUrl,
-        List<JutsuSeason> seasons) {
+        List<JutsuSeason> seasons,
+        List<JutsuFilmListing> films) {
 
     public JutsuAnimeInfo {
         if (slug == null || slug.isBlank()) {
@@ -56,11 +61,17 @@ public record JutsuAnimeInfo(
         genres = genres == null ? Set.of() : Set.copyOf(genres);
         types = types == null ? Set.of() : Set.copyOf(types);
         seasons = seasons == null ? List.of() : List.copyOf(seasons);
+        films = films == null ? List.of() : List.copyOf(films);
     }
 
-    /** Sum of episode counts across every season. */
+    /** Sum of episode counts across every season. Films are tracked separately. */
     public int totalEpisodeCount() {
         return seasons.stream().mapToInt(JutsuSeason::episodeCount).sum();
+    }
+
+    /** Number of full-length movies attached to this anime entry. */
+    public int totalFilmCount() {
+        return films.size();
     }
 
     public boolean hasMultipleSeasons() {

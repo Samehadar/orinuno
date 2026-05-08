@@ -319,6 +319,19 @@ export interface JutsuSeason {
   episodes: JutsuEpisodeListing[]
 }
 
+/**
+ * One full-length movie ("полнометражный фильм") attached to an anime entry on jut.su. Films are
+ * a sibling concept to seasons / episodes — they live under `/{slug}/film-N.html` URLs and
+ * jut.su renders them in a dedicated "Полнометражные фильмы" block separate from season grids.
+ */
+export interface JutsuFilmListing {
+  slug: string
+  /** 1-based film index from the URL (`/life-no-game/film-1.html` → 1). */
+  index: number
+  label: string
+  url: string
+}
+
 export interface JutsuAnimeInfo {
   slug: string
   title: string
@@ -334,7 +347,13 @@ export interface JutsuAnimeInfo {
   genres: string[]
   types: string[]
   seasons: JutsuSeason[]
+  /**
+   * Full-length movies attached to the same series. Empty for anime without movies. Films are
+   * NOT counted in `totalEpisodeCount` — see `totalFilmCount`.
+   */
+  films: JutsuFilmListing[]
   totalEpisodeCount: number
+  totalFilmCount: number
 }
 
 export interface JutsuEpisodeMeta {
