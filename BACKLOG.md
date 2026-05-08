@@ -531,35 +531,27 @@ Sibnet — крупнейший сибирский видеохостинг с *
    - Hybrid-fallback тесты: rate limit, negative cache, kill-switch, force-refresh — `WebTestClient` + Bucket4j real instance.
    - Schema sanity: `JutsuMigrationSmokeTest` — проверяет наличие таблиц/индексов.
 
-#### P1b: Catalog L3 (universal canonical catalog + identity resolver)
+#### P1b: Catalog L3 (universal canonical catalog + identity resolver) — **Частично готово**
 
 **Приоритет:** Высокий
 **Сложность:** Средняя
 **Зависимости:** Liquibase (уже есть). **Не зависит от P1a** — можно делать параллельно.
 
-**Что нужно сделать:**
+**Что сделано (P1b Step 1.A / 1.B / 1.C.A):**
 
-1. **Liquibase changeset** в `com/orinuno/db/changelog/catalog/`:
-   - `catalog_content` — `id` (PK), `kind` (`movie`/`series`/`anime`), `title_ru`, `title_en`, `year`, `kinopoisk_id` (nullable), `imdb_id` (nullable), `shikimori_id` (nullable), `mal_id` (nullable), `mdl_id` (nullable), `tmdb_id` (nullable), `created_at`, `updated_at`. Уникальные индексы по каждому `*_id` (sparse).
-   - `catalog_content_external_id` — `(source_type, external_id, content_id)` с UNIQUE на `(source_type, external_id)` для O(1) lookup.
-   - `catalog_episode` — `(content_id, season, episode)` PK.
-   - `catalog_episode_source_link` — M:N link canonical episode ↔ `episode_source`. Soft-reference на `episode_source.id` (no FK, кросс-контекстное).
+1. **Liquibase changeset** ✅ DONE — 4 миграции в `com/orinuno/db/changelog/scripts/20260508030*.sql`: `catalog_content` + `catalog_content_external_id` + `catalog_episode` + `catalog_episode_source_link`. Identity columns на `catalog_content` (sparse indexes), UNIQUE на `(source_type, external_id)`, M:N link к `episode_source` без FK (ADR 0016 zoning rules).
 
-2. **`CatalogIdentityResolver`** в `com.orinuno.catalog`:
-   - `findOrCreate(sourceType, sourceId, externalIds…)`. Lookup order: `shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId)`.
-   - Аналог `CatalogContentFindOrCreateService` из meter, но без бизнес-логики Kin.
-   - Идемпотентность: повторный вызов с теми же external IDs возвращает существующий `catalog_content`.
+2. **`CatalogIdentityResolver`** ✅ DONE — `com.orinuno.catalog.internal.CatalogIdentityResolver` за `CatalogPublicApi` interface. Lookup order: `shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId)`. Идемпотентность; "first writer wins" для chrome backfill и identity columns; binding conflicts логируются WARN без auto-merge (auto-merge → TECH_DEBT). 10 unit-тестов покрывают все ветки.
 
-3. **`CatalogIngestionService`** + `CatalogPublicApi`:
-   - `CatalogPublicApi.attachSource(sourceType, sourceId, externalIds, episodes)` — единственная точка входа из других контекстов (`kodik`, `jutsu`).
-   - На P1b — синхронный вызов в той же транзакции, что и source-upsert. Без Rabbit/Kafka.
+3. **`CatalogPublicApi`** ✅ DONE — единственная точка входа в catalog контекст для других bounded contexts. Methods: `findOrCreateContent`, `attachExternalId`, `findContentById`, `findContentByExternalId`, `findAttachedExternalIds`. Concrete classes остаются package-private в `com.orinuno.catalog.internal`.
 
-4. **Hooks из `kodik` контекста:** в `KodikContentService.upsert(...)` после успешной записи `kodik_content` — синхронный `CatalogIngestionService.attachSource(KODIK, kodikId, externalIds, ...)`. Защита: не падать на ошибке canonical-sync, только log warning.
+4. **Hook из `jutsu` контекста (Step 1.C.A)** ✅ DONE — `JutsuCatalogIngestion` adapter в `com.orinuno.jutsu.sync`. Wired в `JutsuCatalogSyncService` для full-crawl + notice-walk info-fetch + notice-walk placeholder paths. Resolver exceptions ловятся → лог WARN, sync продолжается. Kill-switch: `orinuno.providers.jutsu.sync.catalog-ingestion.enabled` (default `false`).
 
-5. **Тесты:**
-   - `CatalogIdentityResolverTest` — все 7 lookup paths, идемпотентность, cross-source merge (shikimori_id matches existing catalog_content created from kinopoisk_id).
-   - `CatalogIngestionServiceTest` — sync hook from kodik / jutsu контекстов.
-   - Integration `CatalogIngestionIT` — Testcontainers + полный цикл.
+**Что осталось (P1b Step 1.C.B + tests):**
+
+5. **Hook из `kodik` контекста (Step 1.C.B)** ⏳ TODO — в `ParserService.searchInternal(...)` (или эквивалентном write path для `kodik_content`) после успешного upsert — синхронный вызов `CatalogPublicApi.findOrCreateContent(KODIK, kodikId, shikimoriId?, kinopoiskId?, imdbId?, ...)`. Это даст реальный cross-source merge: jut.su slug `naruto-test` и Kodik content `naruto-id` сольются в одну canonical row, как только Kodik принесёт `shikimori_id`. Защита идентичная jut.su адаптеру — try/catch вокруг ingest, log WARN на падении.
+
+6. **Полный Integration `CatalogIngestionIT`** ⏳ TODO — Testcontainers + полный цикл (jut.su sync → resolver → catalog row → второй sync с overlap external id → один canonical row).
 
 #### P2: Canonical REST API + unified per-source content lookup
 
