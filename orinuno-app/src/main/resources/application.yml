@@ -55,6 +55,8 @@ orinuno:
     bootstrap-from-env: ${KODIK_TOKEN_BOOTSTRAP_FROM_ENV:true}
     token-failover-max-attempts: ${KODIK_TOKEN_FAILOVER_MAX_ATTEMPTS:3}
     validate-on-startup: ${KODIK_TOKEN_VALIDATE_ON_STARTUP:true}
+    catalog-ingestion:
+      enabled: ${KODIK_CATALOG_INGESTION_ENABLED:false}
   parse:
     rate-limit-per-minute: ${PARSE_RATE_LIMIT_PER_MINUTE:30}
     inbound-rate-limit:
