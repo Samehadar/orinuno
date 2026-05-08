@@ -16,7 +16,14 @@ import java.util.Set;
  * @param originalTitle the parenthesised romaji/English title pulled out of the meta description
  *     ({@code "Ванпанчмен (One Punch Man)"} → {@code "One Punch Man"}); may be null
  * @param synopsis short synopsis from the page body; may be null on entries without descriptions
- * @param year extracted year bucket; empty when the page declares none
+ * @param year coarse year bucket from the catalog filter form (one of jut.su's eight buckets, e.g.
+ *     {@code 2015-2023}); empty when the page declares none. Use {@link #years} for the
+ *     finer-grained per-season air years.
+ * @param years individual numeric air years (e.g. {@code [2015, 2019, 2025]} for an anime whose
+ *     three seasons aired in those years); never null, ordered by appearance, deduplicated. Empty
+ *     for anime where the page didn't surface them
+ * @param ageRating Russian age-rating classifier ({@code 0+} / {@code 6+} / {@code 12+} / {@code
+ *     16+} / {@code 18+}); empty when the page didn't render the badge
  * @param genres genre set from the page chrome; may be empty
  * @param types type set from the page chrome; may be empty
  * @param thumbnailUrl absolute thumbnail URL from {@code og:image}; may be null
@@ -29,6 +36,8 @@ public record JutsuAnimeInfo(
         @Nullable String originalTitle,
         @Nullable String synopsis,
         Optional<JutsuYear> year,
+        List<Integer> years,
+        Optional<JutsuAgeRating> ageRating,
         Set<JutsuGenre> genres,
         Set<JutsuType> types,
         @Nullable String thumbnailUrl,
@@ -42,6 +51,8 @@ public record JutsuAnimeInfo(
             throw new IllegalArgumentException("title must not be blank");
         }
         year = year == null ? Optional.empty() : year;
+        years = years == null ? List.of() : List.copyOf(years);
+        ageRating = ageRating == null ? Optional.empty() : ageRating;
         genres = genres == null ? Set.of() : Set.copyOf(genres);
         types = types == null ? Set.of() : Set.copyOf(types);
         seasons = seasons == null ? List.of() : List.copyOf(seasons);

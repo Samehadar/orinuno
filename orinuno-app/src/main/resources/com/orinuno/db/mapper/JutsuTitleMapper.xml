@@ -10,6 +10,8 @@
         <result property="synopsis" column="synopsis"/>
         <result property="thumbnailUrl" column="thumbnail_url"/>
         <result property="yearBucket" column="year_bucket"/>
+        <result property="yearsCsv" column="years_csv"/>
+        <result property="ageRating" column="age_rating"/>
         <result property="genresCsv" column="genres_csv"/>
         <result property="typesCsv" column="types_csv"/>
         <result property="catalogEpisodeCount" column="catalog_episode_count"/>
@@ -100,7 +102,7 @@
     <insert id="upsert" parameterType="com.orinuno.jutsu.model.JutsuTitle">
         INSERT INTO jutsu_title (
             slug, site_id, title, original_title, synopsis, thumbnail_url,
-            year_bucket, genres_csv, types_csv,
+            year_bucket, years_csv, age_rating, genres_csv, types_csv,
             catalog_episode_count, catalog_movie_count, catalog_position,
             info_total_seasons, info_total_episodes,
             info_fetched_at, catalog_fetched_at,
@@ -108,7 +110,8 @@
         ) VALUES (
             #{title.slug}, #{title.siteId}, #{title.title}, #{title.originalTitle},
             #{title.synopsis}, #{title.thumbnailUrl},
-            #{title.yearBucket}, #{title.genresCsv}, #{title.typesCsv},
+            #{title.yearBucket}, #{title.yearsCsv}, #{title.ageRating},
+            #{title.genresCsv}, #{title.typesCsv},
             #{title.catalogEpisodeCount}, #{title.catalogMovieCount}, #{title.catalogPosition},
             #{title.infoTotalSeasons}, #{title.infoTotalEpisodes},
             #{title.infoFetchedAt}, #{title.catalogFetchedAt},
@@ -121,6 +124,8 @@
             synopsis             = COALESCE(VALUES(synopsis), synopsis),
             thumbnail_url        = COALESCE(VALUES(thumbnail_url), thumbnail_url),
             year_bucket          = COALESCE(VALUES(year_bucket), year_bucket),
+            years_csv            = COALESCE(VALUES(years_csv), years_csv),
+            age_rating           = COALESCE(VALUES(age_rating), age_rating),
             genres_csv           = COALESCE(VALUES(genres_csv), genres_csv),
             types_csv            = COALESCE(VALUES(types_csv), types_csv),
             catalog_episode_count = COALESCE(VALUES(catalog_episode_count), catalog_episode_count),
