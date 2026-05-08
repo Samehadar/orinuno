@@ -1,44 +1,42 @@
 package com.orinuno.service;
 
+import com.orinuno.catalog.api.CatalogIdentityRequest;
+import com.orinuno.catalog.api.CatalogPublicApi;
+import com.orinuno.catalog.model.CatalogContentKind;
+import com.orinuno.catalog.model.CatalogSourceType;
 import com.orinuno.configuration.OrinunoProperties;
-import com.orinuno.contract.source.ContentKindHint;
-import com.orinuno.contract.source.ExternalIds;
-import com.orinuno.contract.source.Provenance;
-import com.orinuno.contract.source.SourceCatalogEvent;
-import com.orinuno.contract.source.SourceContentInfo;
-import com.orinuno.contract.source.SourceEventEmitter;
-import com.orinuno.contract.source.SourceIdentifier;
 import com.orinuno.model.KodikContent;
-import java.time.Instant;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Bridge between Kodik {@link KodikContent} writes and the producer-side event contract
- * (ARCH-0017). Hands a {@link SourceCatalogEvent.TitleObserved} to the configured {@link
- * SourceEventEmitter}; the default in-process emitter ({@code CatalogSinkEventEmitter}) translates
- * it back into a catalog identity request and writes into L3.
+ * Bridge between Kodik {@link KodikContent} writes and the L3 universal canonical catalog
+ * (ARCH-0016 P1b Step 1.C.B). Mirror of {@link com.orinuno.jutsu.sync.JutsuCatalogIngestion} for
+ * the {@code kodik} bounded context — package placement reflects the current orinuno-app layout
+ * where Kodik code is spread across {@code com.orinuno.{client,service,repository,model}}; ADR 0016
+ * records this as a tech debt to fold once we re-package by bounded context (P3).
  *
- * <p>Behavioural contract is unchanged from ARCH-0016 P1b Step 1.C.B: when both this bridge and its
- * jut.su sibling are enabled, two source observations carrying the same external-database id
- * (Shikimori / IMDB / Kinopoisk) collapse into a single canonical row. The pipeline now goes {@code
- * KodikContent → SourceCatalogEvent → SourceEventEmitter → CatalogPublicApi} instead of the old
- * {@code KodikContent → CatalogIdentityRequest → CatalogPublicApi} — same transactional semantics,
- * same kill-switch, same failure isolation (the emitter swallows resolver RuntimeExceptions).
+ * <p>This is the second half of P1b: jut.su brings rows in from one direction (anchored on {@code
+ * (JUTSU, slug)}), Kodik brings them in from another (anchored on {@code (KODIK, kodikId)} plus
+ * Kinopoisk / IMDB / Shikimori external ids harvested from upstream). When both bridges are enabled
+ * together, the resolver merges the two views into a single canonical row the moment the external
+ * ids overlap — a jut.su slug for "Naruto" and a Kodik raw id for the same anime, both carrying
+ * {@code shikimoriId="1"}, end up bound to the same {@code catalog_content.id}.
  *
- * <p>Failure isolation: the emitter's own try/catch is the safety net. This class still defends
- * against {@code null} content, missing identifiers, and the catalog-ingestion kill-switch ({@code
- * orinuno.kodik.catalog-ingestion.enabled}, default {@code false}) before constructing the event so
- * disabled deployments don't pay the (cheap) DTO build cost.
+ * <p>Failure isolation: any {@link RuntimeException} from the resolver is caught and logged at
+ * WARN. {@link ContentService#findOrCreateContent(KodikContent)} stays the system of record for
+ * "Kodik gave us this title" — it must never break because L3 produced a transient deadlock or the
+ * resolver hit a not-yet-fixed bug. Subsequent write attempts re-run ingestion (idempotent by
+ * design).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class KodikCatalogIngestion {
 
-    private final SourceEventEmitter emitter;
+    private final CatalogPublicApi catalog;
     private final OrinunoProperties properties;
 
     public void ingest(KodikContent content) {
@@ -55,13 +53,18 @@ public class KodikCatalogIngestion {
                     content.getKinopoiskId());
             return;
         }
-
-        SourceCatalogEvent event =
-                new SourceCatalogEvent.TitleObserved(
-                        SourceIdentifier.of("kodik", sourceId),
-                        toContentInfo(content),
-                        provenance(content));
-        emitter.emit(event);
+        try {
+            CatalogIdentityRequest request = toRequest(sourceId, content);
+            catalog.findOrCreateContent(request);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "kodik-catalog-ingest: catalog ingestion for kodikContentId={} failed"
+                            + " ({}: {}); kodik_content row stays untouched, will retry on next"
+                            + " write",
+                    content.getId(),
+                    ex.getClass().getSimpleName(),
+                    ex.getMessage());
+        }
     }
 
     /**
@@ -82,25 +85,22 @@ public class KodikCatalogIngestion {
     }
 
     /**
-     * Map a {@link KodikContent} row into a {@link SourceContentInfo}. Picks the best-fit kind hint
-     * from Kodik's free-form {@code type} string (anime → ANIME, anything with {@code "serial"} →
-     * SERIES, {@code "movie"} / {@code "film"} → MOVIE, otherwise {@link ContentKindHint#UNKNOWN}).
-     * External-database ids ({@code shikimoriId} / {@code kinopoiskId} / {@code imdbId}) are passed
-     * through as-is; the emitter forwards them to the resolver which uses them in its merge
-     * priority order.
+     * Map a {@link KodikContent} row into a {@link CatalogIdentityRequest}. Picks the best-fit
+     * canonical kind from Kodik's free-form {@code type} string (anime → ANIME, anything with
+     * {@code "serial"} → SERIES, {@code "movie"} / {@code "film"} → MOVIE, otherwise {@link
+     * CatalogContentKind#UNKNOWN}). External-database ids ({@code shikimoriId}, {@code
+     * kinopoiskId}, {@code imdbId}) are passed through to the resolver, which uses them in its
+     * shikimori → mal → imdb → kinopoisk priority order to merge rows across sources.
      */
-    static SourceContentInfo toContentInfo(KodikContent content) {
-        return SourceContentInfo.builder()
+    static CatalogIdentityRequest toRequest(String sourceId, KodikContent content) {
+        return CatalogIdentityRequest.builder(CatalogSourceType.KODIK, sourceId)
                 .titleRu(content.getTitle())
                 .titleEn(content.getTitleOrig())
-                .kindHint(mapKind(content.getType()))
+                .kind(mapKind(content.getType()))
                 .year(content.getYear())
-                .externalIds(
-                        ExternalIds.builder()
-                                .shikimoriId(content.getShikimoriId())
-                                .imdbId(content.getImdbId())
-                                .kinopoiskId(content.getKinopoiskId())
-                                .build())
+                .shikimoriId(blankToNull(content.getShikimoriId()))
+                .imdbId(blankToNull(content.getImdbId()))
+                .kinopoiskId(blankToNull(content.getKinopoiskId()))
                 .build();
     }
 
@@ -115,36 +115,24 @@ public class KodikCatalogIngestion {
      *   <li>contains {@code "anime"} → ANIME (covers {@code anime}, {@code anime-serial})
      *   <li>contains {@code "serial"} → SERIES (covers all *-serial slugs that aren't anime)
      *   <li>contains {@code "movie"} or {@code "film"} → MOVIE
-     *   <li>otherwise → UNKNOWN (resolver treats UNKNOWN as "leave the canonical kind alone")
+     *   <li>otherwise → UNKNOWN (resolver writes UNKNOWN; future call-site with a richer source can
+     *       promote the kind via COALESCE)
      * </ul>
      */
-    static ContentKindHint mapKind(String kodikType) {
+    static CatalogContentKind mapKind(String kodikType) {
         if (kodikType == null || kodikType.isBlank()) {
-            return ContentKindHint.UNKNOWN;
+            return CatalogContentKind.UNKNOWN;
         }
         String normalised = kodikType.trim().toLowerCase(Locale.ROOT);
-        if (normalised.contains("anime")) return ContentKindHint.ANIME;
-        if (normalised.contains("serial")) return ContentKindHint.SERIES;
+        if (normalised.contains("anime")) return CatalogContentKind.ANIME;
+        if (normalised.contains("serial")) return CatalogContentKind.SERIES;
         if (normalised.contains("movie") || normalised.contains("film")) {
-            return ContentKindHint.MOVIE;
+            return CatalogContentKind.MOVIE;
         }
-        return ContentKindHint.UNKNOWN;
+        return CatalogContentKind.UNKNOWN;
     }
 
-    /**
-     * Construct the contract's {@link Provenance} record from what we know about this Kodik upsert.
-     * {@code sourceUrl} is the canonical Kodik API root because the L1 row was harvested via {@code
-     * /list} or the search-then-decode pipeline — we don't carry the per-row upstream URL through
-     * to {@code KodikContent} today, so the API root stands in as a coarse anchor. SDK version /
-     * parser mode / drift flags are not threaded yet; {@link Provenance#of(String,
-     * java.time.Instant)} keeps them null so the contract artifact's {@code @JsonInclude(NON_NULL)}
-     * suppresses them on the wire.
-     */
-    private static Provenance provenance(KodikContent content) {
-        Instant fetchedAt =
-                content.getUpdatedAt() != null
-                        ? content.getUpdatedAt().atZone(java.time.ZoneOffset.UTC).toInstant()
-                        : Instant.now();
-        return Provenance.of("https://kodik-api.com", fetchedAt);
+    private static String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 }
