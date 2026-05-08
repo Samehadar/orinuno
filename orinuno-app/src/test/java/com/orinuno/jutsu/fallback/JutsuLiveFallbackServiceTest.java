@@ -173,12 +173,9 @@ class JutsuLiveFallbackServiceTest {
                 slug,
                 "synopsis",
                 Optional.empty(),
-                List.of(),
-                Optional.empty(),
                 java.util.Set.of(),
                 java.util.Set.of(),
                 "thumb",
-                List.of(),
                 List.of());
     }
 }
