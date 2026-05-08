@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.catalog.repository.CatalogEpisodeRepository">
+
+    <resultMap id="episodeResultMap" type="com.orinuno.catalog.model.CatalogEpisode">
+        <id property="id" column="id"/>
+        <result property="contentId" column="content_id"/>
+        <result property="season" column="season"/>
+        <result property="episode" column="episode"/>
+        <result property="title" column="title"/>
+        <result property="airDate" column="air_date"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="episodeResultMap">
+        SELECT * FROM catalog_episode WHERE id = #{id}
+    </select>
+
+    <select id="findByContentSeasonEpisode" resultMap="episodeResultMap">
+        SELECT * FROM catalog_episode
+        WHERE content_id = #{contentId} AND season = #{season} AND episode = #{episode}
+        LIMIT 1
+    </select>
+
+    <select id="findByContentId" resultMap="episodeResultMap">
+        SELECT * FROM catalog_episode
+        WHERE content_id = #{contentId}
+        ORDER BY season ASC, episode ASC
+    </select>
+
+    <insert id="upsert" parameterType="com.orinuno.catalog.model.CatalogEpisode"
+            useGeneratedKeys="true" keyProperty="episode.id">
+        INSERT INTO catalog_episode (
+            content_id, season, episode, title, air_date, created_at, updated_at
+        ) VALUES (
+            #{episode.contentId}, #{episode.season}, #{episode.episode},
+            #{episode.title}, #{episode.airDate},
+            #{episode.createdAt}, #{episode.updatedAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            title      = COALESCE(VALUES(title), title),
+            air_date   = COALESCE(VALUES(air_date), air_date),
+            updated_at = VALUES(updated_at)
+    </insert>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM catalog_episode
+    </select>
+
+</mapper>

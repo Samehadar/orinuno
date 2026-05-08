@@ -39,3 +39,11 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260508010200_create_jutsu_sync_state.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260508020000_alter_jutsu_title_add_catalog_position.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508030000_create_catalog_content.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508030100_create_catalog_content_external_id.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508030200_create_catalog_episode.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508030300_create_catalog_episode_source_link.sql
