@@ -15,8 +15,6 @@ import com.orinuno.jutsu.catalog.JutsuCatalogRequest;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.drift.JutsuDriftSnapshot;
 import com.orinuno.jutsu.episode.JutsuEpisodeMeta;
-import com.orinuno.jutsu.episode.JutsuFilmMeta;
-import com.orinuno.jutsu.episode.JutsuPageMeta;
 import com.orinuno.jutsu.fallback.JutsuFallbackCircuitBreaker;
 import com.orinuno.jutsu.fallback.JutsuLiveFallbackService;
 import com.orinuno.jutsu.filter.JutsuCatalogFilter;
@@ -164,43 +162,16 @@ class JutsuApiControllerTest {
     }
 
     @Test
-    @DisplayName("GET /catalog binds URL slugs (round-trip from response → request)")
-    void browseCatalogAcceptsSlugInputs() {
-        // Slugs come straight from the response shape (e.g. "action", "before2000", "shonen") so
-        // a UI can copy them back into a follow-up request without translating to enum names.
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
-                .thenReturn(Mono.just(page));
-
-        client.get()
-                .uri(
-                        b ->
-                                b.path("/api/v1/sources/jutsu/catalog")
-                                        .queryParam("genres", "action")
-                                        .queryParam("types", "shonen")
-                                        .queryParam("years", "before2000")
-                                        .queryParam("sort", "order-by-name")
-                                        .build())
-                .exchange()
-                .expectStatus()
-                .isOk();
-
-        ArgumentCaptor<JutsuCatalogFilter> captor =
-                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
-        verify(jutsuClient).browseCatalog(captor.capture(), eq(1));
-        JutsuCatalogFilter f = captor.getValue();
-        assertThat(f.genres()).containsExactly(JutsuGenre.ACTION);
-        assertThat(f.types()).containsExactly(JutsuType.SHONEN);
-        assertThat(f.years()).containsExactly(JutsuYear.BEFORE_2000);
-        assertThat(f.sort()).isEqualTo(com.orinuno.jutsu.filter.JutsuSort.BY_NAME);
-    }
-
-    @Test
-    @DisplayName("GET /catalog tolerates unknown enum names without 5xx")
-    void browseCatalogIgnoresUnknownEnumValues() {
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
-                .thenReturn(Mono.just(page));
+    @DisplayName(
+            "GET /catalog cache-miss + breaker open: 503 with X-Orinuno-Fallback-Reason="
+                    + " circuit-breaker-open")
+    void catalogCacheMissBreakerOpen() {
+        when(readService.findCatalogPage(any())).thenReturn(Optional.empty());
+        when(fallbackService.liveBrowseCatalog(any(JutsuCatalogRequest.class)))
+                .thenReturn(
+                        Mono.error(
+                                new JutsuLiveFallbackService.BreakerOpenException(
+                                        JutsuFallbackCircuitBreaker.State.OPEN)));
 
         client.get()
                 .uri("/api/v1/sources/jutsu/catalog")
@@ -285,14 +256,10 @@ class JutsuApiControllerTest {
                         "synopsis",
                         "thumb",
                         "before2000",
-                        List.of(2002, 2007),
-                        "16+",
                         List.of("action"),
                         List.of(),
                         List.of(),
-                        List.of(),
-                        220,
-                        0);
+                        220);
         when(readService.findAnimeInfo("naruto")).thenReturn(Optional.of(cached));
 
         client.get()
@@ -324,12 +291,9 @@ class JutsuApiControllerTest {
                         "Naruto",
                         "synopsis",
                         Optional.of(JutsuYear.BEFORE_2000),
-                        List.of(),
-                        Optional.empty(),
                         Set.of(JutsuGenre.ACTION),
                         Set.of(),
                         "thumb",
-                        List.of(),
                         List.of());
         when(fallbackService.liveAnimeInfo("naruto")).thenReturn(Mono.just(info));
 

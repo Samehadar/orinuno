@@ -104,12 +104,13 @@ public class JutsuApiController {
     @Operation(
             summary = "Browse the jut.su catalog with optional filters and sort (cache-first)",
             description =
-                    "Maps to POST /anime/{slug}/ on jut.su with the given filter slug. Filter"
-                        + " parameters accept either the URL slug (e.g. `action`, `before2000`,"
-                        + " `order-by-name`) or the SDK enum name (e.g. `ACTION`, `BEFORE_2000`,"
-                        + " `BY_NAME`). Both forms are equivalent — the response always echoes"
-                        + " slugs, so a value taken straight from the response can be sent back as"
-                        + " a query parameter without translation.")
+                    "Reads from the L1 cache (JutsuCatalogSyncService) by default; falls back to a"
+                        + " guarded live SDK call on cache-miss. Filter parameters accept either"
+                        + " the URL slug (e.g. `action`, `before2000`, `order-by-name`) or the SDK"
+                        + " enum name (e.g. `ACTION`, `BEFORE_2000`, `BY_NAME`). Both forms are"
+                        + " equivalent — the response always echoes slugs. The Cache-Status header"
+                        + " (RFC 9211) reports `hit` / `fwd=miss; fallback` so consumers can tell"
+                        + " where the payload came from.")
     public Mono<ResponseEntity<JutsuCatalogPageDto>> browseCatalog(
             @Parameter(description = "1-based page index", example = "1")
                     @RequestParam(defaultValue = "1")
@@ -190,8 +191,11 @@ public class JutsuApiController {
             summary = "Search the jut.su catalog by title (live, NOT cached)",
             description =
                     "Sends the same POST as /catalog with the show_search form field populated."
-                            + " Filter parameters mean exactly what they mean for /catalog and"
-                            + " accept slug or enum-name input identically.")
+                        + " Filter parameters mean exactly what they mean for /catalog and accept"
+                        + " slug or enum-name input identically. Search is NOT served from the L1"
+                        + " cache — text queries would multiply cache keys without benefit; every"
+                        + " call hits jut.su via the live SDK. Response carries `Cache-Status:"
+                        + " orinuno; fwd=bypass`.")
     public Mono<ResponseEntity<JutsuCatalogPageDto>> searchCatalog(
             @Parameter(
                             description = "Title fragment (Russian or original)",
@@ -252,8 +256,9 @@ public class JutsuApiController {
             summary = "Fetch the anime info page (cache-first)",
             description =
                     "Returns the full season/episode listing, plus chrome metadata (title,"
-                            + " synopsis, year, genres, types, thumbnail). The episode list is"
-                            + " grouped by season; single-season anime collapse into one block.")
+                        + " synopsis, year, genres, types, thumbnail). The episode list is grouped"
+                        + " by season; single-season anime collapse into one block. Cache-Status"
+                        + " header reports `hit` / `fwd=miss; fallback`.")
     public Mono<ResponseEntity<JutsuAnimeInfoDto>> getAnimeInfo(
             @Parameter(
                             description = "Anime slug (the path segment used by jut.su URLs)",
@@ -261,7 +266,19 @@ public class JutsuApiController {
                             required = true)
                     @PathVariable
                     String slug) {
-        return jutsuClient.getAnimeInfo(slug).map(JutsuAnimeInfoDto::from).map(ResponseEntity::ok);
+        return Mono.fromCallable(() -> readService.findAnimeInfo(slug))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(
+                        (Optional<JutsuAnimeInfoDto> cached) -> {
+                            if (cached.isPresent()) {
+                                return Mono.just(ok(cached.get(), CACHE_HIT));
+                            }
+                            return fallbackService
+                                    .liveAnimeInfo(slug)
+                                    .map(JutsuAnimeInfoDto::from)
+                                    .map(dto -> ok(dto, CACHE_FALLBACK))
+                                    .onErrorResume(JutsuApiController::fallbackErrorTo503);
+                        });
     }
 
     // -------------------------------------------------------------------------
