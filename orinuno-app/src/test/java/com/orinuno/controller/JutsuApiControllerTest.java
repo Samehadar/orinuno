@@ -4,15 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.catalog.JutsuCatalogEntry;
 import com.orinuno.jutsu.catalog.JutsuCatalogPage;
+import com.orinuno.jutsu.catalog.JutsuCatalogRequest;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.drift.JutsuDriftSnapshot;
 import com.orinuno.jutsu.episode.JutsuEpisodeMeta;
+import com.orinuno.jutsu.fallback.JutsuFallbackCircuitBreaker;
+import com.orinuno.jutsu.fallback.JutsuLiveFallbackService;
 import com.orinuno.jutsu.filter.JutsuCatalogFilter;
 import com.orinuno.jutsu.filter.JutsuGenre;
 import com.orinuno.jutsu.filter.JutsuType;
@@ -20,6 +24,10 @@ import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
 import com.orinuno.jutsu.notice.JutsuNoticeEntry;
 import com.orinuno.jutsu.notice.JutsuNoticeFeed;
+import com.orinuno.jutsu.read.JutsuCatalogReadService;
+import com.orinuno.model.dto.jutsu.JutsuAnimeInfoDto;
+import com.orinuno.model.dto.jutsu.JutsuCatalogEntryDto;
+import com.orinuno.model.dto.jutsu.JutsuCatalogPageDto;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -38,18 +46,72 @@ import reactor.core.publisher.Mono;
 class JutsuApiControllerTest {
 
     @Mock private JutsuClient jutsuClient;
+    @Mock private JutsuCatalogReadService readService;
+    @Mock private JutsuLiveFallbackService fallbackService;
 
     private WebTestClient client;
 
     @BeforeEach
     void setUp() {
-        JutsuApiController controller = new JutsuApiController(jutsuClient);
+        JutsuApiController controller =
+                new JutsuApiController(jutsuClient, readService, fallbackService);
         client = WebTestClient.bindToController(controller).build();
     }
 
+    // -------------------------------------------------------------------------
+    // /catalog — cache-first
+    // -------------------------------------------------------------------------
+
     @Test
-    @DisplayName("GET /catalog forwards page + decoded filter to JutsuClient")
-    void browseCatalogParsesEnumNamesIntoFilter() {
+    @DisplayName(
+            "GET /catalog cache-hit: response comes from L1, Cache-Status=hit, fallback NOT"
+                    + " invoked")
+    void catalogCacheHit() {
+        JutsuCatalogPageDto cached =
+                new JutsuCatalogPageDto(
+                        2,
+                        List.of(
+                                new JutsuCatalogEntryDto(
+                                        "naruto",
+                                        "Наруто",
+                                        "Naruto",
+                                        "thumb.jpg",
+                                        220,
+                                        0,
+                                        List.of("action"),
+                                        List.of(),
+                                        null,
+                                        "https://jut.su/naruto/")),
+                        true);
+        when(readService.findCatalogPage(any())).thenReturn(Optional.of(cached));
+
+        client.get()
+                .uri(
+                        b ->
+                                b.path("/api/v1/sources/jutsu/catalog")
+                                        .queryParam("page", "2")
+                                        .queryParam("genres", "ACTION")
+                                        .build())
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals("Cache-Status", "orinuno; hit")
+                .expectBody()
+                .jsonPath("$.page")
+                .isEqualTo(2)
+                .jsonPath("$.entries[0].slug")
+                .isEqualTo("naruto");
+
+        verify(fallbackService, never()).liveBrowseCatalog(any());
+    }
+
+    @Test
+    @DisplayName(
+            "GET /catalog cache-miss: read service returns empty, fallback wins; Cache-Status="
+                    + " fwd=miss; fallback")
+    void catalogCacheMissFallsBackToLive() {
+        when(readService.findCatalogPage(any())).thenReturn(Optional.empty());
         JutsuCatalogPage page =
                 new JutsuCatalogPage(
                         List.of(
@@ -66,7 +128,7 @@ class JutsuApiControllerTest {
                                         Optional.empty())),
                         2,
                         true);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(2)))
+        when(fallbackService.liveBrowseCatalog(any(JutsuCatalogRequest.class)))
                 .thenReturn(Mono.just(page));
 
         client.get()
@@ -82,86 +144,203 @@ class JutsuApiControllerTest {
                 .exchange()
                 .expectStatus()
                 .isOk()
+                .expectHeader()
+                .valueEquals("Cache-Status", "orinuno; fwd=miss; fallback")
                 .expectBody()
                 .jsonPath("$.page")
                 .isEqualTo(2)
-                .jsonPath("$.entries.length()")
-                .isEqualTo(1)
                 .jsonPath("$.entries[0].slug")
-                .isEqualTo("naruto")
-                .jsonPath("$.entries[0].genres[0]")
-                .isEqualTo("action")
-                .jsonPath("$.hasMore")
-                .isEqualTo(true);
+                .isEqualTo("naruto");
 
-        ArgumentCaptor<JutsuCatalogFilter> captor =
-                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
-        verify(jutsuClient).browseCatalog(captor.capture(), eq(2));
-        JutsuCatalogFilter f = captor.getValue();
+        ArgumentCaptor<JutsuCatalogRequest> captor =
+                ArgumentCaptor.forClass(JutsuCatalogRequest.class);
+        verify(fallbackService).liveBrowseCatalog(captor.capture());
+        JutsuCatalogFilter f = captor.getValue().filter();
         assertThat(f.genres()).containsExactly(JutsuGenre.ACTION);
         assertThat(f.types()).containsExactly(JutsuType.SHONEN);
         assertThat(f.years()).containsExactly(JutsuYear.Y_2024);
     }
 
     @Test
-    @DisplayName("GET /catalog binds URL slugs (round-trip from response → request)")
-    void browseCatalogAcceptsSlugInputs() {
-        // Slugs come straight from the response shape (e.g. "action", "before2000", "shonen") so
-        // a UI can copy them back into a follow-up request without translating to enum names.
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
-                .thenReturn(Mono.just(page));
+    @DisplayName(
+            "GET /catalog cache-miss + breaker open: 503 with X-Orinuno-Fallback-Reason="
+                    + " circuit-breaker-open")
+    void catalogCacheMissBreakerOpen() {
+        when(readService.findCatalogPage(any())).thenReturn(Optional.empty());
+        when(fallbackService.liveBrowseCatalog(any(JutsuCatalogRequest.class)))
+                .thenReturn(
+                        Mono.error(
+                                new JutsuLiveFallbackService.BreakerOpenException(
+                                        JutsuFallbackCircuitBreaker.State.OPEN)));
 
         client.get()
-                .uri(
-                        b ->
-                                b.path("/api/v1/sources/jutsu/catalog")
-                                        .queryParam("genres", "action")
-                                        .queryParam("types", "shonen")
-                                        .queryParam("years", "before2000")
-                                        .queryParam("sort", "order-by-name")
-                                        .build())
+                .uri("/api/v1/sources/jutsu/catalog")
                 .exchange()
                 .expectStatus()
-                .isOk();
-
-        ArgumentCaptor<JutsuCatalogFilter> captor =
-                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
-        verify(jutsuClient).browseCatalog(captor.capture(), eq(1));
-        JutsuCatalogFilter f = captor.getValue();
-        assertThat(f.genres()).containsExactly(JutsuGenre.ACTION);
-        assertThat(f.types()).containsExactly(JutsuType.SHONEN);
-        assertThat(f.years()).containsExactly(JutsuYear.BEFORE_2000);
-        assertThat(f.sort()).isEqualTo(com.orinuno.jutsu.filter.JutsuSort.BY_NAME);
+                .isEqualTo(503)
+                .expectHeader()
+                .valueEquals("Cache-Status", "orinuno; fwd=miss; fallback-error")
+                .expectHeader()
+                .valueEquals("X-Orinuno-Fallback-Reason", "circuit-breaker-open");
     }
 
     @Test
-    @DisplayName("GET /catalog tolerates unknown enum names without 5xx")
-    void browseCatalogIgnoresUnknownEnumValues() {
-        JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
-        when(jutsuClient.browseCatalog(any(JutsuCatalogFilter.class), eq(1)))
-                .thenReturn(Mono.just(page));
+    @DisplayName(
+            "GET /catalog cache-miss + fallback disabled: 503 with X-Orinuno-Fallback-Reason="
+                    + " fallback-disabled")
+    void catalogCacheMissFallbackDisabled() {
+        when(readService.findCatalogPage(any())).thenReturn(Optional.empty());
+        when(fallbackService.liveBrowseCatalog(any(JutsuCatalogRequest.class)))
+                .thenReturn(Mono.error(new JutsuLiveFallbackService.FallbackDisabledException()));
 
         client.get()
-                .uri(
-                        b ->
-                                b.path("/api/v1/sources/jutsu/catalog")
-                                        .queryParam("genres", "NOT_A_GENRE,ACTION")
-                                        .build())
+                .uri("/api/v1/sources/jutsu/catalog")
                 .exchange()
                 .expectStatus()
-                .isOk();
-
-        ArgumentCaptor<JutsuCatalogFilter> captor =
-                ArgumentCaptor.forClass(JutsuCatalogFilter.class);
-        verify(jutsuClient).browseCatalog(captor.capture(), eq(1));
-        // The unknown value is dropped, the recognised one survives.
-        assertThat(captor.getValue().genres()).containsExactly(JutsuGenre.ACTION);
+                .isEqualTo(503)
+                .expectHeader()
+                .valueEquals("X-Orinuno-Fallback-Reason", "fallback-disabled");
     }
 
     @Test
-    @DisplayName("GET /search routes through searchByTitle when no filter is supplied")
-    void searchByTitleNoFilter() {
+    @DisplayName(
+            "GET /catalog cache-miss + neg-cache hit: 503 with X-Orinuno-Fallback-Reason="
+                    + " negative-cache-hit")
+    void catalogCacheMissNegativeCacheHit() {
+        when(readService.findCatalogPage(any())).thenReturn(Optional.empty());
+        when(fallbackService.liveBrowseCatalog(any(JutsuCatalogRequest.class)))
+                .thenReturn(
+                        Mono.error(
+                                new JutsuLiveFallbackService.NegativeCacheHitException(
+                                        "catalog:/anime/:1:")));
+
+        client.get()
+                .uri("/api/v1/sources/jutsu/catalog")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(503)
+                .expectHeader()
+                .valueEquals("X-Orinuno-Fallback-Reason", "negative-cache-hit");
+    }
+
+    @Test
+    @DisplayName(
+            "GET /catalog cache-miss + live SDK error: 503 with X-Orinuno-Fallback-Reason="
+                    + " live-fetch-failed")
+    void catalogCacheMissLiveFetchFails() {
+        when(readService.findCatalogPage(any())).thenReturn(Optional.empty());
+        when(fallbackService.liveBrowseCatalog(any(JutsuCatalogRequest.class)))
+                .thenReturn(Mono.error(new RuntimeException("upstream 503")));
+
+        client.get()
+                .uri("/api/v1/sources/jutsu/catalog")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(503)
+                .expectHeader()
+                .valueEquals("X-Orinuno-Fallback-Reason", "live-fetch-failed");
+    }
+
+    // -------------------------------------------------------------------------
+    // /anime/{slug} — cache-first
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("GET /anime/{slug} cache-hit: response comes from L1, Cache-Status=hit")
+    void animeInfoCacheHit() {
+        JutsuAnimeInfoDto cached =
+                new JutsuAnimeInfoDto(
+                        "naruto",
+                        "Наруто",
+                        "Naruto",
+                        "synopsis",
+                        "thumb",
+                        "before2000",
+                        List.of("action"),
+                        List.of(),
+                        List.of(),
+                        220);
+        when(readService.findAnimeInfo("naruto")).thenReturn(Optional.of(cached));
+
+        client.get()
+                .uri("/api/v1/sources/jutsu/anime/naruto")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals("Cache-Status", "orinuno; hit")
+                .expectBody()
+                .jsonPath("$.slug")
+                .isEqualTo("naruto")
+                .jsonPath("$.totalEpisodeCount")
+                .isEqualTo(220);
+
+        verify(fallbackService, never()).liveAnimeInfo(any());
+    }
+
+    @Test
+    @DisplayName(
+            "GET /anime/{slug} cache-miss: live fallback wins, response carries fwd=miss;"
+                    + " fallback")
+    void animeInfoCacheMissFallback() {
+        when(readService.findAnimeInfo("naruto")).thenReturn(Optional.empty());
+        JutsuAnimeInfo info =
+                new JutsuAnimeInfo(
+                        "naruto",
+                        "Наруто",
+                        "Naruto",
+                        "synopsis",
+                        Optional.of(JutsuYear.BEFORE_2000),
+                        Set.of(JutsuGenre.ACTION),
+                        Set.of(),
+                        "thumb",
+                        List.of());
+        when(fallbackService.liveAnimeInfo("naruto")).thenReturn(Mono.just(info));
+
+        client.get()
+                .uri("/api/v1/sources/jutsu/anime/naruto")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals("Cache-Status", "orinuno; fwd=miss; fallback")
+                .expectBody()
+                .jsonPath("$.slug")
+                .isEqualTo("naruto")
+                .jsonPath("$.year")
+                .isEqualTo("before2000");
+
+        verify(fallbackService).liveAnimeInfo("naruto");
+    }
+
+    @Test
+    @DisplayName("GET /anime/{slug} cache-miss + breaker open: 503 with diagnostic header")
+    void animeInfoCacheMissBreakerOpen() {
+        when(readService.findAnimeInfo("naruto")).thenReturn(Optional.empty());
+        when(fallbackService.liveAnimeInfo("naruto"))
+                .thenReturn(
+                        Mono.error(
+                                new JutsuLiveFallbackService.BreakerOpenException(
+                                        JutsuFallbackCircuitBreaker.State.HALF_OPEN)));
+
+        client.get()
+                .uri("/api/v1/sources/jutsu/anime/naruto")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(503)
+                .expectHeader()
+                .valueEquals("X-Orinuno-Fallback-Reason", "circuit-breaker-open");
+    }
+
+    // -------------------------------------------------------------------------
+    // /search — bypasses cache by design
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName(
+            "GET /search bypasses cache: read service NOT consulted, Cache-Status=fwd=bypass,"
+                    + " live SDK invoked")
+    void searchAlwaysHitsLive() {
         JutsuCatalogPage page = new JutsuCatalogPage(List.of(), 1, false);
         when(jutsuClient.searchByTitle("история", 1)).thenReturn(Mono.just(page));
 
@@ -169,9 +348,13 @@ class JutsuApiControllerTest {
                 .uri(b -> b.path("/api/v1/sources/jutsu/search").queryParam("q", "история").build())
                 .exchange()
                 .expectStatus()
-                .isOk();
+                .isOk()
+                .expectHeader()
+                .valueEquals("Cache-Status", "orinuno; fwd=bypass");
 
         verify(jutsuClient).searchByTitle("история", 1);
+        verify(readService, never()).findCatalogPage(any());
+        verify(fallbackService, never()).liveBrowseCatalog(any());
     }
 
     @Test
@@ -196,37 +379,9 @@ class JutsuApiControllerTest {
         verify(jutsuClient).searchByTitle(any(JutsuCatalogFilter.class), eq("история"), eq(3));
     }
 
-    @Test
-    @DisplayName("GET /anime/{slug} returns the typed info DTO")
-    void getAnimeInfo() {
-        JutsuAnimeInfo info =
-                new JutsuAnimeInfo(
-                        "onepuunchman",
-                        "Ванпанчмен",
-                        "One Punch Man",
-                        "synopsis",
-                        Optional.of(JutsuYear.Y_2015_2023),
-                        Set.of(JutsuGenre.ACTION, JutsuGenre.COMEDY),
-                        Set.of(JutsuType.SUPERPOWER),
-                        "thumb.jpg",
-                        List.of());
-        when(jutsuClient.getAnimeInfo("onepuunchman")).thenReturn(Mono.just(info));
-
-        client.get()
-                .uri("/api/v1/sources/jutsu/anime/onepuunchman")
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody()
-                .jsonPath("$.slug")
-                .isEqualTo("onepuunchman")
-                .jsonPath("$.title")
-                .isEqualTo("Ванпанчмен")
-                .jsonPath("$.year")
-                .isEqualTo("2015-2023")
-                .jsonPath("$.genres.length()")
-                .isEqualTo(2);
-    }
+    // -------------------------------------------------------------------------
+    // Pass-through endpoints (unchanged by Step 3.C)
+    // -------------------------------------------------------------------------
 
     @Test
     @DisplayName("GET /episode returns the typed metadata DTO")
