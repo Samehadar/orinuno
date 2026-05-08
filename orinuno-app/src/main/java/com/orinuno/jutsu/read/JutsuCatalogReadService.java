@@ -5,10 +5,8 @@ import com.orinuno.jutsu.filter.JutsuSort;
 import com.orinuno.jutsu.filter.JutsuType;
 import com.orinuno.jutsu.filter.JutsuYear;
 import com.orinuno.jutsu.model.JutsuEpisode;
-import com.orinuno.jutsu.model.JutsuFilm;
 import com.orinuno.jutsu.model.JutsuTitle;
 import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
-import com.orinuno.jutsu.repository.JutsuFilmRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import com.orinuno.model.dto.jutsu.JutsuAnimeInfoDto;
 import com.orinuno.model.dto.jutsu.JutsuCatalogPageDto;
@@ -54,15 +52,11 @@ public class JutsuCatalogReadService {
 
     private final JutsuTitleRepository titleRepository;
     private final JutsuEpisodeRepository episodeRepository;
-    private final JutsuFilmRepository filmRepository;
 
     public JutsuCatalogReadService(
-            JutsuTitleRepository titleRepository,
-            JutsuEpisodeRepository episodeRepository,
-            JutsuFilmRepository filmRepository) {
+            JutsuTitleRepository titleRepository, JutsuEpisodeRepository episodeRepository) {
         this.titleRepository = titleRepository;
         this.episodeRepository = episodeRepository;
-        this.filmRepository = filmRepository;
     }
 
     /**
@@ -115,8 +109,7 @@ public class JutsuCatalogReadService {
             return Optional.empty();
         }
         List<JutsuEpisode> episodes = episodeRepository.findBySlug(slug);
-        List<JutsuFilm> films = filmRepository.findBySlug(slug);
-        return Optional.of(JutsuAnimeInfoDto.fromCache(title, episodes, films));
+        return Optional.of(JutsuAnimeInfoDto.fromCache(title, episodes));
     }
 
     /**

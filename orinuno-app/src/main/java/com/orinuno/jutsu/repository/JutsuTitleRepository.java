@@ -46,4 +46,28 @@ public interface JutsuTitleRepository {
      * catalog-only refresh doesn't blank info-page fields and vice versa.
      */
     void upsert(@Param("title") JutsuTitle title);
+
+    /**
+     * Read-side catalog query for the cache-first REST surface (ARCH-0016 P1a Step 3.A). The filter
+     * parameters mirror jut.su's catalog form: genres / types are AND-combined ({@code
+     * FIND_IN_SET}), years are OR-combined (a title can only live in one bucket). The {@code sort}
+     * argument is a whitelisted enum slug interpolated via {@code ${...}}; do NOT pass user input
+     * here — wire it through {@code JutsuCatalogReadService} which whitelists the sort against the
+     * {@code JutsuSort} enum before calling.
+     */
+    List<JutsuTitle> findCatalogPage(
+            @Param("genres") List<String> genres,
+            @Param("types") List<String> types,
+            @Param("years") List<String> years,
+            @Param("sort") String sort,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
+
+    /**
+     * Total row count under the same filters as {@link #findCatalogPage}. Drives {@code hasMore}.
+     */
+    long countCatalogRows(
+            @Param("genres") List<String> genres,
+            @Param("types") List<String> types,
+            @Param("years") List<String> years);
 }
