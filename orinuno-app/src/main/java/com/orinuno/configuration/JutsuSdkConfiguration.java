@@ -10,6 +10,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
@@ -46,7 +47,16 @@ public class JutsuSdkConfiguration {
                 .build();
     }
 
+    /**
+     * The main outbound rate limiter for the SDK (catalog / notice / info / decoder calls). Marked
+     * {@link Primary @Primary} because Step 3.B (ARCH-0016) introduces a SECOND {@link
+     * JutsuRateLimiter} bean ({@code jutsuFallbackRateLimiter}) — without {@code @Primary} every
+     * consumer that injects {@code JutsuRateLimiter} without a qualifier (the SDK builder, the
+     * session manager, downloader services) would fail with {@code
+     * NoUniqueBeanDefinitionException}.
+     */
     @Bean
+    @Primary
     public JutsuRateLimiter jutsuRateLimiter(
             OrinunoProperties properties, MeterRegistry meterRegistry) {
         // Pull RPS through the live properties bean rather than freezing it at startup so a
