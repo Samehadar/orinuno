@@ -32,6 +32,22 @@ public class JutsuTitle {
     private String synopsis;
     private String thumbnailUrl;
     private String yearBucket;
+
+    /**
+     * Comma-joined integer years from the labelled info block ({@code "2014,2020,2024"}). Captured
+     * separately from {@link #yearBucket} so display ("Годы выпуска: 2014, 2020, 2024") stays
+     * orthogonal to filter form ("2015-2023"). {@code null} when the parser couldn't find the
+     * labelled block or the page legitimately doesn't list multi-year releases.
+     */
+    private String yearsCsv;
+
+    /**
+     * Russian age-rating wire form ({@code "0+"} / {@code "6+"} / {@code "12+"} / {@code "16+"} /
+     * {@code "18+"}). {@code null} when the page didn't render the badge. Decoded via {@code
+     * JutsuAgeRating.fromWire(...)}.
+     */
+    private String ageRating;
+
     private String genresCsv;
     private String typesCsv;
     private Integer catalogEpisodeCount;

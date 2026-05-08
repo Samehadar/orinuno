@@ -6,6 +6,7 @@ import com.orinuno.jutsu.model.JutsuEpisode;
 import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -149,6 +150,8 @@ public record JutsuAnimeInfoDto(
                 row.getSynopsis(),
                 row.getThumbnailUrl(),
                 row.getYearBucket(),
+                splitYears(row.getYearsCsv()),
+                row.getAgeRating(),
                 splitCsv(row.getGenresCsv()),
                 splitCsv(row.getTypesCsv()),
                 seasons,
@@ -158,5 +161,24 @@ public record JutsuAnimeInfoDto(
     private static List<String> splitCsv(@Nullable String csv) {
         if (csv == null || csv.isBlank()) return List.of();
         return Arrays.stream(csv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
+    /**
+     * Parse the comma-joined "{@code 2014,2020,2024}" form. Non-numeric tokens are dropped silently
+     * so a future widening of the column (e.g. ranges) doesn't break the read path.
+     */
+    private static List<Integer> splitYears(@Nullable String csv) {
+        if (csv == null || csv.isBlank()) return List.of();
+        List<Integer> out = new ArrayList<>();
+        for (String raw : csv.split(",")) {
+            String token = raw.trim();
+            if (token.isEmpty()) continue;
+            try {
+                out.add(Integer.parseInt(token));
+            } catch (NumberFormatException ignore) {
+                // Skip malformed token; cache write path keeps the column constrained.
+            }
+        }
+        return List.copyOf(out);
     }
 }

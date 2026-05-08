@@ -149,7 +149,7 @@ public final class JutsuAnimeInfoParser {
             extractCategoriesFromBody(doc, genres, types);
         }
 
-        SeasonsAndFilms anchorsResult = extractSeasonsAndFilms(doc, slug);
+        List<JutsuSeason> seasons = extractSeasons(doc, slug);
 
         return new JutsuAnimeInfo(
                 slug,
@@ -162,8 +162,7 @@ public final class JutsuAnimeInfoParser {
                 genres,
                 types,
                 thumbnail,
-                anchorsResult.seasons,
-                anchorsResult.films);
+                seasons);
     }
 
     @Nullable
@@ -491,6 +490,25 @@ public final class JutsuAnimeInfoParser {
 
         static SeasonsAndFilms empty() {
             return new SeasonsAndFilms(List.of(), List.of());
+        }
+    }
+
+    /**
+     * Plain holder for the labelled-info-block extraction result. Kept package-private so the
+     * record stays an implementation detail of the parser.
+     */
+    private record InfoBlock(
+            Set<JutsuGenre> genres,
+            Set<JutsuType> types,
+            List<Integer> years,
+            Optional<JutsuAgeRating> ageRating) {
+
+        static InfoBlock empty() {
+            return new InfoBlock(
+                    EnumSet.noneOf(JutsuGenre.class),
+                    EnumSet.noneOf(JutsuType.class),
+                    List.of(),
+                    Optional.empty());
         }
     }
 
