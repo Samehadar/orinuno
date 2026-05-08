@@ -1,10 +1,12 @@
 package com.orinuno.model.dto.jutsu;
 
+import com.orinuno.jutsu.info.JutsuAgeRating;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
 import com.orinuno.jutsu.model.JutsuEpisode;
 import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -16,7 +18,28 @@ public record JutsuAnimeInfoDto(
         @Schema(example = "One Punch Man", nullable = true) @Nullable String originalTitle,
         @Schema(nullable = true) @Nullable String synopsis,
         @Schema(nullable = true) @Nullable String thumbnailUrl,
-        @Schema(nullable = true, example = "2015") @Nullable String year,
+        @Schema(
+                        nullable = true,
+                        example = "2015-2023",
+                        description =
+                                "Coarse year bucket from the catalog filter form. Use `years` for"
+                                        + " the per-season air years.")
+                @Nullable
+                String year,
+        @Schema(
+                        description =
+                                "Per-season air years from the labelled info block (e.g."
+                                        + " [2014, 2020, 2024]). Empty when the page didn't"
+                                        + " surface them.")
+                List<Integer> years,
+        @Schema(
+                        nullable = true,
+                        example = "16+",
+                        description =
+                                "Russian age-rating classifier (`0+` / `6+` / `12+` / `16+` /"
+                                        + " `18+`); null when the page didn't render the badge.")
+                @Nullable
+                String ageRating,
         @Schema(description = "Genre slugs from the page chrome") List<String> genres,
         @Schema(description = "Type slugs from the page chrome") List<String> types,
         @Schema(description = "Season blocks parsed from the page") List<JutsuSeasonDto> seasons,
@@ -30,6 +53,8 @@ public record JutsuAnimeInfoDto(
                 info.synopsis(),
                 info.thumbnailUrl(),
                 info.year().map(y -> y.slug()).orElse(null),
+                info.years(),
+                info.ageRating().map(JutsuAgeRating::wire).orElse(null),
                 info.genres().stream().map(g -> g.slug()).toList(),
                 info.types().stream().map(t -> t.slug()).toList(),
                 info.seasons().stream().map(JutsuSeasonDto::from).toList(),
@@ -52,6 +77,8 @@ public record JutsuAnimeInfoDto(
                 row.getSynopsis(),
                 row.getThumbnailUrl(),
                 row.getYearBucket(),
+                splitYears(row.getYearsCsv()),
+                row.getAgeRating(),
                 splitCsv(row.getGenresCsv()),
                 splitCsv(row.getTypesCsv()),
                 seasons,
@@ -61,5 +88,24 @@ public record JutsuAnimeInfoDto(
     private static List<String> splitCsv(@Nullable String csv) {
         if (csv == null || csv.isBlank()) return List.of();
         return Arrays.stream(csv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
+    /**
+     * Parse the comma-joined "{@code 2014,2020,2024}" form. Non-numeric tokens are dropped silently
+     * so a future widening of the column (e.g. ranges) doesn't break the read path.
+     */
+    private static List<Integer> splitYears(@Nullable String csv) {
+        if (csv == null || csv.isBlank()) return List.of();
+        List<Integer> out = new ArrayList<>();
+        for (String raw : csv.split(",")) {
+            String token = raw.trim();
+            if (token.isEmpty()) continue;
+            try {
+                out.add(Integer.parseInt(token));
+            } catch (NumberFormatException ignore) {
+                // Skip malformed token; cache write path keeps the column constrained.
+            }
+        }
+        return List.copyOf(out);
     }
 }

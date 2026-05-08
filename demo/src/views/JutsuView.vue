@@ -198,6 +198,62 @@ const infoLoading = ref(false)
 const infoError = ref('')
 const infoResult = ref<JutsuAnimeInfo | null>(null)
 
+// Slug → Russian label lookup. Kept inline (no Map) — the lists are small
+// (≈ 12/19 entries) and the linear scan is invisible in practice.
+function genreLabel(slug: string): string {
+  return GENRES.find((g) => g[0] === slug)?.[1] ?? slug
+}
+function typeLabel(slug: string): string {
+  return TYPES.find((t) => t[0] === slug)?.[1] ?? slug
+}
+function yearBucketLabel(slug: string): string {
+  return YEARS.find((y) => y[0] === slug)?.[1] ?? slug
+}
+
+// Human-readable comma list with Russian " и " ("and") before the last entry,
+// matching jut.su's own formatting on the labelled info block. ["a","b","c"] →
+// "a, b и c"; ["a","b"] → "a и b"; ["a"] → "a".
+function joinHumanRu(items: string[]): string {
+  if (items.length === 0) return ''
+  if (items.length === 1) return items[0]
+  return items.slice(0, -1).join(', ') + ' и ' + items[items.length - 1]
+}
+
+const infoGenreLabels = computed<string[]>(
+  () => infoResult.value?.genres.map(genreLabel) ?? [],
+)
+const infoTypeLabels = computed<string[]>(
+  () => infoResult.value?.types.map(typeLabel) ?? [],
+)
+const infoYearsLine = computed<string>(() => {
+  const ys = infoResult.value?.years ?? []
+  if (ys.length) return ys.join(', ')
+  // Fallback to the coarse filter-form bucket when years[] is empty (cache row
+  // pre-migration, or older fixture without the labelled block). yearBucketLabel
+  // yields the human label ("до 2000") instead of the slug ("before2000").
+  const bucket = infoResult.value?.year
+  return bucket ? yearBucketLabel(bucket) : ''
+})
+
+// Age-rating colour map. 18+ red, 16+ orange, 12+ yellow-ish (we reuse the
+// orange neon to keep the palette tight), 6+ and 0+ green. Keep the wire form
+// strings here — that's what the API ships.
+const ageRatingPillClass = computed<string>(() => {
+  switch (infoResult.value?.ageRating) {
+    case '18+':
+      return 'bg-[var(--color-neon-red)]/15 text-[var(--color-neon-red)] border border-[var(--color-neon-red)]/40'
+    case '16+':
+      return 'bg-[var(--color-neon-orange)]/15 text-[var(--color-neon-orange)] border border-[var(--color-neon-orange)]/40'
+    case '12+':
+      return 'bg-[var(--color-neon-orange)]/10 text-[var(--color-neon-orange)] border border-[var(--color-neon-orange)]/30'
+    case '6+':
+    case '0+':
+      return 'bg-[var(--color-neon-green)]/15 text-[var(--color-neon-green)] border border-[var(--color-neon-green)]/40'
+    default:
+      return 'bg-white/10 text-[var(--color-text-muted)] border border-white/20'
+  }
+})
+
 async function loadAnimeInfo() {
   if (!infoSlug.value.trim()) {
     infoError.value = 'Slug is required'
@@ -719,30 +775,88 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             referrerpolicy="no-referrer"
             @error="($event.target as HTMLImageElement).style.display = 'none'"
           />
-          <div class="flex-1">
+          <div class="flex-1 min-w-0">
             <h2 class="text-2xl font-bold">{{ infoResult.title }}</h2>
-            <p v-if="infoResult.originalTitle" class="text-[var(--color-text-muted)]">
-              {{ infoResult.originalTitle }}
-            </p>
-            <p class="text-xs text-[var(--color-text-muted)] mt-2">
-              <span v-if="infoResult.year">{{ infoResult.year }}</span>
-              <span v-if="infoResult.year"> · </span>
-              <span class="font-mono">slug={{ infoResult.slug }}</span>
-              <span> · {{ infoResult.totalEpisodeCount }} total episode anchors</span>
-            </p>
-            <p v-if="infoResult.synopsis" class="text-sm text-[var(--color-text-muted)] mt-3 line-clamp-4">
+
+            <!-- Labelled info block — mirrors the chrome jut.su renders under the
+                 player on every anime page (Жанры / Темы / Годы выпуска /
+                 Оригинальное название / Возрастной рейтинг). Each row is suppressed
+                 individually when its source field is empty, so older fixtures /
+                 cache rows that pre-date the labelled-block migration still render
+                 cleanly with whatever subset they have. -->
+            <dl class="mt-2 text-sm space-y-1.5">
+              <div v-if="infoGenreLabels.length" class="flex gap-1.5 flex-wrap">
+                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Жанры:</dt>
+                <dd class="text-[var(--color-text-primary)]">
+                  {{ joinHumanRu(infoGenreLabels) }}.
+                </dd>
+              </div>
+              <div v-if="infoTypeLabels.length" class="flex gap-1.5 flex-wrap">
+                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Темы:</dt>
+                <dd class="text-[var(--color-text-primary)]">
+                  {{ joinHumanRu(infoTypeLabels) }}.
+                </dd>
+              </div>
+              <div v-if="infoYearsLine" class="flex gap-1.5 flex-wrap">
+                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Годы выпуска:</dt>
+                <dd class="text-[var(--color-text-primary)]">{{ infoYearsLine }}.</dd>
+              </div>
+              <div v-if="infoResult.originalTitle" class="flex gap-1.5 flex-wrap">
+                <dt class="text-[var(--color-text-muted)] flex-shrink-0">
+                  Оригинальное название:
+                </dt>
+                <dd class="text-[var(--color-text-primary)] font-semibold">
+                  {{ infoResult.originalTitle }}
+                </dd>
+              </div>
+              <div v-if="infoResult.ageRating" class="flex items-center gap-1.5 flex-wrap">
+                <dt class="text-[var(--color-text-muted)] flex-shrink-0">Возрастной рейтинг:</dt>
+                <dd>
+                  <span
+                    :class="[
+                      'inline-block px-2 py-0.5 rounded text-[11px] font-mono font-semibold',
+                      ageRatingPillClass,
+                    ]"
+                  >
+                    {{ infoResult.ageRating }}
+                  </span>
+                </dd>
+              </div>
+            </dl>
+
+            <p
+              v-if="infoResult.synopsis"
+              class="text-sm text-[var(--color-text-muted)] mt-3 line-clamp-4 border-t border-white/10 pt-3"
+            >
               {{ infoResult.synopsis }}
             </p>
-            <div class="flex flex-wrap gap-1 mt-3">
-              <span v-for="g in infoResult.genres" :key="'g-' + g"
-                class="badge bg-[var(--color-neon-pink)]/15 text-[var(--color-neon-pink)] text-[10px] font-mono">
+
+            <!-- Technical breadcrumb at the bottom of the card. slug + episode anchor
+                 count are useful for power users debugging through the API; we keep
+                 them out of the labelled block above so it stays visually parallel
+                 with what jut.su itself renders. -->
+            <p class="text-[10px] text-[var(--color-text-muted)] mt-3 font-mono flex items-center gap-2 flex-wrap">
+              <span>slug={{ infoResult.slug }}</span>
+              <span>·</span>
+              <span>{{ infoResult.totalEpisodeCount }} total episode anchors</span>
+              <span v-if="infoResult.genres.length || infoResult.types.length">·</span>
+              <span
+                v-for="g in infoResult.genres"
+                :key="'g-' + g"
+                class="badge bg-[var(--color-neon-pink)]/10 text-[var(--color-neon-pink)] text-[10px] font-mono"
+                :title="genreLabel(g)"
+              >
                 {{ g }}
               </span>
-              <span v-for="t in infoResult.types" :key="'t-' + t"
-                class="badge bg-[var(--color-neon-blue)]/15 text-[var(--color-neon-blue)] text-[10px] font-mono">
+              <span
+                v-for="t in infoResult.types"
+                :key="'t-' + t"
+                class="badge bg-[var(--color-neon-blue)]/10 text-[var(--color-neon-blue)] text-[10px] font-mono"
+                :title="typeLabel(t)"
+              >
                 {{ t }}
               </span>
-            </div>
+            </p>
           </div>
         </div>
 

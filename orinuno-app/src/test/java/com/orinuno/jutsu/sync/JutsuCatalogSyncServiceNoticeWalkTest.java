@@ -189,6 +189,8 @@ class JutsuCatalogSyncServiceNoticeWalkTest {
                                         "Brand New",
                                         "Описание",
                                         Optional.empty(),
+                                        List.of(),
+                                        Optional.empty(),
                                         Set.of(),
                                         Set.of(),
                                         "thumb.jpg",

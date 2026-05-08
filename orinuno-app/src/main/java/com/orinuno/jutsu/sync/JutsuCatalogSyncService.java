@@ -8,6 +8,7 @@ import com.orinuno.jutsu.catalog.JutsuCatalogRequest;
 import com.orinuno.jutsu.filter.JutsuGenre;
 import com.orinuno.jutsu.filter.JutsuType;
 import com.orinuno.jutsu.filter.JutsuYear;
+import com.orinuno.jutsu.info.JutsuAgeRating;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
 import com.orinuno.jutsu.info.JutsuEpisodeListing;
 import com.orinuno.jutsu.info.JutsuSeason;
@@ -500,6 +501,8 @@ public class JutsuCatalogSyncService {
                 .synopsis(info.synopsis())
                 .thumbnailUrl(info.thumbnailUrl())
                 .yearBucket(info.year().map(JutsuYear::slug).orElse(null))
+                .yearsCsv(joinYears(info.years()))
+                .ageRating(info.ageRating().map(JutsuAgeRating::wire).orElse(null))
                 .genresCsv(joinSlugs(info.genres(), JutsuGenre::slug))
                 .typesCsv(joinSlugs(info.types(), JutsuType::slug))
                 .infoTotalSeasons(info.seasons().size())
@@ -508,6 +511,21 @@ public class JutsuCatalogSyncService {
                 .firstSeenAt(now)
                 .lastSeenAt(now)
                 .build();
+    }
+
+    /**
+     * Render a list of integer years into the comma-joined wire form ({@code "2014,2020,2024"}).
+     * Empty list → {@code null} so the COALESCE upsert preserves any previously-stored value.
+     */
+    private static String joinYears(List<Integer> years) {
+        if (years == null || years.isEmpty()) return null;
+        StringBuilder sb = new StringBuilder();
+        for (Integer y : years) {
+            if (y == null) continue;
+            if (sb.length() > 0) sb.append(',');
+            sb.append(y.intValue());
+        }
+        return sb.length() == 0 ? null : sb.toString();
     }
 
     /**

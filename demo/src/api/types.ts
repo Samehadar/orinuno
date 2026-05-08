@@ -325,7 +325,12 @@ export interface JutsuAnimeInfo {
   originalTitle: string | null
   synopsis: string | null
   thumbnailUrl: string | null
+  /** Coarse filter-form year bucket (e.g. `"2015-2023"`); use `years` for per-season air years. */
   year: string | null
+  /** Per-season air years from the labelled info block (e.g. `[2014, 2020, 2024]`). */
+  years: number[]
+  /** Russian age rating wire form: `"0+"` / `"6+"` / `"12+"` / `"16+"` / `"18+"` or null. */
+  ageRating: string | null
   genres: string[]
   types: string[]
   seasons: JutsuSeason[]
