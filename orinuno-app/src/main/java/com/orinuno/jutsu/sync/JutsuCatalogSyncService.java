@@ -79,18 +79,21 @@ public class JutsuCatalogSyncService {
     private final JutsuEpisodeRepository episodeRepository;
     private final JutsuSyncStateRepository syncStateRepository;
     private final OrinunoProperties properties;
+    private final JutsuCatalogIngestion catalogIngestion;
 
     public JutsuCatalogSyncService(
             JutsuClient client,
             JutsuTitleRepository titleRepository,
             JutsuEpisodeRepository episodeRepository,
             JutsuSyncStateRepository syncStateRepository,
-            OrinunoProperties properties) {
+            OrinunoProperties properties,
+            JutsuCatalogIngestion catalogIngestion) {
         this.client = client;
         this.titleRepository = titleRepository;
         this.episodeRepository = episodeRepository;
         this.syncStateRepository = syncStateRepository;
         this.properties = properties;
+        this.catalogIngestion = catalogIngestion;
     }
 
     /**
@@ -156,7 +159,9 @@ public class JutsuCatalogSyncService {
             int slot = 0;
             for (JutsuCatalogEntry entry : response.entries()) {
                 slot++;
-                titleRepository.upsert(toTitle(entry, page, slot, now));
+                JutsuTitle row = toTitle(entry, page, slot, now);
+                titleRepository.upsert(row);
+                catalogIngestion.ingest(row);
                 titlesUpserted++;
             }
             if (!response.hasMore()) {
@@ -336,7 +341,9 @@ public class JutsuCatalogSyncService {
                     continue;
                 }
                 if (info == null) continue;
-                titleRepository.upsert(infoToTitle(info, LocalDateTime.now()));
+                JutsuTitle infoRow = infoToTitle(info, LocalDateTime.now());
+                titleRepository.upsert(infoRow);
+                catalogIngestion.ingest(infoRow);
                 List<JutsuEpisode> episodes = infoToEpisodes(info, LocalDateTime.now());
                 if (!episodes.isEmpty()) {
                     episodeRepository.upsertAll(episodes);
@@ -344,7 +351,10 @@ public class JutsuCatalogSyncService {
                 infoFetched++;
             } else {
                 JutsuNoticeEntry sample = findFirstEntryForSlug(uniqueSlugs, firstFeed, slug);
-                titleRepository.upsert(noticeToPlaceholderTitle(sample, slug, LocalDateTime.now()));
+                JutsuTitle placeholder =
+                        noticeToPlaceholderTitle(sample, slug, LocalDateTime.now());
+                titleRepository.upsert(placeholder);
+                catalogIngestion.ingest(placeholder);
                 placeholderUpserts++;
             }
         }
