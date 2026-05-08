@@ -178,6 +178,7 @@ class JutsuLiveFallbackServiceTest {
                 java.util.Set.of(),
                 java.util.Set.of(),
                 "thumb",
+                List.of(),
                 List.of());
     }
 }

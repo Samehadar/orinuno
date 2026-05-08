@@ -49,3 +49,5 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260508030300_create_catalog_episode_source_link.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260508040000_alter_jutsu_title_add_years_age_rating.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508050000_create_jutsu_film.sql

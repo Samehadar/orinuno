@@ -3,11 +3,13 @@ package com.orinuno.model.dto.jutsu;
 import com.orinuno.jutsu.info.JutsuAgeRating;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
 import com.orinuno.jutsu.model.JutsuEpisode;
+import com.orinuno.jutsu.model.JutsuFilm;
 import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 /** REST projection of {@link JutsuAnimeInfo}. */
@@ -43,7 +45,16 @@ public record JutsuAnimeInfoDto(
         @Schema(description = "Genre slugs from the page chrome") List<String> genres,
         @Schema(description = "Type slugs from the page chrome") List<String> types,
         @Schema(description = "Season blocks parsed from the page") List<JutsuSeasonDto> seasons,
-        @Schema(description = "Total number of episode anchors discovered") int totalEpisodeCount) {
+        @Schema(
+                        description =
+                                "Full-length movies attached to the same series, rendered by jut.su"
+                                        + " in the dedicated \"Полнометражные фильмы\" block. Empty"
+                                        + " for anime without movies. Films are NOT counted in"
+                                        + " `totalEpisodeCount`; use `totalFilmCount` instead.")
+                List<JutsuFilmListingDto> films,
+        @Schema(description = "Total number of episode anchors discovered") int totalEpisodeCount,
+        @Schema(description = "Total number of full-length movie anchors discovered")
+                int totalFilmCount) {
 
     public static JutsuAnimeInfoDto from(JutsuAnimeInfo info) {
         return new JutsuAnimeInfoDto(
@@ -58,18 +69,23 @@ public record JutsuAnimeInfoDto(
                 info.genres().stream().map(g -> g.slug()).toList(),
                 info.types().stream().map(t -> t.slug()).toList(),
                 info.seasons().stream().map(JutsuSeasonDto::from).toList(),
-                info.totalEpisodeCount());
+                info.films().stream().map(JutsuFilmListingDto::from).toList(),
+                info.totalEpisodeCount(),
+                info.totalFilmCount());
     }
 
     /**
-     * Build a DTO from a cached title + its episode list. Episodes are grouped by season into
-     * {@link JutsuSeasonDto} blocks ordered by season ASC; within a season episodes order by
-     * episode number ASC. The shape matches {@link #from(JutsuAnimeInfo)} so consumers can switch
-     * between cache-hit and live-fetch responses transparently.
+     * Build a DTO from a cached title + its episode list + its film list. Episodes are grouped by
+     * season into {@link JutsuSeasonDto} blocks ordered by season ASC; within a season episodes
+     * order by episode number ASC. Films are ordered by film index ASC and surfaced as a flat
+     * sibling list. The shape matches {@link #from(JutsuAnimeInfo)} so consumers can switch between
+     * cache-hit and live-fetch responses transparently.
      */
-    public static JutsuAnimeInfoDto fromCache(JutsuTitle row, List<JutsuEpisode> episodes) {
+    public static JutsuAnimeInfoDto fromCache(
+            JutsuTitle row, List<JutsuEpisode> episodes, List<JutsuFilm> films) {
         List<JutsuSeasonDto> seasons = JutsuSeasonDto.fromCache(row.getSlug(), episodes);
-        int total = seasons.stream().mapToInt(JutsuSeasonDto::episodeCount).sum();
+        int totalEpisodes = seasons.stream().mapToInt(JutsuSeasonDto::episodeCount).sum();
+        List<JutsuFilmListingDto> filmDtos = filmsToDto(films);
         return new JutsuAnimeInfoDto(
                 row.getSlug(),
                 row.getTitle() == null ? row.getSlug() : row.getTitle(),
@@ -82,7 +98,18 @@ public record JutsuAnimeInfoDto(
                 splitCsv(row.getGenresCsv()),
                 splitCsv(row.getTypesCsv()),
                 seasons,
-                total);
+                filmDtos,
+                totalEpisodes,
+                filmDtos.size());
+    }
+
+    private static List<JutsuFilmListingDto> filmsToDto(@Nullable List<JutsuFilm> films) {
+        if (films == null || films.isEmpty()) return List.of();
+        List<JutsuFilm> sorted = new ArrayList<>(films);
+        sorted.sort(Comparator.comparingInt(JutsuFilm::getFilmIndex));
+        List<JutsuFilmListingDto> out = new ArrayList<>(sorted.size());
+        for (JutsuFilm f : sorted) out.add(JutsuFilmListingDto.fromCache(f));
+        return List.copyOf(out);
     }
 
     private static List<String> splitCsv(@Nullable String csv) {

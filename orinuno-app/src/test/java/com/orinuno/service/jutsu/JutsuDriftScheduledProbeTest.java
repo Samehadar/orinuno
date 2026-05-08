@@ -55,6 +55,7 @@ class JutsuDriftScheduledProbeTest {
                                         Set.of(),
                                         Set.of(),
                                         null,
+                                        List.of(),
                                         List.of())));
         when(jutsuClient.getLatestNoticeFeed())
                 .thenReturn(Mono.just(new JutsuNoticeFeed(0, List.of())));
@@ -101,6 +102,7 @@ class JutsuDriftScheduledProbeTest {
                                         Set.of(),
                                         Set.of(),
                                         null,
+                                        List.of(),
                                         List.of())));
         when(jutsuClient.getLatestNoticeFeed())
                 .thenReturn(Mono.just(new JutsuNoticeFeed(0, List.of())));

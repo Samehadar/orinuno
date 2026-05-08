@@ -245,4 +245,85 @@ class JutsuAnimeInfoParserTest {
                 .extracting(e -> e.detail())
                 .allMatch(detail -> detail.contains("labelled block"));
     }
+
+    @Test
+    void filmsAreExtractedFromDedicatedFilmUrls() {
+        // Mirrors the actual jut.su rendering for /life-no-game/: 12 episode anchors followed by
+        // a "Полнометражные фильмы" <h2> and one or more film anchors at /{slug}/film-N.html.
+        // The film anchors carry the same `short-btn video the_hildi` selector as episodes, so
+        // discriminating by URL pattern (and not by selector colour or DOM position) is the only
+        // way to keep films out of seasons and vice versa.
+        String html =
+                "<html><head><meta property='og:image' content='x.jpg'></head><body><h1>X</h1><a"
+                    + " href='/life-no-game/episode-1.html' class='short-btn green video"
+                    + " the_hildi'>1 серия</a><a href='/life-no-game/episode-2.html'"
+                    + " class='short-btn green video the_hildi'>2 серия</a><h2 class='b-b-title"
+                    + " the-anime-season center films_title'>Полнометражные фильмы</h2><a"
+                    + " href='/life-no-game/film-1.html' class='short-btn black video the_hildi'>1"
+                    + " фильм</a><a href='/life-no-game/film-2.html' class='short-btn black video"
+                    + " the_hildi'>2 фильм</a></body></html>";
+        JutsuDriftDetector detector = new JutsuDriftDetector();
+
+        JutsuAnimeInfo info =
+                new JutsuAnimeInfoParser(lenient(detector)).parse(html, "life-no-game");
+
+        assertThat(info).isNotNull();
+        assertThat(info.totalEpisodeCount())
+                .as("films must NOT be counted as episodes")
+                .isEqualTo(2);
+        assertThat(info.totalFilmCount()).isEqualTo(2);
+        assertThat(info.films())
+                .extracting(JutsuFilmListing::index, JutsuFilmListing::url)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(1, "/life-no-game/film-1.html"),
+                        org.assertj.core.groups.Tuple.tuple(2, "/life-no-game/film-2.html"));
+        assertThat(info.films().get(0).label()).contains("1 фильм");
+        // Neither films nor episodes should produce a drift signal beyond the missing labelled
+        // info block (synthetic HTML).
+        assertThat(detector.snapshot().recentEvents())
+                .extracting(e -> e.detail())
+                .allMatch(detail -> detail.contains("labelled block"));
+    }
+
+    @Test
+    void unknownAnchorShapeFiresSchemaViolation() {
+        // A future jut.su template that introduces, say, /{slug}/special-1.html under the same
+        // selector should surface drift so we hear about it before users do. This test pins that
+        // contract: anchors that match the selector but neither the episode nor the film URL
+        // pattern emit SCHEMA_VIOLATION.
+        String html =
+                "<html><body><h1>Single</h1><a href='/single/episode-1.html' class='short-btn"
+                        + " green video the_hildi'>1 серия</a><a href='/single/special-1.html'"
+                        + " class='short-btn black video the_hildi'>спецвыпуск 1</a></body></html>";
+        JutsuDriftDetector detector = new JutsuDriftDetector();
+
+        JutsuAnimeInfo info = new JutsuAnimeInfoParser(lenient(detector)).parse(html, "single");
+
+        assertThat(info).isNotNull();
+        assertThat(info.totalEpisodeCount()).isEqualTo(1);
+        assertThat(info.totalFilmCount()).isZero();
+        assertThat(detector.snapshot().recentEvents())
+                .extracting(e -> e.detail())
+                .anyMatch(detail -> detail.contains("doesn't match episode/film pattern"));
+    }
+
+    @Test
+    void crossPromoFilmAnchorsFromRelatedAnimeAreSilentlyDropped() {
+        // jut.su's "related anime" cross-promos sometimes include film anchors from a different
+        // slug. We must keep them out of the current entry's films list and not raise drift.
+        String html =
+                "<html><body><h1>Single</h1><a href='/single/episode-1.html' class='short-btn"
+                        + " green video the_hildi'>1 серия</a><a href='/another/film-1.html'"
+                        + " class='short-btn black video the_hildi'>чужой фильм</a></body></html>";
+        JutsuDriftDetector detector = new JutsuDriftDetector();
+
+        JutsuAnimeInfo info = new JutsuAnimeInfoParser(lenient(detector)).parse(html, "single");
+
+        assertThat(info).isNotNull();
+        assertThat(info.totalFilmCount()).isZero();
+        // Only the labelled-block selector miss is allowed (synthetic test HTML).
+        assertThat(detector.snapshot().recentEvents())
+                .extracting(e -> e.detail())
+                .allMatch(detail -> detail.contains("labelled block"));
+    }
 }
