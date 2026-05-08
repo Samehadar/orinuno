@@ -11,9 +11,9 @@ import type {
   JutsuCatalogFilterParams,
   JutsuCatalogPage,
   JutsuDriftSnapshot,
-  JutsuEpisodeMeta,
   JutsuNoticeEntry,
   JutsuNoticeFeed,
+  JutsuPageMeta,
   KodikCountry,
   KodikGenre,
   KodikQuality,
@@ -228,7 +228,7 @@ export const api = {
   },
 
   jutsuGetEpisodeMeta(url: string) {
-    return get<JutsuEpisodeMeta>(
+    return get<JutsuPageMeta>(
       `/api/v1/sources/jutsu/episode?url=${encodeURIComponent(url)}`,
     )
   },

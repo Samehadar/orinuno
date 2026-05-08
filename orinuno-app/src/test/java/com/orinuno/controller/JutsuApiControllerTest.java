@@ -15,6 +15,8 @@ import com.orinuno.jutsu.catalog.JutsuCatalogRequest;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.drift.JutsuDriftSnapshot;
 import com.orinuno.jutsu.episode.JutsuEpisodeMeta;
+import com.orinuno.jutsu.episode.JutsuFilmMeta;
+import com.orinuno.jutsu.episode.JutsuPageMeta;
 import com.orinuno.jutsu.fallback.JutsuFallbackCircuitBreaker;
 import com.orinuno.jutsu.fallback.JutsuLiveFallbackService;
 import com.orinuno.jutsu.filter.JutsuCatalogFilter;
