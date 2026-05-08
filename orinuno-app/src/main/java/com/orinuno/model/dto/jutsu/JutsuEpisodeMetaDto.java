@@ -4,7 +4,7 @@ import com.orinuno.jutsu.episode.JutsuEpisodeMeta;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 
-/** REST projection of {@link JutsuEpisodeMeta}. */
+/** REST projection of {@link JutsuEpisodeMeta}; serialised with {@code kind: "episode"}. */
 @Schema(description = "Lightweight metadata for one jut.su episode page (no video decode).")
 public record JutsuEpisodeMetaDto(
         @Schema(example = "onepuunchman") String slug,
@@ -19,7 +19,14 @@ public record JutsuEpisodeMetaDto(
         @Schema(nullable = true) @Nullable String nextEpisodeUrl,
         @Schema(nullable = true) @Nullable String allEpisodesUrl,
         @Schema(description = "true when jut.su shows the Jutsu+ paywall instead of the player")
-                boolean premiumGated) {
+                boolean premiumGated)
+        implements JutsuPageMetaDto {
+
+    @Override
+    @Schema(allowableValues = "episode", example = "episode")
+    public String kind() {
+        return "episode";
+    }
 
     public static JutsuEpisodeMetaDto from(JutsuEpisodeMeta m) {
         return new JutsuEpisodeMetaDto(

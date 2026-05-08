@@ -356,7 +356,13 @@ export interface JutsuAnimeInfo {
   totalFilmCount: number
 }
 
+/**
+ * Lightweight metadata for one jut.su episode page; serialised by the backend with `kind:
+ * "episode"`. The backend also returns {@link JutsuFilmMeta} for full-length-film pages — use
+ * the {@link JutsuPageMeta} discriminated union when consuming `GET /sources/jutsu/episode`.
+ */
 export interface JutsuEpisodeMeta {
+  kind: 'episode'
   slug: string
   season: number
   episode: number
@@ -369,6 +375,29 @@ export interface JutsuEpisodeMeta {
   allEpisodesUrl: string | null
   premiumGated: boolean
 }
+
+/**
+ * Lightweight metadata for one jut.su full-length-film page (`/{slug}/film-N.html`); serialised
+ * by the backend with `kind: "film"`. Films are siblings to episodes — same chrome, different
+ * URL grammar, separate prev/next navigation cohort.
+ */
+export interface JutsuFilmMeta {
+  kind: 'film'
+  slug: string
+  /** 1-based film index from the URL (`/life-no-game/film-1.html` → 1). */
+  filmIndex: number
+  displayTitle: string
+  pageTitle: string
+  canonicalUrl: string
+  thumbnailUrl: string | null
+  prevFilmUrl: string | null
+  nextFilmUrl: string | null
+  allEpisodesUrl: string | null
+  premiumGated: boolean
+}
+
+/** Discriminated union returned by `GET /api/v1/sources/jutsu/episode`. */
+export type JutsuPageMeta = JutsuEpisodeMeta | JutsuFilmMeta
 
 export interface JutsuNoticeEntry {
   slug: string

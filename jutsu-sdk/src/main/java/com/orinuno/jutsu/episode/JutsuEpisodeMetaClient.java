@@ -64,13 +64,15 @@ public final class JutsuEpisodeMetaClient {
     }
 
     /**
-     * Fetch and parse the metadata for a single episode page.
+     * Fetch and parse the metadata for a single episode or full-length-film page.
      *
      * @param relativeOrAbsoluteUrl either a relative path ({@code
-     *     /onepuunchman/season-1/episode-1.html}) or a fully-qualified URL ({@code
-     *     https://jut.su/onepuunchman/episode-1.html})
+     *     /onepuunchman/season-1/episode-1.html}, {@code /life-no-game/film-1.html}) or a
+     *     fully-qualified URL ({@code https://jut.su/onepuunchman/episode-1.html})
+     * @return a {@link JutsuPageMeta} — runtime type is {@link JutsuEpisodeMeta} for {@code
+     *     episode-N.html} URLs and {@link JutsuFilmMeta} for {@code film-N.html} URLs
      */
-    public Mono<JutsuEpisodeMeta> getMeta(String relativeOrAbsoluteUrl) {
+    public Mono<JutsuPageMeta> getMeta(String relativeOrAbsoluteUrl) {
         if (relativeOrAbsoluteUrl == null || relativeOrAbsoluteUrl.isBlank()) {
             return Mono.error(new IllegalArgumentException("url must not be blank"));
         }
@@ -125,10 +127,10 @@ public final class JutsuEpisodeMetaClient {
                         });
     }
 
-    private JutsuEpisodeMeta parse(String html, String expectedRelativeUrl) {
+    private JutsuPageMeta parse(String html, String expectedRelativeUrl) {
         JutsuParserContext ctx =
                 JutsuParserContext.lenient(driftDetector, "JutsuEpisodePageParser");
-        JutsuEpisodeMeta meta = new JutsuEpisodePageParser(ctx).parse(html, expectedRelativeUrl);
+        JutsuPageMeta meta = new JutsuEpisodePageParser(ctx).parse(html, expectedRelativeUrl);
         if (meta == null) {
             throw new IllegalStateException(
                     "episode page parse returned null for " + expectedRelativeUrl);

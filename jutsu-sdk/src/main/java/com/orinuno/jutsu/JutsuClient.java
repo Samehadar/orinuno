@@ -9,6 +9,8 @@ import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.jutsu.drift.JutsuDriftSnapshot;
 import com.orinuno.jutsu.episode.JutsuEpisodeMeta;
 import com.orinuno.jutsu.episode.JutsuEpisodeMetaClient;
+import com.orinuno.jutsu.episode.JutsuFilmMeta;
+import com.orinuno.jutsu.episode.JutsuPageMeta;
 import com.orinuno.jutsu.filter.JutsuCatalogFilter;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
 import com.orinuno.jutsu.info.JutsuAnimeInfoClient;
@@ -155,11 +157,13 @@ public final class JutsuClient {
     // -------------------------------------------------------------------------
 
     /**
-     * Fetch lightweight metadata for a single episode page (title, prev/next links, paywall flag),
-     * without invoking the heavy video-decode pipeline. Use {@link #decode(String)} when you need
-     * the actual mp4 links.
+     * Fetch lightweight metadata for a single viewer page (title, prev/next links, paywall flag)
+     * without invoking the heavy video-decode pipeline. Returns a {@link JutsuPageMeta} whose
+     * runtime type is {@link JutsuEpisodeMeta} for {@code episode-N.html} URLs and {@link
+     * JutsuFilmMeta} for {@code film-N.html} URLs. Use {@link #decode(String)} when you need the
+     * actual mp4 links.
      */
-    public Mono<JutsuEpisodeMeta> getEpisodeMeta(String relativeOrAbsoluteUrl) {
+    public Mono<JutsuPageMeta> getEpisodeMeta(String relativeOrAbsoluteUrl) {
         return episodeMetaClient.getMeta(relativeOrAbsoluteUrl);
     }
 
