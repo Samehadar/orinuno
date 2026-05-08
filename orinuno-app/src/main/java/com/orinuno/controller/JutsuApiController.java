@@ -1,11 +1,14 @@
 package com.orinuno.controller;
 
 import com.orinuno.jutsu.JutsuClient;
+import com.orinuno.jutsu.catalog.JutsuCatalogRequest;
+import com.orinuno.jutsu.fallback.JutsuLiveFallbackService;
 import com.orinuno.jutsu.filter.JutsuCatalogFilter;
 import com.orinuno.jutsu.filter.JutsuGenre;
 import com.orinuno.jutsu.filter.JutsuSort;
 import com.orinuno.jutsu.filter.JutsuType;
 import com.orinuno.jutsu.filter.JutsuYear;
+import com.orinuno.jutsu.read.JutsuCatalogReadService;
 import com.orinuno.model.dto.jutsu.JutsuAnimeInfoDto;
 import com.orinuno.model.dto.jutsu.JutsuCatalogPageDto;
 import com.orinuno.model.dto.jutsu.JutsuDriftSnapshotDto;
@@ -18,7 +21,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Nullable;
 import java.util.List;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * REST surface for the new jut.su SDK operations introduced alongside the schema-drift effort.
@@ -38,16 +45,27 @@ import reactor.core.publisher.Mono;
  * the API-key gate would prevent embedded-browser consumption. Premium / privileged operations live
  * under the parse / download trees and remain gated.
  *
- * <p>Endpoints:
+ * <h3>Cache-first reads (ARCH-0016 P1a Step 3)</h3>
+ *
+ * <p>{@code /catalog} and {@code /anime/{slug}} are served from the L1 cache (populated by {@code
+ * JutsuCatalogSyncService}) by default. On cache-miss the request is forwarded to {@link
+ * JutsuLiveFallbackService} which is guarded by a dedicated rate-limit bucket, a rolling-window
+ * circuit breaker, and a short-TTL negative cache. {@code /search} is intentionally NOT cached —
+ * text search would multiply cache keys without benefit.
+ *
+ * <p>Each response carries a {@code Cache-Status} header (RFC 9211) so consumers can tell where the
+ * payload came from:
  *
  * <ul>
- *   <li>{@code GET .../catalog} — browse / filter / sort the catalog
- *   <li>{@code GET .../search} — title search (composes with filters)
- *   <li>{@code GET .../anime/{slug}} — full anime info page
- *   <li>{@code GET .../episode?url=...} — single-episode metadata (no decode)
- *   <li>{@code GET .../notice} — upcoming-releases feed; one page or streamed walk
- *   <li>{@code GET .../drift} — current SDK drift snapshot for dashboards / health checks
+ *   <li>{@code orinuno; hit} — served from L1 (the sync workers had a fresh copy)
+ *   <li>{@code orinuno; fwd=miss; fallback} — L1 missed, live fallback succeeded
+ *   <li>{@code orinuno; fwd=bypass} — endpoint bypasses the cache by design (search)
  * </ul>
+ *
+ * <p>When all three fallback guards reject (kill-switch off, breaker OPEN, negative-cache hit) we
+ * return {@code 503 Service Unavailable} with an {@code X-Orinuno-Fallback-Reason} header
+ * explaining which guard fired so dashboards / consumers can react. Same status code is used when
+ * the live SDK call itself errors out (e.g. jut.su returned 5xx).
  */
 @Slf4j
 @RestController
@@ -55,26 +73,44 @@ import reactor.core.publisher.Mono;
 @Tag(name = "JutSu", description = "jut.su catalog / info / notice / drift surface")
 public class JutsuApiController {
 
-    private final JutsuClient jutsuClient;
+    /** RFC 9211 header name. Spring doesn't expose a constant for this one. */
+    private static final String CACHE_STATUS = "Cache-Status";
 
-    public JutsuApiController(JutsuClient jutsuClient) {
+    /** Custom diagnostic header explaining why a 503 was returned (which guard or live error). */
+    private static final String FALLBACK_REASON = "X-Orinuno-Fallback-Reason";
+
+    private static final String CACHE_HIT = "orinuno; hit";
+    private static final String CACHE_FALLBACK = "orinuno; fwd=miss; fallback";
+    private static final String CACHE_BYPASS = "orinuno; fwd=bypass";
+
+    private final JutsuClient jutsuClient;
+    private final JutsuCatalogReadService readService;
+    private final JutsuLiveFallbackService fallbackService;
+
+    public JutsuApiController(
+            JutsuClient jutsuClient,
+            JutsuCatalogReadService readService,
+            JutsuLiveFallbackService fallbackService) {
         this.jutsuClient = jutsuClient;
+        this.readService = readService;
+        this.fallbackService = fallbackService;
     }
 
     // -------------------------------------------------------------------------
-    // Catalog browse / filter
+    // Catalog browse / filter — cache-first
     // -------------------------------------------------------------------------
 
     @GetMapping("/catalog")
     @Operation(
-            summary = "Browse the jut.su catalog with optional filters and sort",
+            summary = "Browse the jut.su catalog with optional filters and sort (cache-first)",
             description =
-                    "Maps to POST /anime/{slug}/ on jut.su with the given filter slug. Filter"
-                        + " parameters accept either the URL slug (e.g. `action`, `before2000`,"
-                        + " `order-by-name`) or the SDK enum name (e.g. `ACTION`, `BEFORE_2000`,"
-                        + " `BY_NAME`). Both forms are equivalent — the response always echoes"
-                        + " slugs, so a value taken straight from the response can be sent back as"
-                        + " a query parameter without translation.")
+                    "Reads from the L1 cache (JutsuCatalogSyncService) by default; falls back to a"
+                        + " guarded live SDK call on cache-miss. Filter parameters accept either"
+                        + " the URL slug (e.g. `action`, `before2000`, `order-by-name`) or the SDK"
+                        + " enum name (e.g. `ACTION`, `BEFORE_2000`, `BY_NAME`). Both forms are"
+                        + " equivalent — the response always echoes slugs. The Cache-Status header"
+                        + " (RFC 9211) reports `hit` / `fwd=miss; fallback` so consumers can tell"
+                        + " where the payload came from.")
     public Mono<ResponseEntity<JutsuCatalogPageDto>> browseCatalog(
             @Parameter(description = "1-based page index", example = "1")
                     @RequestParam(defaultValue = "1")
@@ -124,23 +160,42 @@ public class JutsuApiController {
                     @Nullable
                     String sort) {
         JutsuCatalogFilter filter = buildFilter(genres, types, years, sort);
-        return jutsuClient
-                .browseCatalog(filter, page)
-                .map(JutsuCatalogPageDto::from)
-                .map(ResponseEntity::ok);
+        JutsuCatalogReadService.JutsuCatalogQuery query =
+                new JutsuCatalogReadService.JutsuCatalogQuery(
+                        page, filter.genres(), filter.types(), filter.years(), filter.sort());
+        // Repository call is synchronous JDBC — wrap in fromCallable + boundedElastic to keep the
+        // event loop free. The fallback path is already reactive (uses WebClient under the hood).
+        return Mono.fromCallable(() -> readService.findCatalogPage(query))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(
+                        cached -> {
+                            if (cached.isPresent()) {
+                                return Mono.just(ok(cached.get(), CACHE_HIT));
+                            }
+                            JutsuCatalogRequest request =
+                                    JutsuCatalogRequest.filtered(filter, page);
+                            return fallbackService
+                                    .liveBrowseCatalog(request)
+                                    .map(JutsuCatalogPageDto::from)
+                                    .map(dto -> ok(dto, CACHE_FALLBACK))
+                                    .onErrorResume(JutsuApiController::fallbackErrorTo503);
+                        });
     }
 
     // -------------------------------------------------------------------------
-    // Title search (composes with filters)
+    // Title search — bypasses cache by design
     // -------------------------------------------------------------------------
 
     @GetMapping("/search")
     @Operation(
-            summary = "Search the jut.su catalog by title (composes with filters)",
+            summary = "Search the jut.su catalog by title (live, NOT cached)",
             description =
                     "Sends the same POST as /catalog with the show_search form field populated."
-                            + " Filter parameters mean exactly what they mean for /catalog and"
-                            + " accept slug or enum-name input identically.")
+                        + " Filter parameters mean exactly what they mean for /catalog and accept"
+                        + " slug or enum-name input identically. Search is NOT served from the L1"
+                        + " cache — text queries would multiply cache keys without benefit; every"
+                        + " call hits jut.su via the live SDK. Response carries `Cache-Status:"
+                        + " orinuno; fwd=bypass`.")
     public Mono<ResponseEntity<JutsuCatalogPageDto>> searchCatalog(
             @Parameter(
                             description = "Title fragment (Russian or original)",
@@ -189,20 +244,21 @@ public class JutsuApiController {
                 filter.isEmpty()
                         ? jutsuClient.searchByTitle(query, page)
                         : jutsuClient.searchByTitle(filter, query, page);
-        return page$.map(JutsuCatalogPageDto::from).map(ResponseEntity::ok);
+        return page$.map(JutsuCatalogPageDto::from).map(dto -> ok(dto, CACHE_BYPASS));
     }
 
     // -------------------------------------------------------------------------
-    // Anime info page
+    // Anime info page — cache-first
     // -------------------------------------------------------------------------
 
     @GetMapping("/anime/{slug}")
     @Operation(
-            summary = "Fetch the anime info page (GET /{slug}/) into a typed payload",
+            summary = "Fetch the anime info page (cache-first)",
             description =
                     "Returns the full season/episode listing, plus chrome metadata (title,"
-                            + " synopsis, year, genres, types, thumbnail). The episode list is"
-                            + " grouped by season; single-season anime collapse into one block.")
+                        + " synopsis, year, genres, types, thumbnail). The episode list is grouped"
+                        + " by season; single-season anime collapse into one block. Cache-Status"
+                        + " header reports `hit` / `fwd=miss; fallback`.")
     public Mono<ResponseEntity<JutsuAnimeInfoDto>> getAnimeInfo(
             @Parameter(
                             description = "Anime slug (the path segment used by jut.su URLs)",
@@ -210,7 +266,19 @@ public class JutsuApiController {
                             required = true)
                     @PathVariable
                     String slug) {
-        return jutsuClient.getAnimeInfo(slug).map(JutsuAnimeInfoDto::from).map(ResponseEntity::ok);
+        return Mono.fromCallable(() -> readService.findAnimeInfo(slug))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(
+                        (Optional<JutsuAnimeInfoDto> cached) -> {
+                            if (cached.isPresent()) {
+                                return Mono.just(ok(cached.get(), CACHE_HIT));
+                            }
+                            return fallbackService
+                                    .liveAnimeInfo(slug)
+                                    .map(JutsuAnimeInfoDto::from)
+                                    .map(dto -> ok(dto, CACHE_FALLBACK))
+                                    .onErrorResume(JutsuApiController::fallbackErrorTo503);
+                        });
     }
 
     // -------------------------------------------------------------------------
@@ -305,6 +373,42 @@ public class JutsuApiController {
                             + " DEGRADED.")
     public ResponseEntity<JutsuDriftSnapshotDto> getDrift() {
         return ResponseEntity.ok(JutsuDriftSnapshotDto.from(jutsuClient.getDriftSnapshot()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /** Wrap a successful body in a 200 response with the given {@code Cache-Status} header. */
+    private static <T> ResponseEntity<T> ok(T body, String cacheStatus) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(CACHE_STATUS, cacheStatus);
+        return ResponseEntity.ok().headers(headers).body(body);
+    }
+
+    /**
+     * Map a fallback-path error to a 503 response with a diagnostic header explaining which guard
+     * fired (or whether the live call itself errored). Keeps the body shape consistent with success
+     * ({@code null} payload + {@code Cache-Status} header) so the demo UI can switch on status
+     * without parsing the body.
+     */
+    private static <T> Mono<ResponseEntity<T>> fallbackErrorTo503(Throwable err) {
+        String reason;
+        if (err instanceof JutsuLiveFallbackService.FallbackDisabledException) {
+            reason = "fallback-disabled";
+        } else if (err instanceof JutsuLiveFallbackService.BreakerOpenException) {
+            reason = "circuit-breaker-open";
+        } else if (err instanceof JutsuLiveFallbackService.NegativeCacheHitException) {
+            reason = "negative-cache-hit";
+        } else {
+            reason = "live-fetch-failed";
+            log.warn("jutsu-fallback: live fetch failed for cache-miss request", err);
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(CACHE_STATUS, "orinuno; fwd=miss; fallback-error");
+        headers.add(FALLBACK_REASON, reason);
+        return Mono.just(
+                ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).headers(headers).body(null));
     }
 
     // -------------------------------------------------------------------------
