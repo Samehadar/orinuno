@@ -36,6 +36,15 @@ public class JutsuTitle {
     private String typesCsv;
     private Integer catalogEpisodeCount;
     private Integer catalogMovieCount;
+
+    /**
+     * 1-based position in the last full catalog crawl ({@code (page - 1) * 30 + slot}). Drives the
+     * default "by rating" sort on the read side because jut.su returns its default ranking via the
+     * page order itself — page 1 = highest rated. {@code null} for rows that have only been seen by
+     * the notice walker (no full-crawl observation yet); the read service sorts those last.
+     */
+    private Integer catalogPosition;
+
     private Integer infoTotalSeasons;
     private Integer infoTotalEpisodes;
     private LocalDateTime infoFetchedAt;

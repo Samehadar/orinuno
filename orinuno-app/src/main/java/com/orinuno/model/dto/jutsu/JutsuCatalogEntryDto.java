@@ -1,8 +1,10 @@
 package com.orinuno.model.dto.jutsu;
 
 import com.orinuno.jutsu.catalog.JutsuCatalogEntry;
+import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -44,5 +46,30 @@ public record JutsuCatalogEntryDto(
                 e.types().stream().map(t -> t.slug()).toList(),
                 e.year().map(y -> y.slug()).orElse(null),
                 e.detailUrl());
+    }
+
+    /**
+     * Build a DTO from an L1 cache row. Genres / types are split from the COALESCE-protected CSVs
+     * the sync worker writes; the {@code detailUrl} is reconstructed from the slug to keep the
+     * shape identical to {@link #from(JutsuCatalogEntry)} (consumers can hit either endpoint and
+     * get the same fields).
+     */
+    public static JutsuCatalogEntryDto fromCache(JutsuTitle row) {
+        return new JutsuCatalogEntryDto(
+                row.getSlug(),
+                row.getTitle() == null ? row.getSlug() : row.getTitle(),
+                row.getOriginalTitle(),
+                row.getThumbnailUrl(),
+                row.getCatalogEpisodeCount(),
+                row.getCatalogMovieCount(),
+                splitCsv(row.getGenresCsv()),
+                splitCsv(row.getTypesCsv()),
+                row.getYearBucket(),
+                "https://jut.su/" + row.getSlug() + "/");
+    }
+
+    private static List<String> splitCsv(@Nullable String csv) {
+        if (csv == null || csv.isBlank()) return List.of();
+        return Arrays.stream(csv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 }

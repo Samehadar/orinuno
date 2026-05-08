@@ -37,3 +37,5 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260508010100_create_jutsu_episode.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260508010200_create_jutsu_sync_state.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260508020000_alter_jutsu_title_add_catalog_position.sql

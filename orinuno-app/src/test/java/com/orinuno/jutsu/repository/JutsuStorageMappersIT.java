@@ -100,6 +100,7 @@ class JutsuStorageMappersIT {
                         .typesCsv("shonen")
                         .catalogEpisodeCount(220)
                         .catalogMovieCount(0)
+                        .catalogPosition(7)
                         .catalogFetchedAt(t0)
                         .firstSeenAt(t0)
                         .lastSeenAt(t0)
@@ -109,6 +110,9 @@ class JutsuStorageMappersIT {
         Optional<JutsuTitle> afterWave1 = titleRepository.findBySlug("naruto-test");
         assertThat(afterWave1).isPresent();
         assertThat(afterWave1.get().getCatalogEpisodeCount()).isEqualTo(220);
+        assertThat(afterWave1.get().getCatalogPosition())
+                .as("catalog_position is round-tripped through the mapper")
+                .isEqualTo(7);
         assertThat(afterWave1.get().getInfoTotalEpisodes()).isNull();
         assertThat(afterWave1.get().getFirstSeenAt()).isEqualTo(t0);
 
@@ -131,6 +135,9 @@ class JutsuStorageMappersIT {
 
         JutsuTitle merged = titleRepository.findBySlug("naruto-test").orElseThrow();
         assertThat(merged.getCatalogEpisodeCount()).isEqualTo(220); // preserved from wave 1
+        assertThat(merged.getCatalogPosition())
+                .as("info-only wave must NOT blank catalog_position written by wave 1")
+                .isEqualTo(7);
         assertThat(merged.getInfoTotalSeasons()).isEqualTo(2); // added by wave 2
         assertThat(merged.getSynopsis()).isEqualTo("A long-running ninja saga");
         assertThat(merged.getFirstSeenAt()).isEqualTo(t0); // first_seen_at frozen
