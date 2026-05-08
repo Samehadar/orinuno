@@ -33,6 +33,7 @@ spring:
 mybatis:
   mapper-locations: classpath:com/orinuno/db/mapper/*.xml
   type-aliases-package: com.orinuno.model
+  type-handlers-package: com.orinuno.catalog.repository
   configuration:
     map-underscore-to-camel-case: true
 
