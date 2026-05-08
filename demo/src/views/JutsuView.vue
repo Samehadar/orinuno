@@ -219,6 +219,19 @@ function joinHumanRu(items: string[]): string {
   return items.slice(0, -1).join(', ') + ' и ' + items[items.length - 1]
 }
 
+// Russian pluralisation for the "N фильм/фильма/фильмов" suffix. The Slavic
+// rule splits on the last digit (or last two digits for the teens). This
+// mirrors what jut.su prints next to the films heading on its own UI.
+function filmsCountSuffix(n: number): string {
+  const abs = Math.abs(n)
+  const mod10 = abs % 10
+  const mod100 = abs % 100
+  if (mod100 >= 11 && mod100 <= 14) return 'фильмов'
+  if (mod10 === 1) return 'фильм'
+  if (mod10 >= 2 && mod10 <= 4) return 'фильма'
+  return 'фильмов'
+}
+
 const infoGenreLabels = computed<string[]>(
   () => infoResult.value?.genres.map(genreLabel) ?? [],
 )
@@ -839,6 +852,10 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
               <span>slug={{ infoResult.slug }}</span>
               <span>·</span>
               <span>{{ infoResult.totalEpisodeCount }} total episode anchors</span>
+              <template v-if="infoResult.totalFilmCount > 0">
+                <span>·</span>
+                <span>{{ infoResult.totalFilmCount }} {{ filmsCountSuffix(infoResult.totalFilmCount) }}</span>
+              </template>
               <span v-if="infoResult.genres.length || infoResult.types.length">·</span>
               <span
                 v-for="g in infoResult.genres"
@@ -876,6 +893,35 @@ function entriesGrid(p: JutsuCatalogPage | null): JutsuCatalogEntry[] {
             >
               <div class="font-mono">S{{ ep.season }}E{{ ep.episode }}</div>
               <div class="text-[10px] text-[var(--color-text-muted)] truncate">{{ ep.label }}</div>
+            </button>
+          </div>
+        </div>
+
+        <!--
+          Films block: rendered under the seasons grid when the API returns any. Mirrors jut.su's
+          own "Полнометражные фильмы" heading. Films share the episode-meta endpoint via
+          `jumpToEpisode(...)` because the per-film URL (`/{slug}/film-N.html`) is what the
+          backend resolves to a player chrome / decode session.
+        -->
+        <div
+          v-if="infoResult.films && infoResult.films.length > 0"
+          class="glass-card p-4 border-[var(--color-neon-purple)]/40"
+        >
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h3 class="font-semibold">Полнометражные фильмы</h3>
+            <span class="text-[10px] text-[var(--color-text-muted)] font-mono">
+              {{ infoResult.totalFilmCount }} {{ filmsCountSuffix(infoResult.totalFilmCount) }}
+            </span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+            <button
+              v-for="film in infoResult.films"
+              :key="`film-${film.index}`"
+              class="px-2 py-1.5 rounded text-xs bg-white/5 hover:bg-[var(--color-neon-purple)]/20 hover:text-[var(--color-neon-purple)] transition-colors text-left"
+              @click="jumpToEpisode(film.url)"
+            >
+              <div class="font-mono">F{{ film.index }}</div>
+              <div class="text-[10px] text-[var(--color-text-muted)] truncate">{{ film.label }}</div>
             </button>
           </div>
         </div>

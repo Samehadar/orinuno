@@ -3,11 +3,13 @@ package com.orinuno.model.dto.jutsu;
 import com.orinuno.jutsu.info.JutsuAgeRating;
 import com.orinuno.jutsu.info.JutsuAnimeInfo;
 import com.orinuno.jutsu.model.JutsuEpisode;
+import com.orinuno.jutsu.model.JutsuFilm;
 import com.orinuno.jutsu.model.JutsuTitle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 /** REST projection of {@link JutsuAnimeInfo}. */
@@ -108,54 +110,6 @@ public record JutsuAnimeInfoDto(
         List<JutsuFilmListingDto> out = new ArrayList<>(sorted.size());
         for (JutsuFilm f : sorted) out.add(JutsuFilmListingDto.fromCache(f));
         return List.copyOf(out);
-    }
-
-    private static List<String> splitCsv(@Nullable String csv) {
-        if (csv == null || csv.isBlank()) return List.of();
-        return Arrays.stream(csv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
-    }
-
-    /**
-     * Parse the comma-joined "{@code 2014,2020,2024}" form. Non-numeric tokens are dropped silently
-     * so a future widening of the column (e.g. ranges) doesn't break the read path.
-     */
-    private static List<Integer> splitYears(@Nullable String csv) {
-        if (csv == null || csv.isBlank()) return List.of();
-        List<Integer> out = new ArrayList<>();
-        for (String raw : csv.split(",")) {
-            String token = raw.trim();
-            if (token.isEmpty()) continue;
-            try {
-                out.add(Integer.parseInt(token));
-            } catch (NumberFormatException ignore) {
-                // Skip malformed token; cache write path keeps the column constrained.
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    /**
-     * Build a DTO from a cached title + its episode list. Episodes are grouped by season into
-     * {@link JutsuSeasonDto} blocks ordered by season ASC; within a season episodes order by
-     * episode number ASC. The shape matches {@link #from(JutsuAnimeInfo)} so consumers can switch
-     * between cache-hit and live-fetch responses transparently.
-     */
-    public static JutsuAnimeInfoDto fromCache(JutsuTitle row, List<JutsuEpisode> episodes) {
-        List<JutsuSeasonDto> seasons = JutsuSeasonDto.fromCache(row.getSlug(), episodes);
-        int total = seasons.stream().mapToInt(JutsuSeasonDto::episodeCount).sum();
-        return new JutsuAnimeInfoDto(
-                row.getSlug(),
-                row.getTitle() == null ? row.getSlug() : row.getTitle(),
-                row.getOriginalTitle(),
-                row.getSynopsis(),
-                row.getThumbnailUrl(),
-                row.getYearBucket(),
-                splitYears(row.getYearsCsv()),
-                row.getAgeRating(),
-                splitCsv(row.getGenresCsv()),
-                splitCsv(row.getTypesCsv()),
-                seasons,
-                total);
     }
 
     private static List<String> splitCsv(@Nullable String csv) {

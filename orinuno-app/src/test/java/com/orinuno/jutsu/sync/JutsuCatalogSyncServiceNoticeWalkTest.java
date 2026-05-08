@@ -22,6 +22,7 @@ import com.orinuno.jutsu.model.JutsuTitle;
 import com.orinuno.jutsu.notice.JutsuNoticeEntry;
 import com.orinuno.jutsu.notice.JutsuNoticeFeed;
 import com.orinuno.jutsu.repository.JutsuEpisodeRepository;
+import com.orinuno.jutsu.repository.JutsuFilmRepository;
 import com.orinuno.jutsu.repository.JutsuSyncStateRepository;
 import com.orinuno.jutsu.repository.JutsuTitleRepository;
 import java.time.LocalDateTime;
@@ -48,6 +49,7 @@ class JutsuCatalogSyncServiceNoticeWalkTest {
     @Mock private JutsuClient client;
     @Mock private JutsuTitleRepository titleRepository;
     @Mock private JutsuEpisodeRepository episodeRepository;
+    @Mock private JutsuFilmRepository filmRepository;
     @Mock private JutsuSyncStateRepository syncStateRepository;
     @Mock private JutsuCatalogIngestion catalogIngestion;
 
@@ -65,6 +67,7 @@ class JutsuCatalogSyncServiceNoticeWalkTest {
                         client,
                         titleRepository,
                         episodeRepository,
+                        filmRepository,
                         syncStateRepository,
                         properties,
                         catalogIngestion);
@@ -210,7 +213,8 @@ class JutsuCatalogSyncServiceNoticeWalkTest {
                                                                         1,
                                                                         2,
                                                                         "2 серия",
-                                                                        "/brand-new/episode-2.html")))))));
+                                                                        "/brand-new/episode-2.html")))),
+                                        List.of())));
 
         JutsuCatalogSyncService.NoticeWalkResult result = service.runNoticeWalkOnce(5, 5);
 
