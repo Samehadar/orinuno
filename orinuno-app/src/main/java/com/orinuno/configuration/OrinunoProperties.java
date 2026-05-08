@@ -159,6 +159,15 @@ public class OrinunoProperties {
          */
         private SyncProperties sync = new SyncProperties();
 
+        /**
+         * Live fallback guards (ARCH-0016 P1a Step 3.B). Controls the cache-miss path: a dedicated
+         * rate-limit bucket separate from the SDK's main bucket, a rolling-window circuit breaker
+         * that auto-trips after sustained failures, and a negative cache that short-circuits
+         * repeated lookups for slugs we just failed to resolve. When {@code enabled} is false, the
+         * cache-miss path returns 503 instead of touching jut.su.
+         */
+        private FallbackProperties fallback = new FallbackProperties();
+
         public boolean hasCredentials() {
             return username != null
                     && !username.isBlank()
@@ -262,6 +271,95 @@ public class OrinunoProperties {
                  * busy days.
                  */
                 private int maxInfoFetchesPerTick = 10;
+            }
+        }
+
+        /**
+         * Knobs for {@code JutsuLiveFallbackService} (ARCH-0016 P1a Step 3.B). The fallback layer
+         * sits between the L1 cache and the SDK on cache-miss; it exists to keep our service stable
+         * when jut.su is degraded.
+         *
+         * <p>Three independent guards stack on the cache-miss path:
+         *
+         * <ol>
+         *   <li>A dedicated rate-limit bucket (default 0.5 RPS) separate from the sync worker's
+         *       budget so a sudden flood of cache-misses can't starve the worker.
+         *   <li>A rolling-window circuit breaker: when the failure rate over the last {@code
+         *       window-size} fallback calls exceeds {@code failure-rate-threshold} the breaker
+         *       opens for {@code open-pause-seconds}, then transitions to half-open and lets
+         *       exactly one probe through.
+         *   <li>A negative cache: a slug / catalog query whose live fetch just failed gets
+         *       remembered for {@code negative-cache.ttl-seconds} so a thundering herd of retries
+         *       doesn't fire the same doomed request 100x in a row.
+         * </ol>
+         *
+         * <p>Manual override: setting {@code enabled=false} short-circuits the entire fallback path
+         * — REST endpoints return 503 Service Unavailable on cache-miss instead of trying to hit
+         * jut.su. Useful when jut.su is in known maintenance or we want to fail closed.
+         */
+        @Data
+        public static class FallbackProperties {
+
+            /** Master switch. {@code false} ⇒ all cache-miss requests return 503. */
+            private boolean enabled = true;
+
+            /**
+             * Outbound RPS for the cache-miss path. Distinct from {@code
+             * orinuno.providers.jutsu.rate-limit-rps} (which still applies to the sync worker's
+             * catalog / notice / info calls). Default 0.5 RPS = one fallback request every 2
+             * seconds.
+             */
+            private double rateLimitRps = 0.5;
+
+            private CircuitBreakerProperties circuitBreaker = new CircuitBreakerProperties();
+            private NegativeCacheProperties negativeCache = new NegativeCacheProperties();
+
+            /**
+             * Rolling-window circuit breaker tuning. The breaker observes only fallback outcomes —
+             * sync-worker failures don't trip it (they have their own retry / drift handling).
+             */
+            @Data
+            public static class CircuitBreakerProperties {
+                /**
+                 * Number of recent fallback outcomes considered when computing the failure rate.
+                 * Smaller windows trip faster on steady degradation; larger windows tolerate
+                 * spikes. Default 20.
+                 */
+                private int windowSize = 20;
+
+                /**
+                 * Failure rate (0.0 - 1.0) above which the breaker opens once the window is full.
+                 * Default 0.5 = open when half the recent calls failed.
+                 */
+                private double failureRateThreshold = 0.5;
+
+                /**
+                 * How long the breaker stays open before transitioning to half-open. During this
+                 * pause, all fallback requests short-circuit immediately. Default 60 seconds.
+                 */
+                private long openPauseSeconds = 60;
+            }
+
+            /**
+             * Negative-cache tuning. When a fallback live call fails, the failure is remembered for
+             * a short TTL so concurrent / repeat requests with the same key don't re-fire the same
+             * doomed call. Successful results are NOT cached here — they go to the L1 cache via the
+             * sync workers, on a much longer TTL.
+             */
+            @Data
+            public static class NegativeCacheProperties {
+                /**
+                 * How long a failed-fallback marker lives before the next request is allowed
+                 * through. Should be small (default 30s) — too long and a transient blip extends
+                 * into a perceived outage; too short and we don't deduplicate fast enough.
+                 */
+                private long ttlSeconds = 30;
+
+                /**
+                 * Max number of distinct keys cached. Caffeine evicts least-recently-accessed once
+                 * full. Default 10000 covers the entire jut.su catalog with headroom.
+                 */
+                private long maxSize = 10_000;
             }
         }
     }
