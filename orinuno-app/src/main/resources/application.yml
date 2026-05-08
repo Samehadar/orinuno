@@ -139,6 +139,8 @@ orinuno:
           max-feeds-per-tick: ${JUTSU_SYNC_NOTICE_WALK_MAX_FEEDS_PER_TICK:5}
           fetch-info-on-discovery: ${JUTSU_SYNC_NOTICE_WALK_FETCH_INFO_ON_DISCOVERY:false}
           max-info-fetches-per-tick: ${JUTSU_SYNC_NOTICE_WALK_MAX_INFO_FETCHES_PER_TICK:10}
+        catalog-ingestion:
+          enabled: ${JUTSU_SYNC_CATALOG_INGESTION_ENABLED:false}
       fallback:
         enabled: ${JUTSU_FALLBACK_ENABLED:true}
         rate-limit-rps: ${JUTSU_FALLBACK_RATE_LIMIT_RPS:0.5}

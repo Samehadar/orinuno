@@ -49,6 +49,7 @@ class JutsuCatalogSyncServiceNoticeWalkTest {
     @Mock private JutsuTitleRepository titleRepository;
     @Mock private JutsuEpisodeRepository episodeRepository;
     @Mock private JutsuSyncStateRepository syncStateRepository;
+    @Mock private JutsuCatalogIngestion catalogIngestion;
 
     private OrinunoProperties properties;
     private JutsuCatalogSyncService service;
@@ -65,7 +66,8 @@ class JutsuCatalogSyncServiceNoticeWalkTest {
                         titleRepository,
                         episodeRepository,
                         syncStateRepository,
-                        properties);
+                        properties,
+                        catalogIngestion);
     }
 
     @Test

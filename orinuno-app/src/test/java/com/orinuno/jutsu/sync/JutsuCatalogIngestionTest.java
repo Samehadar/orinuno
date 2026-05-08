@@ -4,11 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import com.orinuno.catalog.api.CatalogIdentityRequest;
+import com.orinuno.catalog.api.CatalogPublicApi;
+import com.orinuno.catalog.model.CatalogContent;
+import com.orinuno.catalog.model.CatalogContentKind;
+import com.orinuno.catalog.model.CatalogSourceType;
 import com.orinuno.configuration.OrinunoProperties;
-import com.orinuno.contract.source.ContentKindHint;
-import com.orinuno.contract.source.SourceCatalogEvent;
-import com.orinuno.contract.source.SourceEventEmitter;
 import com.orinuno.jutsu.model.JutsuTitle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,15 +22,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Unit-level coverage for the jut.su L1 → producer-side event bridge (ADR 0017). Verifies the
- * mapping from {@link JutsuTitle} into {@link SourceCatalogEvent.TitleObserved}, the year-parsing
- * fallback, and the kill-switch property semantics. Resolver-failure-isolation is covered by {@code
- * CatalogSinkEventEmitterTest} and the e2e {@code CatalogIngestionIT}.
+ * Unit-level coverage for the jut.su L1 → L3 bridge (ARCH-0016 P1b Step 1.C). Verifies the {@code
+ * JutsuTitle → CatalogIdentityRequest} mapping, the kill-switch property semantics, and the
+ * failure-isolation contract (resolver exceptions never propagate to the sync worker).
  */
 @ExtendWith(MockitoExtension.class)
 class JutsuCatalogIngestionTest {
 
-    @Mock private SourceEventEmitter emitter;
+    @Mock private CatalogPublicApi catalog;
 
     private OrinunoProperties properties;
     private JutsuCatalogIngestion ingestion;
@@ -35,18 +37,20 @@ class JutsuCatalogIngestionTest {
     @BeforeEach
     void setUp() {
         properties = new OrinunoProperties();
+        // Default: catalog ingestion enabled to exercise the happy paths; individual tests
+        // toggle the flag back off when needed.
         properties.getProviders().getJutsu().getSync().getCatalogIngestion().setEnabled(true);
-        ingestion = new JutsuCatalogIngestion(emitter, properties);
+        ingestion = new JutsuCatalogIngestion(catalog, properties);
     }
 
     @Test
-    @DisplayName("catalog ingestion disabled by property → no emit regardless of input")
-    void disabledKillSwitchSkipsEmitter() {
+    @DisplayName("catalog ingestion disabled by property → no resolver call regardless of input")
+    void disabledKillSwitchSkipsResolver() {
         properties.getProviders().getJutsu().getSync().getCatalogIngestion().setEnabled(false);
 
         ingestion.ingest(JutsuTitle.builder().slug("naruto").title("Наруто").build());
 
-        verify(emitter, never()).emit(any());
+        verify(catalog, never()).findOrCreateContent(any());
     }
 
     @Test
@@ -56,14 +60,17 @@ class JutsuCatalogIngestionTest {
         ingestion.ingest(JutsuTitle.builder().slug("").title("X").build());
         ingestion.ingest(JutsuTitle.builder().slug("  ").title("X").build());
 
-        verify(emitter, never()).emit(any());
+        verify(catalog, never()).findOrCreateContent(any());
     }
 
     @Test
     @DisplayName(
-            "happy path: enabled + valid title → emitter receives TitleObserved with"
-                    + " sourceType=jutsu, kindHint=ANIME, parsed year, ExternalIds.empty")
+            "happy path: enabled + valid title → resolver called with (JUTSU, slug) +"
+                    + " titleRu/titleEn/kind=ANIME/parsed year")
     void happyPathMapsAllFields() {
+        when(catalog.findOrCreateContent(any()))
+                .thenReturn(CatalogContent.builder().id(7L).build());
+
         JutsuTitle title =
                 JutsuTitle.builder()
                         .slug("naruto")
@@ -73,19 +80,21 @@ class JutsuCatalogIngestionTest {
                         .build();
         ingestion.ingest(title);
 
-        SourceCatalogEvent.TitleObserved event = captureTitleObserved();
-        assertThat(event.identifier().sourceType()).isEqualTo("jutsu");
-        assertThat(event.identifier().sourceId()).isEqualTo("naruto");
-        assertThat(event.info().titleRu()).isEqualTo("Наруто");
-        assertThat(event.info().titleEn()).isEqualTo("Naruto");
-        assertThat(event.info().kindHint()).isEqualTo(ContentKindHint.ANIME);
-        assertThat(event.info().year()).isEqualTo(2002);
-        assertThat(event.info().externalIds().isEmpty())
+        ArgumentCaptor<CatalogIdentityRequest> req =
+                ArgumentCaptor.forClass(CatalogIdentityRequest.class);
+        verify(catalog).findOrCreateContent(req.capture());
+
+        assertThat(req.getValue().sourceType()).isEqualTo(CatalogSourceType.JUTSU);
+        assertThat(req.getValue().sourceId()).isEqualTo("naruto");
+        assertThat(req.getValue().titleRu()).isEqualTo("Наруто");
+        assertThat(req.getValue().titleEn()).isEqualTo("Naruto");
+        assertThat(req.getValue().kind()).isEqualTo(CatalogContentKind.ANIME);
+        assertThat(req.getValue().year()).isEqualTo(2002);
+        assertThat(req.getValue().externalIds())
                 .as(
                         "jut.su's L1 row carries no Shikimori/MAL/IMDB ids today, so the merge"
-                                + " contribution stays empty until Kodik or another source"
-                                + " provides them")
-                .isTrue();
+                                + " map stays empty until Kodik or another source provides them")
+                .isEmpty();
     }
 
     @Test
@@ -99,29 +108,24 @@ class JutsuCatalogIngestionTest {
         assertThat(JutsuCatalogIngestion.parseYear("ongoing")).isNull();
         assertThat(JutsuCatalogIngestion.parseYear("")).isNull();
         assertThat(JutsuCatalogIngestion.parseYear(null)).isNull();
-        assertThat(JutsuCatalogIngestion.parseYear("1700")).isNull();
-        assertThat(JutsuCatalogIngestion.parseYear("3000")).isNull();
-        assertThat(JutsuCatalogIngestion.parseYear("12345")).isNull();
+        assertThat(JutsuCatalogIngestion.parseYear("1700")).isNull(); // out of bounds
+        assertThat(JutsuCatalogIngestion.parseYear("3000")).isNull(); // out of bounds
+        assertThat(JutsuCatalogIngestion.parseYear("12345")).isNull(); // wrong length
     }
 
     @Test
     @DisplayName(
-            "every emit carries a Provenance pointing at the title's anime-info URL + a"
-                    + " non-null fetchedAt (sourced from JutsuTitle.lastSeenAt when present)")
-    void provenanceIsAlwaysAttached() {
-        ingestion.ingest(JutsuTitle.builder().slug("naruto").title("X").yearBucket("2020").build());
+            "resolver exception is caught and logged at WARN — sync worker MUST keep walking;"
+                    + " ingest() returns normally after the swallow")
+    void resolverExceptionIsSwallowed() {
+        when(catalog.findOrCreateContent(any()))
+                .thenThrow(new RuntimeException("boom from resolver"));
 
-        SourceCatalogEvent.TitleObserved event = captureTitleObserved();
-        assertThat(event.provenance().sourceUrl()).contains("jut.su/naruto/");
-        assertThat(event.provenance().fetchedAt()).isNotNull();
-    }
+        // Must not throw — sync workers rely on this contract to keep the L1 cache writes
+        // independent from L3 hiccups.
+        ingestion.ingest(
+                JutsuTitle.builder().slug("ok-slug").title("ok").yearBucket("2020").build());
 
-    private SourceCatalogEvent.TitleObserved captureTitleObserved() {
-        ArgumentCaptor<SourceCatalogEvent> captor =
-                ArgumentCaptor.forClass(SourceCatalogEvent.class);
-        verify(emitter).emit(captor.capture());
-        SourceCatalogEvent value = captor.getValue();
-        assertThat(value).isInstanceOf(SourceCatalogEvent.TitleObserved.class);
-        return (SourceCatalogEvent.TitleObserved) value;
+        verify(catalog).findOrCreateContent(any());
     }
 }

@@ -229,6 +229,24 @@ public class OrinunoProperties {
             private boolean enabled = false;
             private FullCrawlProperties fullCrawl = new FullCrawlProperties();
             private NoticeWalkProperties noticeWalk = new NoticeWalkProperties();
+            private CatalogIngestionProperties catalogIngestion = new CatalogIngestionProperties();
+
+            /**
+             * Bridge between the jut.su L1 cache and the L3 universal canonical catalog (ARCH-0016
+             * P1b Step 1.C). When enabled, every {@code jutsu_title} upsert in the sync worker
+             * triggers a synchronous call to {@code CatalogPublicApi.findOrCreateContent} which
+             * materialises (or updates) the canonical row and binds the {@code (JUTSU, slug)} pair
+             * via {@code catalog_content_external_id}.
+             *
+             * <p>Disabled by default while the L3 surface is still under construction — enable once
+             * a full-crawl tick is known to be safe end-to-end on the target deployment. Failures
+             * inside the resolver are caught and logged WARN; sync never aborts because of an L3
+             * hiccup.
+             */
+            @Data
+            public static class CatalogIngestionProperties {
+                private boolean enabled = false;
+            }
 
             @Data
             public static class FullCrawlProperties {

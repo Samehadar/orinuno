@@ -43,14 +43,9 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 | Kodik API client | `orinuno-app/src/main/java/com/orinuno/client/` |
 | Kodik token registry | `orinuno-app/src/main/java/com/orinuno/token/` |
 | Mappers (entity↔dto) | `orinuno-app/src/main/java/com/orinuno/mapper/` |
-| L1 → SourceCatalogEvent renderer | `orinuno-app/src/main/java/com/orinuno/mapper/SourceEventMapper.java` (ADR 0017 Stage B) |
-| Source events controller | `orinuno-app/src/main/java/com/orinuno/controller/SourceEventController.java` (ADR 0017 Stage B) |
 | Catalog L3 public API | `orinuno-app/src/main/java/com/orinuno/catalog/api/` (P1b) |
 | Catalog L3 resolver | `orinuno-app/src/main/java/com/orinuno/catalog/internal/CatalogIdentityResolver.java` (P1b) |
-| jut.su → event bridge | `orinuno-app/src/main/java/com/orinuno/jutsu/sync/JutsuCatalogIngestion.java` (P1b, refactored ADR 0017) |
-| Kodik → event bridge | `orinuno-app/src/main/java/com/orinuno/service/KodikCatalogIngestion.java` (P1b, refactored ADR 0017) |
-| Default in-process event sink | `orinuno-app/src/main/java/com/orinuno/catalog/ingestion/CatalogSinkEventEmitter.java` (ADR 0017) |
-| Producer-side event contract | `orinuno-source-contract/src/main/java/com/orinuno/contract/source/` (ADR 0017) |
+| jut.su → L3 bridge | `orinuno-app/src/main/java/com/orinuno/jutsu/sync/JutsuCatalogIngestion.java` (P1b) |
 | Schema-drift SDK (extracted) | `kodik-sdk-drift/src/main/java/com/kodik/sdk/drift/` |
 | JutSu SDK (extracted, Step 2) | `jutsu-sdk/src/main/java/com/orinuno/jutsu/` |
 | Sibnet SDK (extracted, Step 3) | `sibnet-sdk/src/main/java/com/orinuno/sibnet/` |
@@ -100,6 +95,7 @@ Controller → Service → Repository (MyBatis XML) → MySQL
 8. **Retry Failed**: `@Scheduled ParserService.retryFailedDecodes()` → retries previously failed decodes
 9. **jut.su browser parity (ADR 0015)**: `JutsuApiController` under `/api/v1/sources/jutsu/` exposes `/catalog`, `/search`, `/anime/{slug}`, `/episode`, `/notice`, `/notice/stream` (NDJSON), `/drift`. `JutsuDriftScheduledProbe` (`@Scheduled`, `@ConditionalOnProperty`) hits a canary set in lenient mode; `MultiSourceController` reads `JutsuClient.getDriftSnapshot().health()` and adds jut.su to `RankingPreferences.demotedProviders` whenever health ≠ HEALTHY (it still appears in results, but lands at the bottom).
 10. **jut.su cache-first reads (ARCH-0016 P1a)**: `/catalog` and `/anime/{slug}` are served from the L1 cache (`jutsu_title` + `jutsu_episode` populated by `JutsuCatalogSyncService` full-crawl + notice-walk workers) by default. On cache-miss the request is routed through `JutsuLiveFallbackService`, guarded by three independent layers: a manual `enabled` switch (`orinuno.providers.jutsu.fallback.enabled`), a self-written rolling-window circuit breaker (`JutsuFallbackCircuitBreaker`, default 50% failure rate over 20 calls → 60s OPEN → HALF_OPEN single-probe recovery), and a Caffeine-backed negative cache (`JutsuFallbackNegativeCache`, default 30s TTL). A dedicated rate-limit bucket (`@Qualifier("jutsuFallbackRateLimiter")`, default 0.5 RPS) sits AFTER the guards so cache-miss floods can't starve the sync workers. `/search` is intentionally NOT cached (text queries multiply keys without benefit) and goes straight to `JutsuClient`. Every response carries an RFC 9211 `Cache-Status` header (`hit` / `fwd=miss; fallback` / `fwd=bypass`); 503 responses include `X-Orinuno-Fallback-Reason` (`fallback-disabled` / `circuit-breaker-open` / `negative-cache-hit` / `live-fetch-failed`).
+11. **Catalog L3 ingestion (ARCH-0016 P1b)**: every `JutsuCatalogSyncService` upsert (full-crawl page, notice-walk info-fetch, notice-walk placeholder) calls `JutsuCatalogIngestion.ingest(JutsuTitle)` synchronously after the L1 row is persisted. The adapter maps the L1 row into a `CatalogIdentityRequest` (`sourceType=JUTSU`, `kind=ANIME`, parsed numeric year) and hands it to the only public catalog surface, `CatalogPublicApi.findOrCreateContent(...)`. The resolver (`CatalogIdentityResolver`, `@Transactional`) walks the priority order shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId) over `catalog_content` identity columns; first match wins, no auto-merge of two canonical rows (deferred to a later phase, see TECH_DEBT). Resolver exceptions are caught and logged WARN inside the adapter — a transient L3 hiccup never aborts the L1 sync. Off by default (`orinuno.providers.jutsu.sync.catalog-ingestion.enabled=false`); enable per deployment after verifying a full-crawl tick runs cleanly end-to-end.
 
 ### Database Tables
 
