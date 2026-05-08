@@ -537,7 +537,7 @@ Sibnet — крупнейший сибирский видеохостинг с *
 **Сложность:** Средняя
 **Зависимости:** Liquibase (уже есть). **Не зависит от P1a** — можно делать параллельно.
 
-**Что сделано (P1b Step 1.A / 1.B / 1.C.A):**
+**Что сделано (P1b Step 1.A / 1.B / 1.C.A / 1.C.B + IT):** — **DONE**
 
 1. **Liquibase changeset** ✅ DONE — 4 миграции в `com/orinuno/db/changelog/scripts/20260508030*.sql`: `catalog_content` + `catalog_content_external_id` + `catalog_episode` + `catalog_episode_source_link`. Identity columns на `catalog_content` (sparse indexes), UNIQUE на `(source_type, external_id)`, M:N link к `episode_source` без FK (ADR 0016 zoning rules).
 
@@ -547,11 +547,9 @@ Sibnet — крупнейший сибирский видеохостинг с *
 
 4. **Hook из `jutsu` контекста (Step 1.C.A)** ✅ DONE — `JutsuCatalogIngestion` adapter в `com.orinuno.jutsu.sync`. Wired в `JutsuCatalogSyncService` для full-crawl + notice-walk info-fetch + notice-walk placeholder paths. Resolver exceptions ловятся → лог WARN, sync продолжается. Kill-switch: `orinuno.providers.jutsu.sync.catalog-ingestion.enabled` (default `false`).
 
-**Что осталось (P1b Step 1.C.B + tests):**
+5. **Hook из `kodik` контекста (Step 1.C.B)** ✅ DONE — `KodikCatalogIngestion` adapter в `com.orinuno.service`. Wired в `ContentService.findOrCreateContent(KodikContent)` после insert/update; пропускает kodikId (или `kp:<kinopoiskId>` fallback) и external-DB ids (shikimori/imdb/kinopoisk). `mapKind(...)` транслирует свободные строки Kodik в `CatalogContentKind` (anime → ANIME, *-serial → SERIES, *-movie/film → MOVIE, иначе UNKNOWN). Resolver exceptions ловятся → лог WARN, kodik upsert не аффектится. Kill-switch: `orinuno.kodik.catalog-ingestion.enabled` (default `false`). 12 unit-тестов в `KodikCatalogIngestionTest`.
 
-5. **Hook из `kodik` контекста (Step 1.C.B)** ⏳ TODO — в `ParserService.searchInternal(...)` (или эквивалентном write path для `kodik_content`) после успешного upsert — синхронный вызов `CatalogPublicApi.findOrCreateContent(KODIK, kodikId, shikimoriId?, kinopoiskId?, imdbId?, ...)`. Это даст реальный cross-source merge: jut.su slug `naruto-test` и Kodik content `naruto-id` сольются в одну canonical row, как только Kodik принесёт `shikimori_id`. Защита идентичная jut.su адаптеру — try/catch вокруг ingest, log WARN на падении.
-
-6. **Полный Integration `CatalogIngestionIT`** ⏳ TODO — Testcontainers + полный цикл (jut.su sync → resolver → catalog row → второй sync с overlap external id → один canonical row).
+6. **Полный Integration `CatalogIngestionIT`** ✅ DONE — Testcontainers MySQL + Liquibase + 4 e2e-теста: jut.su idempotent re-ingest (одна canonical-строка на N upsert'ов), Kodik cross-source merge через `shikimori_id` (две строки `kodik_content` с одинаковым shikimori_id → ОДНА canonical-строка + 4 binding'а), Kodik partial-refresh chrome protection (UNKNOWN не оверрайдит ANIME, COALESCE не блeнчит titleRu), jut.su+Kodik без overlap → две независимые canonical-строки. Запускается `mvn -pl orinuno-app -Pe2e test -Dtest=CatalogIngestionIT`.
 
 #### P2: Canonical REST API + unified per-source content lookup
 
