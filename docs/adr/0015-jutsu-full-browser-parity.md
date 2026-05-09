@@ -43,7 +43,9 @@ jutsu-sdk/src/main/java/com/orinuno/jutsu/
 ├─ episode/
 │   ├─ JutsuEpisodeMeta.java
 │   ├─ JutsuEpisodeMetaClient.java
-│   └─ JutsuEpisodePageParser.java
+│   ├─ JutsuEpisodePageParser.java
+│   ├─ JutsuFilmMeta.java                ← 2026-05-08 follow-up
+│   └─ JutsuPageMeta.java                ← 2026-05-08 follow-up (sealed)
 ├─ filter/
 │   ├─ JutsuFilterFormParser.java
 │   ├─ JutsuFilterSlugger.java
@@ -72,7 +74,7 @@ jutsu-sdk/src/main/java/com/orinuno/jutsu/
 | `browseCatalog(request)` | `catalog/` | `POST /anime/` paginated catalog (with `start_from_page=N` AJAX shape). Filter is composed deterministically as a URL slug. |
 | `searchByTitle(title, page)` | `catalog/` | Title search via `show_search` form field, orthogonal to filters. |
 | `getAnimeInfo(slug)` | `info/` | `GET /{slug}/` — full anime info, including all seasons + all episodes (green = available, black = premium-gated). |
-| `getEpisodeMeta(url)` | `episode/` | `GET …/episode-N.html` — lightweight metadata (slug, season, episode, titles, thumbnail, premium flag) without actually decoding the player. |
+| `getEpisodeMeta(url)` | `episode/` | `GET …/episode-N.html` **or** `GET …/film-N.html` — lightweight metadata without actually decoding the player. Returns a sealed `JutsuPageMeta` (`JutsuEpisodeMeta` for episode shapes, `JutsuFilmMeta` for full-length-film shapes). See the *2026-05-08 follow-up* below. |
 | `getNoticeFeed(noticeId)` | `notice/` | `POST /engine/ajax/site_notice.php` — one page of upcoming-releases feed. |
 | `getLatestNoticeFeed()` | `notice/` | Scrapes the homepage to discover the latest cursor, then calls `getNoticeFeed`. |
 | `walkNoticeFeedsBackwards(start)` | `notice/` | Pagination as a `Flux<JutsuNoticeFeed>`. |
@@ -160,3 +162,19 @@ Nothing — Step 17 ships alongside the surrounding orchestration (this PR cycle
 | `SourcesController.capabilities()` advertises six new ops + driftHealth + driftLifetimeEvents | ✅ done |
 | Reactor regression: `mvn -pl orinuno-app -am test` | ✅ 611 passed, 68 skipped, 0 failed |
 | ADR 0015 + cross-links in jutsu-sdk/README, AGENTS.md, BACKLOG.md | ✅ done |
+
+## Follow-up (2026-05-08): full-length films
+
+`life-no-game/film-1.html` (and any other entry where jut.su attaches a movie to a series) exposed two gaps in the original ADR:
+
+1. **`info/JutsuAnimeInfoParser`** dropped film anchors because the URL pattern matched only `/{slug}/(season-N/)?episode-M.html`. Result: `JutsuAnimeInfo` returned `totalEpisodeCount=12`, films absent — both from `/api/v1/sources/jutsu/anime/{slug}` and the demo.
+2. **`episode/JutsuEpisodePageParser`** crashed `/api/v1/sources/jutsu/episode?url=…/film-N.html` with a 500: the canonical didn't match `episode-N.html`, parser returned `null`, client threw `IllegalStateException`.
+
+We did **not** overload `season=0` as a film sentinel; instead films became a sibling of episodes:
+
+- New record `info/JutsuFilmListing(slug, index, label, url)` and `JutsuAnimeInfo.films()` / `totalFilmCount()`. The parser now performs a single anchor walk and classifies each anchor by URL pattern (episode vs film); cross-promo film links to other anime stay out of the current entry's list.
+- New L1 table `jutsu_film` (`slug`, `film_index`, `label`, `relative_url`, `paywalled`, `discovered_at`, `last_seen_at`) with FK to `jutsu_title`. `JutsuCatalogSyncService.runNoticeWalkOnce` upserts films via `infoToFilms` alongside `infoToEpisodes`; `JutsuCatalogReadService.findAnimeInfo` reads them via `JutsuFilmRepository`.
+- New sealed `episode/JutsuPageMeta permits JutsuEpisodeMeta, JutsuFilmMeta`. `JutsuClient.getEpisodeMeta(url)` is now `Mono<JutsuPageMeta>`; the parser dispatches on the canonical regex (`episode-N.html` vs `film-N.html`) and now also raises `SCHEMA_VIOLATION` on a silent kind-flip between the requested and canonical URL.
+- REST: `/api/v1/sources/jutsu/episode` returns a discriminated `JutsuPageMetaDto` (`oneOf JutsuEpisodeMetaDto | JutsuFilmMetaDto`, Jackson `@JsonTypeInfo(property = "kind")`); consumers switch on `kind: "episode" | "film"` before pattern-matching the payload. OpenAPI snapshot regenerated.
+
+Verified end-to-end against `life-no-game` (1 film) and `onepuunchman` (0 films, no regression). Commits: `3294d3a` (anime info + films table), `67a73e7` (page-meta sealed dto + 500 fix).
