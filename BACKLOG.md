@@ -599,6 +599,30 @@ P4 — жить в monolith, пока не сработает один из тр
 
 ---
 
+### ARCH-0017: `orinuno-source-contract` — producer-side event contract как отдельный артефакт — **DONE** (2026-05-10)
+
+**Статус:** Реализовано в этом PR.
+**ADR:** [`docs/adr/0017-source-event-contract.md`](docs/adr/0017-source-event-contract.md)
+
+**Контекст:** ADR 0016 закрепил modular monolith как трajectory; ADR 0017 закрывает оставшийся пробел в boundary-discipline — producer-side wire format между source bounded context и любым consumer'ом (in-process L3 sink, the external meter через будущий `external bridge`, OSS aggregator). До этого PR контракт был типизирован catalog-internal записями (`CatalogIdentityRequest`), что блокировало Maven Central публикацию и делало любую внешнюю интеграцию (downstream consumer shrinking, OSS подписчики) обходом catalog'а напрямую.
+
+**Что сделано:**
+- Новый Maven-модуль `orinuno-source-contract` (sibling рядом с SDK-модулями): pure DTOs (`SourceIdentifier`, `ExternalIds`, `Provenance`, `ContentKindHint`, `SourceContentInfo`, `SourceSeason`, `SourceEpisode`, `SourceEpisodeVariant`), sealed `SourceCatalogEvent` с пятью вариантами (`TitleObserved` / `MovieDiscovered` / `SeriesDiscovered` / `EpisodesUpdated` / `SourceRemoved`), функциональный интерфейс `SourceEventEmitter`. Зависимости: `jackson-annotations`, `jakarta.annotation-api`, `lombok` (provided). **Без Spring, без jsoup, без slf4j, без Kin-типов.** Готов к публикации на Maven Central через тот же pipeline, что планируется для SDK-модулей (см. `IDEA-SDK-4`).
+- Golden-file JSON shape stability test (`JsonShapeStabilityTest` + 5 fixture-файлов в `src/test/resources/com/orinuno/contract/source/golden/`) — фиксирует wire format. Любая случайная переиначка контракта (rename, reorder, type change) ломает тест до merge. Discriminator: `@JsonTypeInfo(NAME)` с `kind` property (kebab-case значения `title-observed` / `movie-discovered` / …).
+- В `orinuno-app`: новый `CatalogSinkEventEmitter` (`com.orinuno.catalog.ingestion`) — default in-process `@Component`, реализующий `SourceEventEmitter`. Переводит `SourceCatalogEvent` обратно в `CatalogIdentityRequest` и зовёт `CatalogPublicApi.findOrCreateContent(...)`. Failure isolation сместилась с per-bridge try/catch на one-shot inside emitter.
+- Рефакторинг `KodikCatalogIngestion` (`com.orinuno.service`) и `JutsuCatalogIngestion` (`com.orinuno.jutsu.sync`): теперь зависят от `SourceEventEmitter` (а не от `CatalogPublicApi`); строят `SourceCatalogEvent.TitleObserved` (с `Provenance`, открыто-string `sourceType`, `ExternalIds` builder) и эмитят. Helper-методы `mapKind(...)`, `parseYear(...)`, `resolveSourceId(...)` остались статическими и продолжают тестироваться unit-тестами.
+- Адаптация unit-тестов: `KodikCatalogIngestionTest` и `JutsuCatalogIngestionTest` теперь мокают `SourceEventEmitter` и проверяют форму эмитированного события. Добавлен `CatalogSinkEventEmitterTest` (10 кейсов: kodik / jutsu happy paths, all 5 variants handling, unknown sourceType drop, resolver-exception swallow, null event, kindHint mapping).
+- `CatalogIngestionIT` (e2e Testcontainers MySQL) **остаётся зелёным без правок** — Spring подтягивает default emitter автоматически, поведение byte-identical.
+- ADR 0017 описал audit table meter `ContentExportRequest` → `SourceCatalogEvent` (consumer-coupled hot spots: closed `SourceType` enum → open-string, value-object id wrappers → plain `@Nullable String`, `filepath` → `mediaUrl`, consumer-coupled enums → open strings); добавлено правило #7 в boundary discipline ADR 0016.
+
+**Что осталось (out of scope этого PR):**
+- **Maven Central publish** — переиспользует pipeline от `IDEA-SDK-4` (всё ещё PENDING на нашей стороне). Когда первый OSS consumer материализуется — публикуем артефакт.
+- **`OutboxEventEmitter` + `<context>_event_outbox` таблица** — deferred. Пишем outbox-implementation только когда появится второй consumer (the external aggregator's`external bridge` или remote OSS aggregator). До тех пор default in-process emitter — единственный.
+- **`external bridge` в `external aggregator`** — consumer-side adapter, переводящий `SourceCatalogEvent` в `meterapi.dto.ContentExportRequest`. Out-of-tree: лежит в `external aggregator`, а не здесь. Когда появится — `downstream consumer` сжимается до thin shim или удаляется.
+- **Episode-level emit** (`MovieDiscovered`, `SeriesDiscovered`, `EpisodesUpdated` с реальными вариантами) — пока default emitter форвардит только chrome через `findOrCreateContent`, эпизоды игнорируются. Реализуется когда P2 (canonical REST API) расширит resolver на canonical episodes.
+
+---
+
 ### PHASE-2: Async parse-requests + Kodik /list proxy + ContentExportDto v2 — **DONE** (2026-04-26)
 
 **Статус:** Реализовано полным ходом, см. TD-1 выше и `ARCHITECTURE.md` §7.

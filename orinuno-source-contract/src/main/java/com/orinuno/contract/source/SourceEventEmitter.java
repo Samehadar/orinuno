@@ -4,8 +4,8 @@ package com.orinuno.contract.source;
  * Single-method sink that source bounded contexts call after each L1 upsert. Implementations decide
  * whether to deliver synchronously into an in-process catalog (the default {@code
  * CatalogSinkEventEmitter} inside {@code orinuno-app}), enqueue into an outbox for later remote
- * delivery, or post directly to a remote consumer (the external aggregator's {@code external
- * bridge}, future OSS aggregator).
+ * delivery, or post directly to a remote consumer (the external aggregator's{@code external bridge}, future OSS
+ * aggregator).
  *
  * <p>The contract is deliberately thin and synchronous: emitting is always called inside the same
  * transaction that performed the L1 upsert, so failures must propagate as exceptions if the
