@@ -8,8 +8,8 @@ This module is the **second per-source SDK** extracted out of the [orinuno](../R
 - **1 RPS hard cap** outbound to `jut.su` (`JutsuRateLimiter`) — single Bucket4j bucket, hot-swappable RPS via a `DoubleSupplier`, reactive `Mono.delay`-based suspension (no thread blocking). Shared across every subpackage so adding clients does not multiply outbound traffic.
 - **Episode-page decoder** (`decoder/JutsuDecoder`) — fetches the episode page with the cached cookies, recognises the `tab_need_plus` overlay + `pixel.png` placeholder URLs (premium gate), classifies Cloudflare challenges and bot-detection responses with their own error codes, and returns one mp4 URL per quality bucket.
 - **Catalog browser** (`catalog/JutsuCatalogClient` + `filter/JutsuFilterSlugger`) — paginated `POST /anime/` with composable filters (genre, type, year, sort) and orthogonal title search via `show_search`. Filter slug round-trips through `parse → toString → parse` (~1000-case property test).
-- **Anime info** (`info/JutsuAnimeInfoClient`) — `GET /{slug}/` returns the full season list + every episode (green-coloured = available, black-coloured = premium-gated).
-- **Episode metadata** (`episode/JutsuEpisodeMetaClient`) — `GET …/episode-N.html` returns slug / season / episode / titles / thumbnail / `premiumGated` without actually decoding the player.
+- **Anime info** (`info/JutsuAnimeInfoClient`) — `GET /{slug}/` returns the full season list + every episode (green-coloured = available, black-coloured = premium-gated), plus the `films` list (full-length movies attached to the entry, anchors `/{slug}/film-N.html` rendered under jut.su's `<h2 class="films_title">` block) and `totalFilmCount()`.
+- **Page metadata** (`episode/JutsuEpisodeMetaClient`) — `GET …/episode-N.html` **or** `GET …/film-N.html` returns a sealed `JutsuPageMeta` (`JutsuEpisodeMeta` for episodes, `JutsuFilmMeta` for full-length films) with slug / titles / thumbnail / `premiumGated` and kind-specific navigation (`prevEpisodeUrl`/`nextEpisodeUrl` vs `prevFilmUrl`/`nextFilmUrl`) without actually decoding the player.
 - **Upcoming releases feed** (`notice/JutsuNoticeClient`) — `POST /engine/ajax/site_notice.php` paginated cursor, including a backward walk (`Flux<JutsuNoticeFeed>`) and a flattened `Flux<JutsuNoticeEntry>` for NDJSON streaming.
 - **Schema-drift detection** (`drift/`) — every parser raises typed `JutsuDriftSignal` events through a thread-safe `JutsuDriftDetector`. Lenient mode keeps best-effort parsing alive in production; **strict mode** (used by `JutsuStrictReplayTest` + the `orinuno-app` canary probe) escalates any signal to `JutsuDriftException` so a parser regression fails CI before it ships.
 
@@ -70,10 +70,22 @@ JutsuCatalogPage hits = client.searchByTitle("naruto", 1).block();
 // Full anime info incl. seasons + episodes
 JutsuAnimeInfo info = client.getAnimeInfo("naruto").block();
 
-// Lightweight episode meta (no decode)
-JutsuEpisodeMeta meta = client
+// Lightweight page meta (no decode). Returns the sealed JutsuPageMeta —
+// downcast to JutsuEpisodeMeta or JutsuFilmMeta depending on URL grammar.
+JutsuPageMeta page = client
         .getEpisodeMeta("https://jut.su/naruto/episode-1.html")
         .block();
+if (page instanceof JutsuEpisodeMeta ep) {
+    System.out.printf("S%dE%d %s%n", ep.season(), ep.episode(), ep.displayTitle());
+}
+
+// Full-length-film URLs are accepted by the same method.
+JutsuPageMeta filmPage = client
+        .getEpisodeMeta("https://jut.su/life-no-game/film-1.html")
+        .block();
+if (filmPage instanceof JutsuFilmMeta film) {
+    System.out.printf("F%d %s%n", film.filmIndex(), film.displayTitle());
+}
 
 // Latest "upcoming releases" notice feed page
 JutsuNoticeFeed latest = client.getLatestNoticeFeed().block();
@@ -180,7 +192,7 @@ The decoder handles three known jut.su weirdnesses; if you hit a new one, please
 This module follows the parent reactor's version (`0.1.0` today). Public API surface:
 
 - Facade: `com.orinuno.jutsu.JutsuClient`, `JutsuConfig`, `JutsuDecodeResult`, `JutsuErrorCodes`.
-- Subpackages: `auth.JutsuSessionManager`, `catalog.*`, `decoder.JutsuDecoder`, `drift.*`, `episode.*`, `filter.*`, `info.*`, `notice.*`, `parser.JutsuSourceParser`, `ratelimit.JutsuRateLimiter`.
+- Subpackages: `auth.JutsuSessionManager`, `catalog.*`, `decoder.JutsuDecoder`, `drift.*`, `episode.*` (sealed `JutsuPageMeta` + `JutsuEpisodeMeta` / `JutsuFilmMeta`), `filter.*`, `info.*` (incl. `JutsuFilmListing`), `notice.*`, `parser.JutsuSourceParser`, `ratelimit.JutsuRateLimiter`.
 
 Breaking changes here will bump the minor version.
 

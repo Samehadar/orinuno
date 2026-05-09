@@ -8,6 +8,54 @@ authoritative log of every change.
 
 ## [Unreleased]
 
+### jut.su films + page-meta discriminator (2026-05-08)
+
+- **New** `JutsuFilmListing` SDK record + `JutsuAnimeInfo.films()` /
+  `totalFilmCount()` — full-length movies attached to a series (anchors
+  `/{slug}/film-N.html` rendered under jut.su's `<h2 class="films_title">`
+  block) are now surfaced as a sibling collection to seasons/episodes
+  instead of being dropped by the parser. `JutsuAnimeInfoParser` walks all
+  `.short-btn.video.the_hildi` anchors once and classifies each by URL
+  pattern; cross-promo film links to other anime stay out of the current
+  entry's list. Anchors that match the selector but neither URL pattern
+  still emit `SCHEMA_VIOLATION`.
+- **New** `jutsu_film` table (`slug`, `film_index`, `label`,
+  `relative_url`, `paywalled`, `discovered_at`, `last_seen_at`) +
+  `JutsuFilm` entity / `JutsuFilmRepository` / `JutsuFilmMapper.xml`.
+  `COALESCE` upserts preserve `discovered_at` and `paywalled` across
+  re-fetches. Liquibase migration:
+  `20260508050000_create_jutsu_film.sql`.
+- **API** `JutsuAnimeInfoDto.films` (`List<JutsuFilmListingDto>`) +
+  `totalFilmCount` populated in both the live `from(JutsuAnimeInfo)` path
+  and the `fromCache(title, episodes, films)` path. `JutsuCatalogReadService`
+  reads films via `JutsuFilmRepository.findBySlug`;
+  `JutsuCatalogSyncService.runNoticeWalkOnce` writes them via
+  `infoToFilms` alongside `infoToEpisodes`.
+- **Demo UI** renders a dedicated "Полнометражные фильмы" block under the
+  seasons grid with Russian-pluralised count suffix
+  (`1 фильм` / `2 фильма` / `5 фильмов`).
+- **Breaking SDK** — `JutsuClient.getEpisodeMeta(url)` now returns
+  `Mono<JutsuPageMeta>` instead of `Mono<JutsuEpisodeMeta>`.
+  `JutsuPageMeta` is a `sealed interface permits JutsuEpisodeMeta,
+  JutsuFilmMeta`. Episode URLs (`/{slug}/(season-N/)?episode-M.html`) keep
+  returning `JutsuEpisodeMeta`; full-length-film URLs
+  (`/{slug}/film-N.html`) now return the new `JutsuFilmMeta` record
+  (`slug`, `filmIndex`, `prevFilmUrl`/`nextFilmUrl`) instead of crashing
+  with `IllegalStateException` ("episode page parse returned null"). The
+  parser's canonical-URL drift cross-check now also signals
+  `SCHEMA_VIOLATION` on a silent kind-flip (caller asked for an episode,
+  jut.su redirected to a film, or vice versa).
+- **Breaking REST** — `GET /api/v1/sources/jutsu/episode?url=…` now serves
+  a discriminated DTO `JutsuPageMetaDto` (`oneOf JutsuEpisodeMetaDto |
+  JutsuFilmMetaDto`, Jackson `@JsonTypeInfo(property = "kind")`).
+  Consumers must read the `kind` field (`"episode"` or `"film"`) before
+  pattern-matching on payload-shape fields. Episode shape is identical to
+  before plus the `kind: "episode"` literal; film shape carries
+  `filmIndex`, `prevFilmUrl`, `nextFilmUrl` instead of season/episode.
+  OpenAPI snapshot regenerated.
+- Fixes the 500 Internal Server Error on
+  `GET /api/v1/sources/jutsu/episode?url=https://jut.su/life-no-game/film-1.html`.
+
 ## [SDK-SPLIT 2026-05-03] — API tier + per-provider standalone SDKs
 
 The "SDK split" is a five-step refactor that moved every video provider out of
