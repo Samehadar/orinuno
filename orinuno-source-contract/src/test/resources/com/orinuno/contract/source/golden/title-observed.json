@@ -1,0 +1,27 @@
+{
+  "kind" : "title-observed",
+  "identifier" : {
+    "sourceType" : "kodik",
+    "sourceId" : "movie-12345"
+  },
+  "info" : {
+    "titleRu" : "Наруто",
+    "titleEn" : "Naruto",
+    "year" : 2002,
+    "kindHint" : "ANIME",
+    "externalIds" : {
+      "kinopoiskId" : "283290",
+      "imdbId" : "tt0409591",
+      "shikimoriId" : "1"
+    }
+  },
+  "provenance" : {
+    "sourceUrl" : "https://kodik-api.com/list",
+    "fetchedAt" : "2026-05-10T12:34:56Z",
+    "sdkVersion" : "kodik-sdk-drift/0.1.0",
+    "parserMode" : "lenient",
+    "schemaDriftFlags" : [
+      "UNKNOWN_FIELD:material_data.deprecated_box"
+    ]
+  }
+}

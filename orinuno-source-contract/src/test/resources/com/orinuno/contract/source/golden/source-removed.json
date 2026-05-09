@@ -1,0 +1,16 @@
+{
+  "kind" : "source-removed",
+  "identifier" : {
+    "sourceType" : "kodik",
+    "sourceId" : "movie-deprecated-99"
+  },
+  "provenance" : {
+    "sourceUrl" : "https://kodik-api.com/list",
+    "fetchedAt" : "2026-05-10T12:34:56Z",
+    "sdkVersion" : "kodik-sdk-drift/0.1.0",
+    "parserMode" : "lenient",
+    "schemaDriftFlags" : [
+      "UNKNOWN_FIELD:material_data.deprecated_box"
+    ]
+  }
+}
