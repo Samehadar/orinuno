@@ -30,7 +30,7 @@ Not every source needs its own L1 tables. Sources fall into two classes by their
 | Source | Class | L1 tables | Reason |
 |---|---|---|---|
 | **Kodik** | catalog (REST API ~150k titles) | yes, **already exist**: `kodik_content`, `kodik_episode_variant`, `kodik_calendar_state/outbox`, `kodik_decoder_path_cache`, `kodik_content_enrichment` | upstream returns structured metadata with external IDs |
-| **jut.su** | catalog (HTML scraping ~5k anime) | yes, **to be added in P1a**: `jutsu_title`, `jutsu_episode`, `jutsu_translation` (optional), `jutsu_sync_state` | catalog is currently fetched live on every request; HTML parsing is slow and drift-prone |
+| **jut.su** | catalog (HTML scraping ~5k anime) | yes, **to be added in P1a**: `jutsu_title`, `jutsu_episode`, `jutsu_film`, `jutsu_translation` (optional), `jutsu_sync_state` | catalog is currently fetched live on every request; HTML parsing is slow and drift-prone |
 | **Aniboom** | decoder (CDN/player; embed URL → mp4) | no, **stateless** | source has no concept of "title list"; `AniboomClient.decode(embedUrl)` is the entire surface |
 | **Sibnet** | decoder (video host) | no, **stateless** | same; `SibnetClient.decode(...)` is the entire surface |
 
@@ -80,6 +80,7 @@ A new package `com.orinuno.catalog` inside `orinuno-app` owns L3. It exposes a `
 
 - `jutsu_title` — `slug` PK, `title_ru`, `title_en`, `status` (`ongoing` / `released`), `year`, `episodes_total`, `shikimori_id` (nullable, parsed from HTML), `mal_id` (nullable), `description`, `poster_url`, `last_synced_at`, `source_etag` (for conditional GET).
 - `jutsu_episode` — `(title_slug, season, episode)` PK, `embed_url`, `video_qualities` (JSON: `{"480":..., "720":..., "1080":...}`), `last_synced_at`.
+- `jutsu_film` — `(slug, film_index)` PK with FK to `jutsu_title.slug`, `label`, `relative_url` (`/{slug}/film-N.html`), `paywalled`, `discovered_at`, `last_seen_at`. Sibling of `jutsu_episode` for full-length movies attached to a series (e.g. `life-no-game/film-1.html`); separate table because films use a distinct URL grammar and a separate `vnleft`/`vnright` navigation cohort, so overloading `season=0` would mislead any L3 ingestion logic that walks `(season, episode)` pairs.
 - `jutsu_translation` — optional, only if jut.su starts exposing duplicate entries with different dubs.
 - `jutsu_sync_state` — singleton row: `last_full_crawl_at`, `last_notice_cursor`, `notice_walk_in_progress`.
 
@@ -244,6 +245,7 @@ Nothing — this ADR fixes direction. Code work (`catalog_*` migrations, `Catalo
 | `BACKLOG.md` P1/P2/P3 entries | ✅ this PR |
 | `TECH_DEBT.md` kodik L1+L2 hybrid entry | ✅ this PR |
 | P1a — `jutsu_title` / `jutsu_episode` / `jutsu_sync_state` migrations + repo | ⏳ pending |
+| Follow-up — `jutsu_film` table + repo (sibling of `jutsu_episode`, separate URL grammar `/{slug}/film-N.html`) | ✅ done (2026-05-08) |
 | P1a — `JutsuCatalogSyncService` (full + incremental) | ⏳ pending |
 | P1a — hybrid-fallback guards (rate limit + negative cache + kill-switch + metrics) | ⏳ pending |
 | P1a — `JutsuApiController` cutover to DB-first reads | ⏳ pending |
