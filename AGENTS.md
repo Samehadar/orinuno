@@ -21,13 +21,21 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 > jut.su in `MultiSourceRanker` when upstream HTML changes. ADR 0016
 > fixes the architecture trajectory: stay as a modular monolith with a
 > universal canonical catalog (L3) as a separate bounded context;
-> split into per-source services only when explicit triggers fire. See
+> split into per-source services only when explicit triggers fire. ADR
+> 0017 promoted the producer-side event contract to a first-class
+> Maven artifact (`orinuno-source-contract`) so source bounded contexts
+> emit `SourceCatalogEvent` to a `SourceEventEmitter` and the in-app
+> default `CatalogSinkEventEmitter` is the only thing translating
+> events into catalog identity requests — sets up Kin reuse, OSS
+> ecosystem, and future per-source split as a config flip rather than
+> a refactor. See
 > `docs/adr/0001-kodik-sdk-extraction.md`,
 > `docs/adr/0012-jutsu-sdk-extraction.md`,
 > `docs/adr/0013-sibnet-and-aniboom-sdk-extraction.md`,
 > `docs/adr/0014-controllers-on-sdk-facades.md`,
-> `docs/adr/0015-jutsu-full-browser-parity.md`, and
-> `docs/adr/0016-architecture-trajectory.md`.
+> `docs/adr/0015-jutsu-full-browser-parity.md`,
+> `docs/adr/0016-architecture-trajectory.md`, and
+> `docs/adr/0017-source-event-contract.md`.
 
 | Area | Path |
 |------|------|
@@ -45,8 +53,10 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 | Mappers (entity↔dto) | `orinuno-app/src/main/java/com/orinuno/mapper/` |
 | Catalog L3 public API | `orinuno-app/src/main/java/com/orinuno/catalog/api/` (P1b) |
 | Catalog L3 resolver | `orinuno-app/src/main/java/com/orinuno/catalog/internal/CatalogIdentityResolver.java` (P1b) |
-| jut.su → L3 bridge | `orinuno-app/src/main/java/com/orinuno/jutsu/sync/JutsuCatalogIngestion.java` (P1b) |
-| Kodik → L3 bridge | `orinuno-app/src/main/java/com/orinuno/service/KodikCatalogIngestion.java` (P1b) |
+| jut.su → event bridge | `orinuno-app/src/main/java/com/orinuno/jutsu/sync/JutsuCatalogIngestion.java` (P1b, refactored ADR 0017) |
+| Kodik → event bridge | `orinuno-app/src/main/java/com/orinuno/service/KodikCatalogIngestion.java` (P1b, refactored ADR 0017) |
+| Default in-process event sink | `orinuno-app/src/main/java/com/orinuno/catalog/ingestion/CatalogSinkEventEmitter.java` (ADR 0017) |
+| Producer-side event contract | `orinuno-source-contract/src/main/java/com/orinuno/contract/source/` (ADR 0017) |
 | Schema-drift SDK (extracted) | `kodik-sdk-drift/src/main/java/com/kodik/sdk/drift/` |
 | JutSu SDK (extracted, Step 2) | `jutsu-sdk/src/main/java/com/orinuno/jutsu/` |
 | Sibnet SDK (extracted, Step 3) | `sibnet-sdk/src/main/java/com/orinuno/sibnet/` |
@@ -59,10 +69,12 @@ Spring Boot 3.4.6 + WebFlux + MyBatis + MySQL + Liquibase.
 | Tests (jutsu SDK) | `jutsu-sdk/src/test/java/com/orinuno/jutsu/` |
 | Tests (sibnet SDK) | `sibnet-sdk/src/test/java/com/orinuno/sibnet/` |
 | Tests (aniboom SDK) | `aniboom-sdk/src/test/java/com/orinuno/aniboom/` |
+| Tests (source contract — golden-file shape stability) | `orinuno-source-contract/src/test/java/com/orinuno/contract/source/JsonShapeStabilityTest.java` + fixtures under `orinuno-source-contract/src/test/resources/com/orinuno/contract/source/golden/` |
 | Properties | `orinuno-app/src/main/resources/application.yml` |
 | Test properties | `orinuno-app/src/test/resources/application-test.yml` |
 | Reactor pom | `pom.xml` |
 | Service module pom | `orinuno-app/pom.xml` |
+| Source-event contract module pom | `orinuno-source-contract/pom.xml` |
 | SDK pilot module pom | `kodik-sdk-drift/pom.xml` |
 | JutSu SDK module pom | `jutsu-sdk/pom.xml` |
 | Sibnet SDK module pom | `sibnet-sdk/pom.xml` |
@@ -94,7 +106,7 @@ Controller → Service → Repository (MyBatis XML) → MySQL
 8. **Retry Failed**: `@Scheduled ParserService.retryFailedDecodes()` → retries previously failed decodes
 9. **jut.su browser parity (ADR 0015)**: `JutsuApiController` under `/api/v1/sources/jutsu/` exposes `/catalog`, `/search`, `/anime/{slug}`, `/episode`, `/notice`, `/notice/stream` (NDJSON), `/drift`. `/anime/{slug}` returns seasons (with episodes) **and** `films: [JutsuFilmListing]` + `totalFilmCount` for full-length movies attached to the entry (e.g. `life-no-game/film-1.html`). `/episode?url=…` accepts both episode (`/{slug}/(season-N/)?episode-M.html`) and full-length-film (`/{slug}/film-N.html`) URLs and returns a discriminated `JutsuPageMetaDto` (`oneOf JutsuEpisodeMetaDto | JutsuFilmMetaDto`, `kind: "episode" | "film"` Jackson `@JsonTypeInfo`). `JutsuDriftScheduledProbe` (`@Scheduled`, `@ConditionalOnProperty`) hits a canary set in lenient mode; `MultiSourceController` reads `JutsuClient.getDriftSnapshot().health()` and adds jut.su to `RankingPreferences.demotedProviders` whenever health ≠ HEALTHY (it still appears in results, but lands at the bottom).
 10. **jut.su cache-first reads (ARCH-0016 P1a)**: `/catalog` and `/anime/{slug}` are served from the L1 cache (`jutsu_title` + `jutsu_episode` populated by `JutsuCatalogSyncService` full-crawl + notice-walk workers) by default. On cache-miss the request is routed through `JutsuLiveFallbackService`, guarded by three independent layers: a manual `enabled` switch (`orinuno.providers.jutsu.fallback.enabled`), a self-written rolling-window circuit breaker (`JutsuFallbackCircuitBreaker`, default 50% failure rate over 20 calls → 60s OPEN → HALF_OPEN single-probe recovery), and a Caffeine-backed negative cache (`JutsuFallbackNegativeCache`, default 30s TTL). A dedicated rate-limit bucket (`@Qualifier("jutsuFallbackRateLimiter")`, default 0.5 RPS) sits AFTER the guards so cache-miss floods can't starve the sync workers. `/search` is intentionally NOT cached (text queries multiply keys without benefit) and goes straight to `JutsuClient`. Every response carries an RFC 9211 `Cache-Status` header (`hit` / `fwd=miss; fallback` / `fwd=bypass`); 503 responses include `X-Orinuno-Fallback-Reason` (`fallback-disabled` / `circuit-breaker-open` / `negative-cache-hit` / `live-fetch-failed`).
-11. **Catalog L3 ingestion (ARCH-0016 P1b)**: two adapters bridge the per-source L1 caches into the universal canonical catalog (L3). `JutsuCatalogIngestion.ingest(JutsuTitle)` runs after every `JutsuCatalogSyncService` upsert (full-crawl page, notice-walk info-fetch, notice-walk placeholder) and maps the L1 row into a `CatalogIdentityRequest` (`sourceType=JUTSU`, `kind=ANIME`, parsed numeric year). `KodikCatalogIngestion.ingest(KodikContent)` runs after every `ContentService.findOrCreateContent(...)` insert/update and maps the L1 row into a `CatalogIdentityRequest` (`sourceType=KODIK`, `sourceId` = `kodikId` or `kp:<kinopoiskId>`, `kind` derived from Kodik's `type` field, plus `shikimori_id`/`imdb_id`/`kinopoisk_id` external bindings). Both bridges call the only public catalog surface — `CatalogPublicApi.findOrCreateContent(...)`. The resolver (`CatalogIdentityResolver`, `@Transactional`) walks the priority order shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId) over `catalog_content` identity columns; first match wins, no auto-merge of two canonical rows (deferred to a later phase, see TECH_DEBT). The merge invariant — verified end-to-end in `CatalogIngestionIT` — is that two Kodik rows sharing a `shikimori_id` collapse into one canonical row carrying both KODIK bindings + the SHIKIMORI binding, regardless of order. Resolver exceptions are caught and logged WARN inside each adapter — a transient L3 hiccup never aborts the L1 sync. Both bridges are off by default (`orinuno.providers.jutsu.sync.catalog-ingestion.enabled=false`, `orinuno.kodik.catalog-ingestion.enabled=false`); enable per deployment after verifying a sync tick runs cleanly end-to-end.
+11. **Catalog L3 ingestion (ARCH-0016 P1b + ADR 0017)**: two adapters bridge the per-source L1 caches into the universal canonical catalog (L3) **via the producer-side event contract**. `JutsuCatalogIngestion.ingest(JutsuTitle)` runs after every `JutsuCatalogSyncService` upsert (full-crawl page, notice-walk info-fetch, notice-walk placeholder) and emits a `SourceCatalogEvent.TitleObserved` (`sourceType="jutsu"`, `kindHint=ANIME`, parsed numeric year, `ExternalIds.empty()`) to the configured `SourceEventEmitter`. `KodikCatalogIngestion.ingest(KodikContent)` runs after every `ContentService.findOrCreateContent(...)` insert/update and emits a `TitleObserved` (`sourceType="kodik"`, `sourceId` = `kodikId` or `kp:<kinopoiskId>`, `kindHint` derived from Kodik's `type` field, plus `shikimori`/`imdb`/`kinopoisk` ids on `ExternalIds`). The default in-process implementation `CatalogSinkEventEmitter` (in `com.orinuno.catalog.ingestion`) translates the event into the catalog's internal `CatalogIdentityRequest` and calls the only public catalog surface — `CatalogPublicApi.findOrCreateContent(...)`. The resolver (`CatalogIdentityResolver`, `@Transactional`) walks the priority order shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId) over `catalog_content` identity columns; first match wins, no auto-merge of two canonical rows (deferred to a later phase, see TECH_DEBT). The merge invariant — verified end-to-end in `CatalogIngestionIT` — is that two Kodik rows sharing a `shikimori_id` collapse into one canonical row carrying both KODIK bindings + the SHIKIMORI binding, regardless of order. Resolver exceptions are caught and logged WARN inside the emitter — a transient L3 hiccup never aborts the L1 sync. Both bridges are off by default (`orinuno.providers.jutsu.sync.catalog-ingestion.enabled=false`, `orinuno.kodik.catalog-ingestion.enabled=false`); enable per deployment after verifying a sync tick runs cleanly end-to-end. The event contract itself lives in the `orinuno-source-contract` module — Spring-free / Kin-free, publishable to Maven Central, ready for consumption by future OSS aggregators or Kin's `external-bridge` (out-of-tree).
 
 ### Database Tables
 
@@ -145,14 +157,15 @@ Kodik uses a custom obfuscation: ROT13 with shift +18 (mod 26) + URL-safe Base64
 - **No cross-context `FOREIGN KEY` constraints** in the database. Cross-context references are soft (raw column with the other context's PK value, no FK). This makes a future per-source service split (ADR 0016 Layout B) a refactor instead of a rewrite.
 - **Each context owns its Liquibase changelog directory**. `liquibase-changelog.yaml` aggregates them via explicit `<include>` per directory.
 - **SDK facade stability**. Each SDK's facade (`KodikApiClient`, `JutsuClient`, `SibnetClient`, `AniboomClient`) plus its result records are the only types crossing the SDK boundary. They are the wire types if/when we ever distribute the system.
+- **Producer-side event contract is stable** (ADR 0017). The only types crossing the source-context → consumer boundary are `SourceCatalogEvent` and the records it transitively references (`SourceIdentifier`, `SourceContentInfo`, `ExternalIds`, `Provenance`, `SourceSeason`, `SourceEpisode`, `SourceEpisodeVariant`, `ContentKindHint`). Internal entities (`KodikContent`, `JutsuTitle`, …) stay package-local — translation happens in the per-source `*CatalogIngestion` adapter, not in the consumer. The contract artifact (`orinuno-source-contract`) is Spring-free and Kin-free; if a record needs a Spring-coupled type, it does not belong on the contract.
 
 ### Adding a new source
 
 The decision tree from ADR 0016 §"Source classification":
 
-1. **"Does the source expose a list of titles?"** → catalog source → add an L1 schema (`<source>_title`, `<source>_episode`, `<source>_sync_state` at minimum) and a sync worker (full crawl + incremental). Wire it through `CatalogIngestionService` so titles get reflected into L3 (`catalog_content`).
-2. **"Does the source take a URL and return mp4?"** → decoder source → keep it stateless behind the SDK facade. No DB tables, no sync worker. Aniboom and Sibnet are the canonical examples.
-3. A source that is **both** (Kodik, future Sibnet-with-album-listing) gets both: L1 catalog tables + the decoder pipeline.
+1. **"Does the source expose a list of titles?"** → catalog source → add an L1 schema (`<source>_title`, `<source>_episode`, `<source>_sync_state` at minimum) and a sync worker (full crawl + incremental). Wire a `<source>CatalogIngestion` adapter that emits `SourceCatalogEvent.TitleObserved` (or richer variants once decoder URLs are in hand) to the autowired `SourceEventEmitter` — the default `CatalogSinkEventEmitter` will reflect it into L3.
+2. **"Does the source take a URL and return mp4?"** → decoder source → keep it stateless behind the SDK facade. No DB tables, no sync worker, no source-event emitter. Aniboom and Sibnet are the canonical examples.
+3. A source that is **both** (Kodik, future Sibnet-with-album-listing) gets both: L1 catalog tables + the decoder pipeline + a `<source>CatalogIngestion` adapter.
 
 ## Key Rules
 
@@ -181,6 +194,7 @@ mvn -pl orinuno-app -am spring-boot:run
 mvn test
 
 # Tests (single module)
+mvn -pl orinuno-source-contract test
 mvn -pl kodik-sdk-drift test
 mvn -pl jutsu-sdk test
 mvn -pl sibnet-sdk test

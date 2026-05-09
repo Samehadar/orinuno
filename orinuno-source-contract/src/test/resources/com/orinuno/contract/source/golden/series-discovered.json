@@ -1,0 +1,37 @@
+{
+  "kind" : "series-discovered",
+  "identifier" : {
+    "sourceType" : "jutsu",
+    "sourceId" : "naruto"
+  },
+  "info" : {
+    "titleRu" : "Наруто",
+    "titleEn" : "Naruto",
+    "year" : 2002,
+    "kindHint" : "ANIME",
+    "externalIds" : { }
+  },
+  "seasons" : [
+    {
+      "title" : "Сезон 1",
+      "order" : 1,
+      "episodes" : [
+        {
+          "title" : "Возвращение Какаси",
+          "duration" : "PT24M",
+          "order" : 1,
+          "variants" : [ ]
+        }
+      ]
+    }
+  ],
+  "provenance" : {
+    "sourceUrl" : "https://kodik-api.com/list",
+    "fetchedAt" : "2026-05-10T12:34:56Z",
+    "sdkVersion" : "kodik-sdk-drift/0.1.0",
+    "parserMode" : "lenient",
+    "schemaDriftFlags" : [
+      "UNKNOWN_FIELD:material_data.deprecated_box"
+    ]
+  }
+}

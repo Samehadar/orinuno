@@ -1,45 +1,47 @@
 package com.orinuno.jutsu.sync;
 
-import com.orinuno.catalog.api.CatalogIdentityRequest;
-import com.orinuno.catalog.api.CatalogPublicApi;
-import com.orinuno.catalog.model.CatalogContentKind;
-import com.orinuno.catalog.model.CatalogSourceType;
 import com.orinuno.configuration.OrinunoProperties;
+import com.orinuno.contract.source.ContentKindHint;
+import com.orinuno.contract.source.ExternalIds;
+import com.orinuno.contract.source.Provenance;
+import com.orinuno.contract.source.SourceCatalogEvent;
+import com.orinuno.contract.source.SourceContentInfo;
+import com.orinuno.contract.source.SourceEventEmitter;
+import com.orinuno.contract.source.SourceIdentifier;
 import com.orinuno.jutsu.model.JutsuTitle;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Bridge between the jut.su L1 cache and the L3 universal canonical catalog (ARCH-0016 P1b Step
- * 1.C). This is the only class in the {@code jutsu} bounded context that ever reaches into {@code
- * com.orinuno.catalog.api.*} — it lives here, not in the {@code catalog} package, because ADR 0016
- * zoning rules go one direction: {@code jutsu} depends on {@code catalog}, never the other way
- * around.
+ * Bridge between the jut.su L1 cache and the producer-side event contract (ARCH-0017). Hands a
+ * {@link SourceCatalogEvent.TitleObserved} to the configured {@link SourceEventEmitter} once per
+ * {@link JutsuTitle} upsert; the default in-process emitter ({@code CatalogSinkEventEmitter})
+ * translates it back into a catalog identity request and writes into L3.
  *
- * <p>Each {@link JutsuTitle} upsert in {@link JutsuCatalogSyncService} (full crawl, notice walk
- * info-fetch, notice walk placeholder) calls {@link #ingest(JutsuTitle)} synchronously. The
- * resolver inside {@link CatalogPublicApi} runs {@code @Transactional} so a partial commit
- * (canonical row inserted, binding insert failed, etc.) rolls back without touching the L1 upsert
- * that already succeeded one transaction earlier.
+ * <p>This is the jut.su half of P1b: jut.su brings rows in anchored on {@code (JUTSU, slug)}, Kodik
+ * brings them in anchored on {@code (KODIK, kodikId)} plus any external-database ids it harvested.
+ * When both bridges are enabled together, the resolver merges the two views into a single canonical
+ * row the moment external-database ids overlap.
  *
- * <p>Failure isolation: any {@link RuntimeException} from the resolver is caught and logged at
- * WARN. The L1 sync is the system of record for "we observed this title on jut.su today" — it must
- * not break because L3 binding produced a transient deadlock or the resolver hit a not-yet-fixed
- * bug. A subsequent tick re-attempts the binding (idempotent by design).
+ * <p>Failure isolation: the emitter swallows resolver {@link RuntimeException}s; this class
+ * additionally short-circuits on {@code null} / blank slug or when the catalog-ingestion
+ * kill-switch ({@code orinuno.providers.jutsu.sync.catalog-ingestion.enabled}, default {@code
+ * false}) is off, so disabled deployments don't pay the (cheap) DTO build cost.
  *
- * <p>jut.su's {@link JutsuTitle} carries no third-party identifiers (no Shikimori id, no MAL id, no
- * IMDB id) — the SDK doesn't extract them today. So the canonical row created from a jut.su upsert
- * is initially anchored only by {@code (JUTSU, slug)}. Merging with rows from Kodik (the Kodik
- * bridge that lands in Step 1.C.B) happens later when the Kodik upsert calls {@code
- * findOrCreateContent} carrying a {@code shikimori_id} that resolves to the same canonical row.
+ * <p>jut.su's {@link JutsuTitle} carries no third-party identifiers today (no Shikimori id, no MAL
+ * id, no IMDB id) — the canonical row created from a jut.su upsert is initially anchored only by
+ * {@code (JUTSU, slug)}. Merging happens later when a Kodik upsert arrives carrying a Shikimori id
+ * that resolves to the same canonical row.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class JutsuCatalogIngestion {
 
-    private final CatalogPublicApi catalog;
+    private final SourceEventEmitter emitter;
     private final OrinunoProperties properties;
 
     public void ingest(JutsuTitle title) {
@@ -49,37 +51,32 @@ public class JutsuCatalogIngestion {
         if (!properties.getProviders().getJutsu().getSync().getCatalogIngestion().isEnabled()) {
             return;
         }
-        try {
-            CatalogIdentityRequest request = toRequest(title);
-            catalog.findOrCreateContent(request);
-        } catch (RuntimeException ex) {
-            log.warn(
-                    "jutsu-sync: catalog ingestion for slug='{}' failed ({}: {}); L1 row stays"
-                            + " untouched, will retry on next tick",
-                    title.getSlug(),
-                    ex.getClass().getSimpleName(),
-                    ex.getMessage());
-        }
+        SourceCatalogEvent event =
+                new SourceCatalogEvent.TitleObserved(
+                        SourceIdentifier.of("jutsu", title.getSlug()),
+                        toContentInfo(title),
+                        provenance(title));
+        emitter.emit(event);
     }
 
     /**
-     * Map a {@link JutsuTitle} into a {@link CatalogIdentityRequest}. {@code titleRu} comes from
+     * Map a {@link JutsuTitle} into a {@link SourceContentInfo}. {@code titleRu} comes from
      * jut.su's primary {@code title} field (always Russian on jut.su); {@code titleEn} is the SDK's
-     * {@code originalTitle} (English / original language). {@code kind} is hardcoded {@link
-     * CatalogContentKind#ANIME} because jut.su itself is an anime-only site — every row in {@code
-     * jutsu_title} is an anime by definition.
+     * {@code originalTitle} (English / original language). {@code kindHint} is hardcoded {@link
+     * ContentKindHint#ANIME} because jut.su itself is an anime-only site.
      *
      * <p>{@code year} is parsed from {@code yearBucket}. jut.su exposes the bucket as a slug like
      * {@code "2020"}, {@code "before2000"}, or {@code "ongoing"}; we extract a parseable integer
      * when possible and leave {@code null} otherwise. The resolver's COALESCE-protected update
      * fills the canonical {@code year} only if it's currently null.
      */
-    static CatalogIdentityRequest toRequest(JutsuTitle title) {
-        return CatalogIdentityRequest.builder(CatalogSourceType.JUTSU, title.getSlug())
+    static SourceContentInfo toContentInfo(JutsuTitle title) {
+        return SourceContentInfo.builder()
                 .titleRu(title.getTitle())
                 .titleEn(title.getOriginalTitle())
-                .kind(CatalogContentKind.ANIME)
+                .kindHint(ContentKindHint.ANIME)
                 .year(parseYear(title.getYearBucket()))
+                .externalIds(ExternalIds.empty())
                 .build();
     }
 
@@ -102,5 +99,19 @@ public class JutsuCatalogIngestion {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    /**
+     * Best-effort {@link Provenance} for a jut.su L1 upsert. {@code sourceUrl} points at the
+     * title's anime-info page (the most informative URL we can derive without round-tripping back
+     * to the SDK), {@code fetchedAt} comes from {@link JutsuTitle#getLastSeenAt()} when present,
+     * otherwise {@code now}.
+     */
+    private static Provenance provenance(JutsuTitle title) {
+        Instant fetchedAt =
+                title.getLastSeenAt() != null
+                        ? title.getLastSeenAt().atZone(ZoneOffset.UTC).toInstant()
+                        : Instant.now();
+        return Provenance.of("https://jut.su/" + title.getSlug() + "/", fetchedAt);
     }
 }

@@ -77,6 +77,17 @@
             <artifactId>aniboom-sdk</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--
+            orinuno-source-contract — ADR 0017. Producer-side event contract (SourceCatalogEvent
+            sealed family + SourceEventEmitter). orinuno-app supplies the default in-process
+            implementation (CatalogSinkEventEmitter) that translates events into the catalog
+            context's CatalogIdentityRequest and calls CatalogPublicApi.findOrCreateContent.
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>orinuno-source-contract</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- General -->
         <dependency>

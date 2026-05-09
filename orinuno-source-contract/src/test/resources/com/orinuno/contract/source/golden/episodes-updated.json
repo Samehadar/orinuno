@@ -1,0 +1,30 @@
+{
+  "kind" : "episodes-updated",
+  "identifier" : {
+    "sourceType" : "jutsu",
+    "sourceId" : "naruto"
+  },
+  "seasons" : [
+    {
+      "order" : 1,
+      "episodes" : [
+        {
+          "title" : "Эпизод 220",
+          "duration" : "PT24M",
+          "mediaUrl" : "https://video.jut.su/naruto/220",
+          "order" : 220,
+          "variants" : [ ]
+        }
+      ]
+    }
+  ],
+  "provenance" : {
+    "sourceUrl" : "https://kodik-api.com/list",
+    "fetchedAt" : "2026-05-10T12:34:56Z",
+    "sdkVersion" : "kodik-sdk-drift/0.1.0",
+    "parserMode" : "lenient",
+    "schemaDriftFlags" : [
+      "UNKNOWN_FIELD:material_data.deprecated_box"
+    ]
+  }
+}

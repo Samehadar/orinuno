@@ -22,6 +22,7 @@
     -->
 
     <modules>
+        <module>orinuno-source-contract</module>
         <module>kodik-sdk-drift</module>
         <module>jutsu-sdk</module>
         <module>sibnet-sdk</module>
@@ -63,6 +64,11 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.orinuno</groupId>
+                <artifactId>orinuno-source-contract</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.orinuno</groupId>
                 <artifactId>kodik-sdk-drift</artifactId>
