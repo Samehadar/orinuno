@@ -1,0 +1,43 @@
+{
+  "kind" : "movie-discovered",
+  "identifier" : {
+    "sourceType" : "kodik",
+    "sourceId" : "russian-movie-island-2006"
+  },
+  "info" : {
+    "titleRu" : "Остров",
+    "year" : 2006,
+    "kindHint" : "MOVIE",
+    "externalIds" : {
+      "kinopoiskId" : "253245"
+    },
+    "posterUrl" : "https://st.kp.yandex.net/images/film_iphone/iphone360_253245.jpg",
+    "bigPosterUrl" : "https://st.kp.yandex.net/images/film_big/253245.jpg",
+    "screenshotUrls" : [
+      "https://i.kodik.biz/screenshots/253245/1.jpg",
+      "https://i.kodik.biz/screenshots/253245/2.jpg"
+    ],
+    "trailerUrls" : [
+      "https://www.youtube.com/watch?v=island2006"
+    ]
+  },
+  "variant" : {
+    "identifier" : {
+      "sourceType" : "kodik",
+      "sourceId" : "russian-movie-island-2006:variant-rus"
+    },
+    "mediaUrl" : "https://cdn.kodik-api.com/island.mp4",
+    "title" : "Russian dub",
+    "streamQuality" : "1080p",
+    "duration" : "PT1H52M"
+  },
+  "provenance" : {
+    "sourceUrl" : "https://kodik-api.com/list",
+    "fetchedAt" : "2026-05-10T12:34:56Z",
+    "sdkVersion" : "kodik-sdk-drift/0.1.0",
+    "parserMode" : "lenient",
+    "schemaDriftFlags" : [
+      "UNKNOWN_FIELD:material_data.deprecated_box"
+    ]
+  }
+}

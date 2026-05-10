@@ -106,6 +106,16 @@ class JsonShapeStabilityTest {
 
     @Test
     @DisplayName(
+            "MovieDiscovered with poster URLs (posterUrl + bigPosterUrl + screenshotUrls +"
+                    + " trailerUrls) — locks ARCH-0017-FOLLOWUP-POSTER wire shape")
+    void movieDiscoveredWithPostersShape() throws Exception {
+        SourceCatalogEvent event = sampleMovieDiscoveredWithPosters();
+        assertJsonShapeMatches(event, "movie-discovered-with-posters.json");
+        assertRoundTripsTo(event, SourceCatalogEvent.MovieDiscovered.class);
+    }
+
+    @Test
+    @DisplayName(
             "ExternalIds with all fields populated round-trips and excludes null entries from"
                     + " JSON output (NON_NULL inclusion contract)")
     void externalIdsRoundTripExcludesNulls() throws Exception {
@@ -143,6 +153,10 @@ class JsonShapeStabilityTest {
         Files.createDirectories(goldenDir);
         writeFixture(goldenDir, "title-observed.json", sampleTitleObserved());
         writeFixture(goldenDir, "movie-discovered.json", sampleMovieDiscovered());
+        writeFixture(
+                goldenDir,
+                "movie-discovered-with-posters.json",
+                sampleMovieDiscoveredWithPosters());
         writeFixture(goldenDir, "series-discovered.json", sampleSeriesDiscovered());
         writeFixture(goldenDir, "episodes-updated.json", sampleEpisodesUpdated());
         writeFixture(goldenDir, "source-removed.json", sampleSourceRemoved());
@@ -174,6 +188,33 @@ class JsonShapeStabilityTest {
                         .year(2006)
                         .kindHint(ContentKindHint.MOVIE)
                         .externalIds(ExternalIds.builder().kinopoiskId("253245").build())
+                        .build(),
+                new SourceEpisodeVariant(
+                        SourceIdentifier.of("kodik", "russian-movie-island-2006:variant-rus"),
+                        "https://cdn.kodik-api.com/island.mp4",
+                        "Russian dub",
+                        "1080p",
+                        Duration.ofMinutes(112),
+                        null),
+                PROVENANCE);
+    }
+
+    private static SourceCatalogEvent.MovieDiscovered sampleMovieDiscoveredWithPosters() {
+        return new SourceCatalogEvent.MovieDiscovered(
+                SourceIdentifier.of("kodik", "russian-movie-island-2006"),
+                SourceContentInfo.builder()
+                        .titleRu("Остров")
+                        .year(2006)
+                        .kindHint(ContentKindHint.MOVIE)
+                        .externalIds(ExternalIds.builder().kinopoiskId("253245").build())
+                        .posterUrl(
+                                "https://st.kp.yandex.net/images/film_iphone/iphone360_253245.jpg")
+                        .bigPosterUrl("https://st.kp.yandex.net/images/film_big/253245.jpg")
+                        .screenshotUrls(
+                                List.of(
+                                        "https://i.kodik.biz/screenshots/253245/1.jpg",
+                                        "https://i.kodik.biz/screenshots/253245/2.jpg"))
+                        .trailerUrls(List.of("https://www.youtube.com/watch?v=island2006"))
                         .build(),
                 new SourceEpisodeVariant(
                         SourceIdentifier.of("kodik", "russian-movie-island-2006:variant-rus"),

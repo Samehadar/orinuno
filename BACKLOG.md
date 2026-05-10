@@ -618,8 +618,25 @@ P4 — жить в monolith, пока не сработает один из тр
 **Что осталось (out of scope этого PR):**
 - **Maven Central publish** — переиспользует pipeline от `IDEA-SDK-4` (всё ещё PENDING на нашей стороне). Когда первый OSS consumer материализуется — публикуем артефакт.
 - **`OutboxEventEmitter` + `<context>_event_outbox` таблица** — deferred. Пишем outbox-implementation только когда появится второй consumer (Kin's `external-bridge` или remote OSS aggregator). До тех пор default in-process emitter — единственный.
-- **`external-bridge` в `downstream-repo`** — Kin-side adapter, переводящий `SourceCatalogEvent` в `meterapi.dto.ContentExportRequest`. Out-of-tree: лежит в `downstream-repo`, а не здесь. Когда появится — `kodik-parser` сжимается до thin shim или удаляется.
 - **Episode-level emit** (`MovieDiscovered`, `SeriesDiscovered`, `EpisodesUpdated` с реальными вариантами) — пока default emitter форвардит только chrome через `findOrCreateContent`, эпизоды игнорируются. Реализуется когда P2 (canonical REST API) расширит resolver на canonical episodes.
+
+---
+
+### ARCH-0017-FOLLOWUP-POSTER: posters в SourceContentInfo — **DONE** (2026-05-10)
+
+**Статус:** Реализовано в этом PR (Stages 1–5). Закрывает регрессию, которую внёс ARCH-0017 Stage C (cutover `kodik-parser`): новый pipeline на `SourceCatalogEvent` отбрасывал `posterFilepath` (передавал `null` в `MeterSourceBridge`), и свежие meter-записи приходили без обложек. Возврат к старому контракту (`KodikContentExportDto.posterUrl()`) был отвергнут — он Kin-specific и не годится для OSS-consumer'ов; вместо этого расширили wire-format.
+
+**Что сделано:**
+- В `orinuno-source-contract::SourceContentInfo` добавлены поля `posterUrl`, `bigPosterUrl`, `screenshotUrls` (`List<String>`), `trailerUrls` (`List<String>`). Все nullable / non-empty; `@JsonInclude(NON_EMPTY)` гарантирует, что отсутствующие значения не появятся в JSON и старые fixtures (`title-observed.json`, `series-discovered.json`, …) остаются bit-identical. Builder получил соответствующие методы.
+- `JsonShapeStabilityTest` дополнен новым кейсом `movieDiscoveredWithPostersShape()` + новым golden-файлом `movie-discovered-with-posters.json` — locking shape для wire-format с заполненными poster-полями. Существующие fixtures **не менялись** (NON_EMPTY режет пустые коллекции).
+- В `orinuno-app::SourceEventMapper` (Stage 3) `buildInfo(...)` теперь парсит `KodikContent.materialData` (через `Jackson`) и вытягивает `poster_url_original` (приоритет) → `poster_url` → `anime_poster_url` → `drama_poster_url` для `posterUrl`; `poster_url_original` отдельно для `bigPosterUrl`; колонку `screenshots` (отдельный JSON-array) — для `screenshotUrls`. `trailerUrls` пока пустой (Kodik не отдаёт). Добавлены 4 новых unit-теста.
+- В `downstream-repo::external-bridge` (Stage 4) введён record `PosterAttachments(posterFilepath, bigPosterFilepath, trailerFilepaths)` с `empty()` / `posterOnly(...)` factories. Сигнатуры `MeterSourceBridge.bridge(event, attachments)` и `SourceCatalogEventMapper.toExportRequest(event, attachments)` теперь принимают `PosterAttachments` вместо `String posterFilepath`. `commonInfoOf(...)` пробрасывает `bigPosterFilepath` и `trailerFilepaths` (если не пусто) в meter's `ContentCommonInfo`. +5 новых тестов.
+- В `downstream-repo::kodik-parser::KodikExportScheduler` (Stage 5) восстановлен poster pipeline: новый метод `downloadPostersIfAvailable(event, kodikId)` читает URLs из `event.info()` (`posterUrl` + screenshots fallback, отдельно `bigPosterUrl`), скачивает через `KodikMediaDownloader.downloadAndStorePoster(...)` (тот же сервис, что использовался до cutover'а), оборачивает результат в `PosterAttachments` и передаёт в `bridge(...)`. Failure-tolerant: download error → `PosterAttachments.empty()`, экспорт продолжается. +3 новых теста.
+
+**Архитектурный смысл:**
+- `SourceCatalogEvent` теперь несёт **producer-side URLs** (что сорс показал). OSS-consumer (Telegram-бот, indexer) рендерит их напрямую.
+- `external-bridge::PosterAttachments` — Kin-side **MinIO object keys** (что Kin сложил у себя). Boundary между URL-семантикой и filepath-семантикой явный — никто не путает их в одном поле.
+- Мы НЕ ввели `meterapi.dto.ContentCommonInfo.previewImageFilepath` — этого поля в meter не существует (audit-table в ADR 0017 ошибочно его упоминал). Реальный набор: `posterFilepath` + `bigPosterFilepath` + `trailerFilepaths`.
 
 ---
 
