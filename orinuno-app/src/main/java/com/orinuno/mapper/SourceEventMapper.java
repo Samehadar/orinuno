@@ -1,5 +1,8 @@
 package com.orinuno.mapper;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.contract.source.ContentKindHint;
 import com.orinuno.contract.source.ExternalIds;
 import com.orinuno.contract.source.Provenance;
@@ -14,12 +17,15 @@ import com.orinuno.model.KodikEpisodeVariant;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Renders L1 Kodik state ({@link KodikContent} + decoded {@link KodikEpisodeVariant}s) into a
@@ -42,11 +48,20 @@ import java.util.Optional;
  *   <li><b>Provenance</b>: {@code sourceUrl=orinuno-app://kodik/<kodikId>}, {@code fetchedAt} from
  *       {@code content.updatedAt} when available, otherwise the supplied clock. Mirrors the
  *       producer-side discipline used by {@code KodikCatalogIngestion}.
+ *   <li><b>Posters</b> (ARCH-0017-FOLLOWUP-POSTER): {@link SourceContentInfo#posterUrl()} comes
+ *       from {@code material_data.poster_url_original} with fallbacks to {@code poster_url} /
+ *       {@code anime_poster_url} / {@code drama_poster_url}; {@link
+ *       SourceContentInfo#bigPosterUrl()} is the original-sized variant only; {@link
+ *       SourceContentInfo#screenshotUrls()} is the {@code screenshots} JSON array. {@link
+ *       SourceContentInfo#trailerUrls()} stays empty — Kodik does not expose trailer URLs in its L1
+ *       schema.
  * </ul>
  */
+@Slf4j
 public final class SourceEventMapper {
 
     private static final String SOURCE_TYPE = "kodik";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private SourceEventMapper() {}
 
@@ -90,6 +105,8 @@ public final class SourceEventMapper {
     }
 
     private static SourceContentInfo buildInfo(KodikContent content) {
+        Map<String, Object> materialData = parseMaterialData(content.getMaterialData());
+        List<String> screenshotUrls = parseScreenshots(content.getScreenshots());
         return SourceContentInfo.builder()
                 .titleRu(content.getTitle())
                 .titleEn(content.getTitleOrig())
@@ -101,7 +118,91 @@ public final class SourceEventMapper {
                                 .imdbId(content.getImdbId())
                                 .shikimoriId(content.getShikimoriId())
                                 .build())
+                .posterUrl(extractPosterUrl(materialData))
+                .bigPosterUrl(extractBigPosterUrl(materialData))
+                .screenshotUrls(screenshotUrls)
                 .build();
+    }
+
+    /**
+     * Reads the {@code poster_url_original}/{@code poster_url}/{@code anime_poster_url}/{@code
+     * drama_poster_url} fields from Kodik's {@code material_data} blob and returns the first
+     * non-blank value. Mirrors {@link com.orinuno.mapper.ContentMapper#extractPosterUrl} but with
+     * graceful fallbacks for the kind-specialised poster URLs that {@code KodikMaterialDataDto}
+     * also exposes.
+     */
+    private static String extractPosterUrl(Map<String, Object> materialData) {
+        if (materialData == null) {
+            return null;
+        }
+        return firstNonBlank(
+                materialData,
+                "poster_url_original",
+                "poster_url",
+                "anime_poster_url",
+                "drama_poster_url");
+    }
+
+    /**
+     * Returns the original/largest poster URL when Kodik exposes one separately from the regular
+     * {@code poster_url}. Falls back to {@code null} when only the regular variant is present —
+     * consumers can promote {@link #extractPosterUrl} when they need a single best-effort URL.
+     */
+    private static String extractBigPosterUrl(Map<String, Object> materialData) {
+        if (materialData == null) {
+            return null;
+        }
+        return firstNonBlank(materialData, "poster_url_original");
+    }
+
+    private static String firstNonBlank(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            Object value = map.get(key);
+            if (value instanceof String s && !s.isBlank()) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    private static Map<String, Object> parseMaterialData(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException e) {
+            log.warn(
+                    "SourceEventMapper: failed to parse material_data JSON, posters will be"
+                            + " omitted: {}",
+                    e.getMessage());
+            return null;
+        }
+    }
+
+    private static List<String> parseScreenshots(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            List<String> raw = OBJECT_MAPPER.readValue(json, new TypeReference<>() {});
+            if (raw == null) {
+                return Collections.emptyList();
+            }
+            List<String> sanitised = new ArrayList<>(raw.size());
+            for (String s : raw) {
+                if (s != null && !s.isBlank()) {
+                    sanitised.add(s);
+                }
+            }
+            return sanitised;
+        } catch (JsonProcessingException e) {
+            log.warn(
+                    "SourceEventMapper: failed to parse screenshots JSON, screenshotUrls will be"
+                            + " omitted: {}",
+                    e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     private static ContentKindHint deriveKindHint(String type) {
