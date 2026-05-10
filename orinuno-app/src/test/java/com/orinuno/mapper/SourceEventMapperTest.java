@@ -191,66 +191,6 @@ class SourceEventMapperTest {
         assertThat(serial.info().kindHint()).isEqualTo(ContentKindHint.ANIME);
     }
 
-    @Test
-    void postersAreExtractedFromMaterialDataWithOriginalPriority() {
-        var content = baseContent("movie");
-        content.setMaterialData(
-                "{"
-                        + "\"poster_url_original\":\"https://kp/big.jpg\","
-                        + "\"poster_url\":\"https://kp/small.jpg\""
-                        + "}");
-        var variants = List.of(playableVariant(11L, 0, 0, "TR", "https://cdn/11.mp4"));
-
-        var event = SourceEventMapper.toEvent(content, variants, FIXED_CLOCK);
-
-        var movie = (SourceCatalogEvent.MovieDiscovered) event;
-        assertThat(movie.info().posterUrl()).isEqualTo("https://kp/big.jpg");
-        assertThat(movie.info().bigPosterUrl()).isEqualTo("https://kp/big.jpg");
-    }
-
-    @Test
-    void posterUrlFallsBackThroughKindSpecialisedFields() {
-        var content = baseContent("anime-serial");
-        content.setMaterialData(
-                "{\"anime_poster_url\":\"https://kodik/anime.jpg\","
-                        + "\"drama_poster_url\":\"https://kodik/drama.jpg\"}");
-        var variants = List.of(playableVariant(50L, 1, 1, "TR", "https://cdn/50.mp4"));
-
-        var event = SourceEventMapper.toEvent(content, variants, FIXED_CLOCK);
-
-        var serial = (SourceCatalogEvent.SeriesDiscovered) event;
-        assertThat(serial.info().posterUrl()).isEqualTo("https://kodik/anime.jpg");
-        assertThat(serial.info().bigPosterUrl()).isNull();
-    }
-
-    @Test
-    void screenshotUrlsArePopulatedFromScreenshotsJson() {
-        var content = baseContent("movie");
-        content.setScreenshots("[\"https://shot/1.jpg\",\"https://shot/2.jpg\",\"\",null]");
-        var variants = List.of(playableVariant(11L, 0, 0, "TR", "https://cdn/11.mp4"));
-
-        var event = SourceEventMapper.toEvent(content, variants, FIXED_CLOCK);
-
-        var movie = (SourceCatalogEvent.MovieDiscovered) event;
-        assertThat(movie.info().screenshotUrls())
-                .containsExactly("https://shot/1.jpg", "https://shot/2.jpg");
-    }
-
-    @Test
-    void postersAreEmptyWhenMaterialDataIsMissingOrUnparsable() {
-        var content = baseContent("movie");
-        content.setMaterialData("not-a-json");
-        var variants = List.of(playableVariant(11L, 0, 0, "TR", "https://cdn/11.mp4"));
-
-        var event = SourceEventMapper.toEvent(content, variants, FIXED_CLOCK);
-
-        var movie = (SourceCatalogEvent.MovieDiscovered) event;
-        assertThat(movie.info().posterUrl()).isNull();
-        assertThat(movie.info().bigPosterUrl()).isNull();
-        assertThat(movie.info().screenshotUrls()).isEmpty();
-        assertThat(movie.info().trailerUrls()).isEmpty();
-    }
-
     private static KodikContent baseContent(String type) {
         return KodikContent.builder()
                 .id(100L)

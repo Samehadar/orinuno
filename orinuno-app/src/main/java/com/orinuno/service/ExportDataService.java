@@ -86,8 +86,8 @@ public class ExportDataService {
 
     /**
      * Stage B of ARCH-0017: render ready-for-export L1 rows as producer-side {@link
-     * SourceCatalogEvent}s for direct consumption by the external aggregator's {@code external
-     * bridge} (and any future open consumer). Same query and same variant filter as {@link
+     * SourceCatalogEvent}s for direct consumption by the external aggregator's{@code external bridge} (and any
+     * future open consumer). Same query and same variant filter as {@link
      * #getReadyForExport(PageRequest, LocalDateTime)} — different output shape.
      *
      * <p>Pagination is collapsed into a single {@code limit} parameter — the eventing endpoint is
