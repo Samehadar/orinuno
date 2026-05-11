@@ -139,9 +139,16 @@ public class ParserService {
                                                 "Variant not found: " + variantId));
                             }
                             KodikEpisodeVariant variant = opt.get();
-                            if (!force && variant.getMp4Link() != null) {
+                            // ADR 0018 Phase 0.4c — variant.getMp4Link() returns null after the
+                            // column drop. Skip-if-decoded check now consults episode_video via
+                            // findByIdWithDecodedVideo, which INNER-JOINs and only returns a row
+                            // when a populated video_url exists.
+                            if (!force
+                                    && episodeVariantRepository
+                                            .findByIdWithDecodedVideo(variantId)
+                                            .isPresent()) {
                                 log.info(
-                                        "ℹ️ Variant id={} already has mp4_link, skipping (pass"
+                                        "ℹ️ Variant id={} already has decoded video, skipping (pass"
                                                 + " force=true to redo)",
                                         variantId);
                                 return Mono.just(false);
@@ -335,8 +342,10 @@ public class ParserService {
             bestLink = any.getValue();
             pickedQuality = any.getKey();
         }
-        episodeVariantRepository.updateMp4LinkAndMethod(
-                variant.getId(), bestLink, result.method().name());
+        // ADR 0018 Phase 0.4c — episode_video is the sole store for decoded URLs.
+        // KodikEpisodeDualWriteService.mirrorDecode is the single writer (no longer "mirror" of
+        // a variant-table write; kept under the original name to avoid touching test mocks in
+        // this commit — renamed to KodikDecodedVideoWriter in a follow-up).
         if (episodeDualWriter != null) {
             episodeDualWriter.mirrorDecode(variant, result, pickedQuality, bestLink);
         }
