@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.meter.catalog.repository.CatalogEpisodeSourceLinkRepository">
+
+    <resultMap id="linkResultMap" type="com.orinuno.meter.catalog.model.CatalogEpisodeSourceLink">
+        <id property="id" column="id"/>
+        <result property="catalogEpisodeId" column="catalog_episode_id"/>
+        <result property="episodeSourceId" column="episode_source_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="findByEpisodeAndSource" resultMap="linkResultMap">
+        SELECT * FROM catalog_episode_source_link
+        WHERE catalog_episode_id = #{catalogEpisodeId}
+          AND episode_source_id = #{episodeSourceId}
+        LIMIT 1
+    </select>
+
+    <select id="findByCatalogEpisode" resultMap="linkResultMap">
+        SELECT * FROM catalog_episode_source_link
+        WHERE catalog_episode_id = #{catalogEpisodeId}
+        ORDER BY id
+    </select>
+
+    <select id="findByEpisodeSource" resultMap="linkResultMap">
+        SELECT * FROM catalog_episode_source_link
+        WHERE episode_source_id = #{episodeSourceId}
+        ORDER BY id
+    </select>
+
+    <!--
+        Idempotent insert: ON DUPLICATE KEY UPDATE id=id is a no-op that keeps the existing row.
+        Returns 1 on first insert, 2 on update with INSERT ... ON DUPLICATE — we normalise the
+        return value by simply using the affected-rows count; callers treat any positive result
+        the same way (link is now present).
+    -->
+    <insert id="upsert" parameterType="com.orinuno.meter.catalog.model.CatalogEpisodeSourceLink"
+            useGeneratedKeys="true" keyProperty="link.id">
+        INSERT INTO catalog_episode_source_link (
+            catalog_episode_id, episode_source_id, created_at
+        ) VALUES (
+            #{link.catalogEpisodeId}, #{link.episodeSourceId}, #{link.createdAt}
+        )
+        ON DUPLICATE KEY UPDATE id = id
+    </insert>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM catalog_episode_source_link
+    </select>
+
+</mapper>

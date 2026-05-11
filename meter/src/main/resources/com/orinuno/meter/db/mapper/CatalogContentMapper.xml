@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.meter.catalog.repository.CatalogContentRepository">
+
+    <resultMap id="contentResultMap" type="com.orinuno.meter.catalog.model.CatalogContent">
+        <id property="id" column="id"/>
+        <result property="titleRu" column="title_ru"/>
+        <result property="titleEn" column="title_en"/>
+        <result property="kind" column="kind"
+                javaType="com.orinuno.meter.catalog.model.CatalogContentKind"
+                typeHandler="com.orinuno.meter.catalog.repository.CatalogContentKindTypeHandler"/>
+        <result property="year" column="year"/>
+        <result property="shikimoriId" column="shikimori_id"/>
+        <result property="malId" column="mal_id"/>
+        <result property="imdbId" column="imdb_id"/>
+        <result property="kinopoiskId" column="kinopoisk_id"/>
+        <result property="mdlId" column="mdl_id"/>
+        <result property="tmdbId" column="tmdb_id"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="contentResultMap">
+        SELECT * FROM catalog_content WHERE id = #{id}
+    </select>
+
+    <select id="findByShikimoriId" resultMap="contentResultMap">
+        SELECT * FROM catalog_content WHERE shikimori_id = #{externalId} LIMIT 1
+    </select>
+
+    <select id="findByMalId" resultMap="contentResultMap">
+        SELECT * FROM catalog_content WHERE mal_id = #{externalId} LIMIT 1
+    </select>
+
+    <select id="findByImdbId" resultMap="contentResultMap">
+        SELECT * FROM catalog_content WHERE imdb_id = #{externalId} LIMIT 1
+    </select>
+
+    <select id="findByKinopoiskId" resultMap="contentResultMap">
+        SELECT * FROM catalog_content WHERE kinopoisk_id = #{externalId} LIMIT 1
+    </select>
+
+    <select id="findByMdlId" resultMap="contentResultMap">
+        SELECT * FROM catalog_content WHERE mdl_id = #{externalId} LIMIT 1
+    </select>
+
+    <select id="findByTmdbId" resultMap="contentResultMap">
+        SELECT * FROM catalog_content WHERE tmdb_id = #{externalId} LIMIT 1
+    </select>
+
+    <insert id="insert" parameterType="com.orinuno.meter.catalog.model.CatalogContent"
+            useGeneratedKeys="true" keyProperty="content.id">
+        INSERT INTO catalog_content (
+            title_ru, title_en, kind, year,
+            shikimori_id, mal_id, imdb_id, kinopoisk_id, mdl_id, tmdb_id,
+            created_at, updated_at
+        ) VALUES (
+            #{content.titleRu}, #{content.titleEn},
+            #{content.kind, javaType=com.orinuno.meter.catalog.model.CatalogContentKind, typeHandler=com.orinuno.meter.catalog.repository.CatalogContentKindTypeHandler},
+            #{content.year},
+            #{content.shikimoriId}, #{content.malId}, #{content.imdbId},
+            #{content.kinopoiskId}, #{content.mdlId}, #{content.tmdbId},
+            #{content.createdAt}, #{content.updatedAt}
+        )
+    </insert>
+
+    <!--
+        UPDATE protects identity columns and chrome via COALESCE on input — the resolver may pass
+        a partial entity (e.g. only the new shikimoriId) and we must not blank columns that other
+        sources have already filled. To explicitly clear an identity column the resolver calls
+        clearIdentityColumn(...).
+    -->
+    <update id="update" parameterType="com.orinuno.meter.catalog.model.CatalogContent">
+        UPDATE catalog_content SET
+            title_ru     = COALESCE(#{content.titleRu}, title_ru),
+            title_en     = COALESCE(#{content.titleEn}, title_en),
+            kind         = COALESCE(
+                #{content.kind, javaType=com.orinuno.meter.catalog.model.CatalogContentKind, typeHandler=com.orinuno.meter.catalog.repository.CatalogContentKindTypeHandler},
+                kind
+            ),
+            year         = COALESCE(#{content.year}, year),
+            shikimori_id = COALESCE(#{content.shikimoriId}, shikimori_id),
+            mal_id       = COALESCE(#{content.malId}, mal_id),
+            imdb_id      = COALESCE(#{content.imdbId}, imdb_id),
+            kinopoisk_id = COALESCE(#{content.kinopoiskId}, kinopoisk_id),
+            mdl_id       = COALESCE(#{content.mdlId}, mdl_id),
+            tmdb_id      = COALESCE(#{content.tmdbId}, tmdb_id),
+            updated_at   = #{content.updatedAt}
+        WHERE id = #{content.id}
+    </update>
+
+    <!--
+        Whitelist `column` against the six identity column names. The CHOOSE block makes user
+        input safe because only one of the static branches can match.
+    -->
+    <update id="clearIdentityColumn">
+        UPDATE catalog_content SET
+            <choose>
+                <when test="column == 'shikimori_id'">shikimori_id = NULL</when>
+                <when test="column == 'mal_id'">mal_id = NULL</when>
+                <when test="column == 'imdb_id'">imdb_id = NULL</when>
+                <when test="column == 'kinopoisk_id'">kinopoisk_id = NULL</when>
+                <when test="column == 'mdl_id'">mdl_id = NULL</when>
+                <when test="column == 'tmdb_id'">tmdb_id = NULL</when>
+                <otherwise>id = id</otherwise>
+            </choose>
+        WHERE id = #{id}
+    </update>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM catalog_content
+    </select>
+
+</mapper>
