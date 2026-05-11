@@ -1,0 +1,8 @@
+{
+  "method": "REGEX",
+  "qualities": {
+    "360": "https://cloud.kodik-storage.com/video/abc/360.mp4",
+    "480": "https://cloud.kodik-storage.com/video/abc/480.mp4",
+    "720": "https://cloud.kodik-storage.com/video/abc/720.mp4"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "title": "Naruto",
+  "limit": 20,
+  "withEpisodes": true,
+  "withMaterialData": true,
+  "types": "anime,anime-serial"
+}

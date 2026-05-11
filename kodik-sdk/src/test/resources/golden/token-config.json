@@ -1,0 +1,9 @@
+{
+  "tokenFile": "./data/kodik_tokens.json",
+  "bootstrapToken": null,
+  "bootstrapFromEnv": true,
+  "autoDiscoveryEnabled": true,
+  "validateOnStartup": true,
+  "deadRevalidationIntervalMinutes": 1440,
+  "tokenFailoverMaxAttempts": 3
+}
