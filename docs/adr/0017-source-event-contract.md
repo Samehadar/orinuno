@@ -128,7 +128,15 @@ Nothing. Module + emitter + refactor are independent of P1a (jut.su L1) and P1b 
 | New `CatalogSinkEventEmitterTest` (mock `CatalogPublicApi`) | this PR |
 | Golden-file JSON shape stability test inside `orinuno-source-contract` | this PR |
 | `CatalogIngestionIT` stays green (Spring picks up the default emitter, behaviour unchanged) | this PR |
-| Maven Central publish pipeline reuses `IDEA-SDK-4` plumbing | follow-up |
-| `OutboxEventEmitter` + `<context>_event_outbox` table | deferred |
+| Maven Central publish pipeline reuses `IDEA-SDK-4` plumbing | deferred — Maven Central отложен до явного внешнего потребителя; артефакты публикуются в локальный / internal Maven repo. Решение зафиксируется отдельным ADR при появлении триггера. |
+| `OutboxEventEmitter` + `<context>_event_outbox` table | deferred — шипится когда появится второй консьюмер `SourceCatalogEvent` (Kin `external bridge` → событие-driven вместо poll, либо OSS meter-сервис из ADR 0018 захочет at-least-once delivery). Дальнейший апгрейд до Kafka-event-sourcing трекается отдельным будущим ADR. |
 | `external bridge` in `external aggregator` (consumes `SourceCatalogEvent`, emits `ContentExportRequest`) | done (2026-05-10), follow-up landed |
 | `SourceContentInfo` poster URLs + `PosterAttachments` translator + scheduler download restore (ARCH-0017-FOLLOWUP-POSTER) | done (2026-05-10) |
+
+## Successor context
+
+После ADR 0016 ⇒ Layout A "stay monolith". ADR 0018 (pending) перевернёт направление на Layout B (per-source split + отдельный OSS `meter` сервис). `SourceCatalogEvent` + `SourceEventEmitter` контракт **остаётся неизменным** — он становится единственным API между:
+1. per-source services (`orinuno-source-kodik`, `orinuno-source-jutsu`) и Kin `external bridge`;
+2. теми же per-source services и новым OSS `meter` сервисом.
+
+Симметрия двух meter'ов (proprietary + OSS) под одним контрактом — главный результат ADR 0017, который Phase 5 нового плана только усиливает.

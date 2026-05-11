@@ -244,15 +244,19 @@ Nothing — this ADR fixes direction. Code work (`catalog_*` migrations, `Catalo
 | `AGENTS.md` "Bounded contexts" section | ✅ this PR |
 | `BACKLOG.md` P1/P2/P3 entries | ✅ this PR |
 | `TECH_DEBT.md` kodik L1+L2 hybrid entry | ✅ this PR |
-| P1a — `jutsu_title` / `jutsu_episode` / `jutsu_sync_state` migrations + repo | ⏳ pending |
-| Follow-up — `jutsu_film` table + repo (sibling of `jutsu_episode`, separate URL grammar `/{slug}/film-N.html`) | ✅ done (2026-05-08) |
-| P1a — `JutsuCatalogSyncService` (full + incremental) | ⏳ pending |
-| P1a — hybrid-fallback guards (rate limit + negative cache + kill-switch + metrics) | ⏳ pending |
-| P1a — `JutsuApiController` cutover to DB-first reads | ⏳ pending |
-| P1b — `catalog_content` / `catalog_content_external_id` / `catalog_episode` / `catalog_episode_source_link` migrations | ⏳ pending |
-| P1b — `CatalogIdentityResolver` + tests | ⏳ pending |
-| P1b — `CatalogIngestionService` + sync hooks from Kodik / jut.su contexts | ⏳ pending |
-| P2 — `/api/v1/catalog/*` controller + DTOs | ⏳ pending |
-| P2 — `GET /api/v1/sources/{provider}/content/{externalId}` unified raw lookup | ⏳ pending |
-| P3 — ArchUnit "no cross-context @Autowired except *PublicApi" test | ⏳ pending |
-| P3 — Liquibase guard "no cross-context FK" test | ⏳ pending |
+| P1a — `jutsu_title` / `jutsu_episode` / `jutsu_sync_state` migrations + repo | ✅ done (2026-05-08; see `db/changelog/scripts/20260508010000_create_jutsu_title.sql`, `..010100_create_jutsu_episode.sql`, `..010200_create_jutsu_sync_state.sql`) |
+| Follow-up — `jutsu_film` table + repo (sibling of `jutsu_episode`, separate URL grammar `/{slug}/film-N.html`) | ✅ done (2026-05-08; `..050000_create_jutsu_film.sql`) |
+| P1a — `JutsuCatalogSyncService` (full + incremental) | ✅ done (`com/orinuno/jutsu/sync/JutsuCatalogSyncService.java`, `JutsuCatalogSyncScheduler.java`, `JutsuNoticeWalkScheduler.java`) |
+| P1a — hybrid-fallback guards (rate limit + negative cache + kill-switch + metrics) | ✅ done (`com/orinuno/jutsu/fallback/JutsuLiveFallbackService.java`) |
+| P1a — `JutsuApiController` cutover to DB-first reads | ✅ done (`com/orinuno/controller/JutsuApiController.java` uses `JutsuCatalogReadService` + `JutsuLiveFallbackService`) |
+| P1b — `catalog_content` / `catalog_content_external_id` / `catalog_episode` / `catalog_episode_source_link` migrations | ✅ done (2026-05-08; `..030000_create_catalog_content.sql` through `..030300_create_catalog_episode_source_link.sql`) |
+| P1b — `CatalogIdentityResolver` + tests | ✅ done (`com/orinuno/catalog/internal/CatalogIdentityResolver.java`) |
+| P1b — `CatalogIngestionService` + sync hooks from Kodik / jut.su contexts | ✅ done — superseded by ADR 0017 `CatalogSinkEventEmitter` pattern (`com/orinuno/catalog/ingestion/CatalogSinkEventEmitter.java`); sync hooks live in `KodikCatalogIngestion` + `JutsuCatalogIngestion` |
+| P2 — `/api/v1/catalog/*` controller + DTOs | ⏳ pending — **superseded by ADR 0018 (pending): canonical REST живёт в новом OSS `meter` сервисе, `orinuno` отдаёт через shared-DB read-only repository + Caffeine cache** |
+| P2 — `GET /api/v1/sources/{provider}/content/{externalId}` unified raw lookup | ⏳ pending — sub-priority, не блокирует per-source split |
+| P3 — ArchUnit "no cross-context @Autowired except *PublicApi" test | ⏳ pending — landed as Phase 0.3 prerequisite for ADR 0018 |
+| P3 — Liquibase guard "no cross-context FK" test | ⏳ pending — landed as Phase 0.3 prerequisite for ADR 0018 |
+
+## Successor
+
+**ADR 0018 (pending)** — "Per-source service split: Kodik first". Overrides §"Decision" of this ADR: triggers fired (standalone product + OSS community fork + per-parser failure isolation + preventive scaling). Layout B (per-source services + separate OSS meter) becomes the new trajectory. This ADR remains historically valid — it documents the monolith era and the triggers that ended it. Update once ADR 0018 lands.
