@@ -32,6 +32,7 @@ its own standalone deployable, so the reactor now ships these modules:
 |--------|---------|---------|
 | [`orinuno-app/`](./orinuno-app/) | Public API gateway + monolith fallback: controllers, MyBatis, Liquibase, REST surface, reverse-proxy to per-source services. | ✅ Boot |
 | [`orinuno-source-kodik/`](./orinuno-source-kodik/) | Standalone Kodik deployable (ADR 0018 Phase 2). Owns the `kodik_*` schema and serves `/api/v1/kodik/*`, `/api/v1/embed/*`, `/api/v1/reference/*`, `/api/v1/source-events/*`. | ✅ Boot |
+| [`meter/`](./meter/) | OSS catalog collector (ADR 0018 Phase 5). Subscribes to `/api/v1/source-events/ready` on per-source services, single-writer of the shared `catalog_*` schema. Skeleton today; write-path migration in Phases 5.2+. | ✅ Boot |
 | [`orinuno-source-contract/`](./orinuno-source-contract/) | Sealed `SourceCatalogEvent` contract shared with meter consumers (ADR 0017). | ❌ pure Java |
 | [`kodik-sdk/`](./kodik-sdk/) | Spring-free Kodik HTTP/decoder/token SDK + drift detector. | ❌ Reactor + WebFlux only |
 | [`kodik-sdk-spring-boot-starter/`](./kodik-sdk-spring-boot-starter/) | Auto-config glue: wires kodik-sdk beans into any Spring Boot host. | ✅ auto-config |
