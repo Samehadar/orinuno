@@ -1,6 +1,6 @@
 # ADR 0019 — Per-source service split: JutSu next
 
-Status: **Accepted (deferred)** — implementation gated on ADR 0018 Phase 3 (14 days of `orinuno-source-kodik` prod stability).
+Status: **Accepted** — Phase 3 calendar gate dropped (pre-prod refactor mode, no prod traffic to measure stability against); Phase 4 implementation begins immediately.
 Date: 2026-05-12
 Supersedes: nothing.
 Refines: ADR 0018 (extends the split pattern to the second source).
@@ -169,7 +169,7 @@ Secondary: the reverse-proxy filter generalisation (§"Reverse-proxy prefixes" r
 | Item | Status |
 |------|--------|
 | ADR 0019 + index update | ✅ this PR |
-| Phase 3 prod gate cleared | ⏳ pending (ADR 0018 Phase 3) |
+| Phase 3 prod gate cleared | 🗑️ dropped (pre-prod refactor mode) |
 | Phase 4.1 module skeleton | ⏳ pending |
 | Phase 4.2 schema migration | ⏳ pending |
 | Phase 4.3 repos + mappers | ⏳ pending |
