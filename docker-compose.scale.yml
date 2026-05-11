@@ -1,0 +1,32 @@
+# ADR 0018 Phase 5.8 — multi-instance orinuno overlay.
+#
+# Drops `app`'s host port binding (incompatible with --scale because all
+# replicas would fight for the same host port) and puts an nginx load
+# balancer in front. Demo / external consumers hit nginx on host :8084
+# instead of orinuno-app directly.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --scale app=3
+#   curl http://localhost:8084/api/v1/health         # round-robins
+#   curl http://localhost:8084/lb-health             # nginx-side probe
+#
+# Per ADR 0018 Phase 5.7a, consumers may observe up to
+# orinuno.catalog.cache.expire-after-write-seconds (default 300s) of lag
+# between instances on catalog reads. Reads not requiring strict freshness
+# are safe to round-robin without sticky sessions.
+services:
+  app:
+    # Strip the host port mapping — every replica binds 8080 internally,
+    # nginx's `app:8080` upstream resolves to all of them.
+    ports: !override []
+
+  lb:
+    image: nginx:1.27-alpine
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "8084:80"
+    volumes:
+      - ./scripts/nginx/orinuno-lb.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
