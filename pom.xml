@@ -24,6 +24,7 @@
     <modules>
         <module>orinuno-source-contract</module>
         <module>kodik-sdk</module>
+        <module>kodik-sdk-spring-boot-starter</module>
         <module>jutsu-sdk</module>
         <module>sibnet-sdk</module>
         <module>aniboom-sdk</module>
@@ -60,6 +61,11 @@
             forbids accidental drift.
         -->
         <jsoup.version>1.22.2</jsoup.version>
+        <!--
+            Spring Boot version matches what spring-boot-starter-parent 3.5.x ships so the
+            kodik-sdk-spring-boot-starter is binary-compatible with orinuno-app at runtime.
+        -->
+        <spring-boot.version>3.5.14</spring-boot.version>
     </properties>
 
     <dependencyManagement>
@@ -72,6 +78,11 @@
             <dependency>
                 <groupId>com.orinuno</groupId>
                 <artifactId>kodik-sdk</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orinuno</groupId>
+                <artifactId>kodik-sdk-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
