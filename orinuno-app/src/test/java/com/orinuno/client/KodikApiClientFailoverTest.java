@@ -2,8 +2,6 @@ package com.orinuno.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kodik.client.KodikApiRateLimiter;
@@ -12,10 +10,9 @@ import com.kodik.client.dto.KodikSearchRequest;
 import com.kodik.token.KodikFunction;
 import com.kodik.token.KodikTokenEntry;
 import com.kodik.token.KodikTokenException;
+import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
 import com.orinuno.configuration.OrinunoProperties;
-import com.orinuno.token.KodikTokenAutoDiscovery;
-import com.orinuno.token.KodikTokenRegistry;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +22,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -57,10 +53,9 @@ class KodikApiClientFailoverTest {
         properties.getKodik().setAutoDiscoveryEnabled(false);
         properties.getKodik().setTokenFailoverMaxAttempts(3);
 
-        ObjectProvider<KodikTokenAutoDiscovery> noDiscovery =
-                (ObjectProvider<KodikTokenAutoDiscovery>) mock(ObjectProvider.class);
-        when(noDiscovery.getIfAvailable()).thenReturn(null);
-        registry = new KodikTokenRegistry(properties, noDiscovery);
+        registry =
+                new KodikTokenRegistry(
+                        com.orinuno.token.TokenConfigTestSupport.toConfig(properties), () -> null);
         registry.init();
 
         passthroughLimiter = new KodikApiRateLimiter(properties.getParse().getRateLimitPerMinute());

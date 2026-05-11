@@ -1,4 +1,4 @@
-package com.orinuno.token;
+package com.kodik.token;
 
 import com.kodik.client.http.RotatingUserAgentProvider;
 import java.time.Duration;
@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
@@ -19,7 +18,6 @@ import org.springframework.web.reactive.function.client.WebClient;
  * / {@code get_m3u8_playlist_link}).
  */
 @Slf4j
-@Component
 public class KodikTokenAutoDiscovery {
 
     private static final String SCRIPT_URL = "https://kodik-add.com/add-players.min.js?v=2";

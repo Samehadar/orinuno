@@ -1,19 +1,13 @@
-package com.orinuno.token;
+package com.kodik.token;
 
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikSearchResponse;
-import com.kodik.token.KodikFunction;
-import com.kodik.token.KodikTokenEntry;
-import com.kodik.token.KodikTokenTier;
-import com.orinuno.configuration.OrinunoProperties;
 import java.time.Duration;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -37,7 +31,6 @@ import reactor.core.publisher.Mono;
  * </ul>
  */
 @Slf4j
-@Component
 public class KodikTokenValidator {
 
     /** Exact phrase Kodik returns when a token is missing or rejected. */
@@ -49,17 +42,21 @@ public class KodikTokenValidator {
     private static final Duration PROBE_SPACING = Duration.ofSeconds(2);
 
     private final WebClient kodikApiWebClient;
-    private final OrinunoProperties properties;
+    private final KodikTokenConfig config;
     private final KodikTokenRegistry registry;
     private final KodikResponseMapper responseMapper;
 
+    /**
+     * ADR 0018 Phase 1.4b — Spring-free constructor. orinuno-app's KodikSdkConfiguration passes the
+     * qualified {@code kodikApiWebClient} bean explicitly.
+     */
     public KodikTokenValidator(
-            @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
-            OrinunoProperties properties,
+            WebClient kodikApiWebClient,
+            KodikTokenConfig config,
             KodikTokenRegistry registry,
             KodikResponseMapper responseMapper) {
         this.kodikApiWebClient = kodikApiWebClient;
-        this.properties = properties;
+        this.config = config;
         this.registry = registry;
         this.responseMapper = responseMapper;
     }
@@ -160,7 +157,7 @@ public class KodikTokenValidator {
         if (dead == null || dead.isEmpty()) {
             return List.of();
         }
-        long cooldownMinutes = properties.getKodik().getDeadRevalidationIntervalMinutes();
+        long cooldownMinutes = config.deadRevalidationIntervalMinutes();
         if (cooldownMinutes <= 0) {
             return List.copyOf(dead);
         }
@@ -201,7 +198,12 @@ public class KodikTokenValidator {
         return probe("/list", params, tokenValue, "list");
     }
 
-    boolean probe(
+    /**
+     * Visible-for-testing — tests in {@code orinuno-app}'s {@code com.orinuno.token} package no
+     * longer share package scope with the validator, so the probe method is promoted to public. The
+     * signature is otherwise identical to the prior package-private hook.
+     */
+    public boolean probe(
             String path,
             MultiValueMap<String, String> params,
             String tokenValue,
@@ -276,7 +278,7 @@ public class KodikTokenValidator {
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {});
     }
 
-    OrinunoProperties getProperties() {
-        return properties;
+    KodikTokenConfig getConfig() {
+        return config;
     }
 }

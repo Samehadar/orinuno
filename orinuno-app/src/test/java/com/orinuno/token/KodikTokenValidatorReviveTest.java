@@ -1,12 +1,12 @@
 package com.orinuno.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
+import com.kodik.token.KodikTokenValidator;
 import com.orinuno.configuration.OrinunoProperties;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,7 +19,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -43,10 +42,7 @@ class KodikTokenValidatorReviveTest {
         properties.getKodik().setBootstrapFromEnv(false);
         properties.getKodik().setAutoDiscoveryEnabled(false);
 
-        ObjectProvider<KodikTokenAutoDiscovery> noDiscovery =
-                (ObjectProvider<KodikTokenAutoDiscovery>) mock(ObjectProvider.class);
-        when(noDiscovery.getIfAvailable()).thenReturn(null);
-        registry = new KodikTokenRegistry(properties, noDiscovery);
+        registry = new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), () -> null);
     }
 
     @Nested
@@ -69,7 +65,10 @@ class KodikTokenValidatorReviveTest {
 
             KodikTokenValidator validator =
                     new KodikTokenValidator(
-                            okWebClient(), properties, registry, new KodikResponseMapper());
+                            okWebClient(),
+                            TokenConfigTestSupport.toConfig(properties),
+                            registry,
+                            new KodikResponseMapper());
 
             validator.validateAll();
 
@@ -97,7 +96,10 @@ class KodikTokenValidatorReviveTest {
 
             KodikTokenValidator validator =
                     new KodikTokenValidator(
-                            okWebClient(), properties, registry, new KodikResponseMapper());
+                            okWebClient(),
+                            TokenConfigTestSupport.toConfig(properties),
+                            registry,
+                            new KodikResponseMapper());
 
             validator.validateAll();
 
@@ -134,7 +136,10 @@ class KodikTokenValidatorReviveTest {
                             });
             KodikTokenValidator validator =
                     new KodikTokenValidator(
-                            counting, properties, registry, new KodikResponseMapper());
+                            counting,
+                            TokenConfigTestSupport.toConfig(properties),
+                            registry,
+                            new KodikResponseMapper());
 
             validator.validateAll();
 
@@ -175,7 +180,10 @@ class KodikTokenValidatorReviveTest {
                                                     .build()));
             KodikTokenValidator validator =
                     new KodikTokenValidator(
-                            rejecting, properties, registry, new KodikResponseMapper());
+                            rejecting,
+                            TokenConfigTestSupport.toConfig(properties),
+                            registry,
+                            new KodikResponseMapper());
 
             validator.validateAll();
 

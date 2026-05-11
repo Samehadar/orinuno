@@ -1,32 +1,29 @@
-package com.orinuno.token;
+package com.kodik.token;
 
-import com.orinuno.configuration.OrinunoProperties;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
 /**
  * Runs the token validator on application start (so the registry's availability matrix is fresh
- * before the first API call) and every {@code orinuno.kodik.validation-interval-minutes} after
- * that. Off-loads blocking HTTP work to a separate thread so the startup never blocks the Spring
- * context.
+ * before the first API call) and on every scheduled revalidation tick. Off-loads blocking HTTP work
+ * to a separate thread so the startup never blocks the host process.
+ *
+ * <p>ADR 0018 Phase 1.4b — Spring-free. orinuno-app's KodikSdkConfiguration calls {@link
+ * #onStart()} from its own {@code @PostConstruct} and registers a {@code @Scheduled} wrapper that
+ * forwards to {@link #scheduledRevalidation()}.
  */
 @Slf4j
-@Component
 public class KodikTokenLifecycle {
 
     private final KodikTokenValidator validator;
-    private final OrinunoProperties properties;
+    private final KodikTokenConfig config;
 
-    public KodikTokenLifecycle(KodikTokenValidator validator, OrinunoProperties properties) {
+    public KodikTokenLifecycle(KodikTokenValidator validator, KodikTokenConfig config) {
         this.validator = validator;
-        this.properties = properties;
+        this.config = config;
     }
 
-    @PostConstruct
     public void onStart() {
-        if (!properties.getKodik().isValidateOnStartup()) {
+        if (!config.validateOnStartup()) {
             log.info("Kodik token startup validation disabled by config");
             return;
         }
@@ -54,10 +51,6 @@ public class KodikTokenLifecycle {
         worker.start();
     }
 
-    @Scheduled(
-            fixedRateString = "${orinuno.kodik.validation-interval-minutes:360}",
-            timeUnit = java.util.concurrent.TimeUnit.MINUTES,
-            initialDelayString = "${orinuno.kodik.validation-interval-minutes:360}")
     public void scheduledRevalidation() {
         if (!validator.hasAnythingToValidate()) {
             return;

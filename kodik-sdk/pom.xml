@@ -73,6 +73,15 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!--
+            JSR-310 datatype module for the token registry — KodikTokenEntry uses Instant /
+            LocalDateTime, which need explicit JavaTimeModule registration on the ObjectMapper.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
 
         <!-- Outbound RPS budget — symmetric to jutsu-sdk's rate limiter. -->
         <dependency>

@@ -4,52 +4,143 @@ import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.http.RotatingUserAgentProvider;
 import com.kodik.sdk.drift.DriftDetector;
+import com.kodik.token.KodikTokenAutoDiscovery;
+import com.kodik.token.KodikTokenConfig;
+import com.kodik.token.KodikTokenLifecycle;
+import com.kodik.token.KodikTokenMetrics;
+import com.kodik.token.KodikTokenRegistry;
+import com.kodik.token.KodikTokenValidator;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.web.reactive.function.client.WebClient;
 
 /**
  * Spring wiring for the {@code kodik-sdk} module (ADR 0018 Phase 1.2c onwards).
  *
  * <p>The SDK is Spring-free by design — no {@code @Component}, no {@code @Autowired}, no Boot
  * auto-configuration. This class is the single bridge: it translates {@link OrinunoProperties} into
- * plain constructor arguments for SDK types and re-exposes them as Spring beans so the rest of
- * orinuno-app (controllers, services, tests) can inject them as before — only the package import
- * changes.
+ * plain constructor arguments / config records for SDK types and re-exposes them as Spring beans so
+ * the rest of orinuno-app can inject them as before.
  *
  * <p>Symmetric to {@link JutsuSdkConfiguration} for the jut.su SDK and {@link DriftDetectorConfig}
  * for the drift detector. Once {@code kodik-sdk-spring-boot-starter} lands in Phase 1.6, these
- * beans move into the starter and this configuration class shrinks.
+ * beans move into the starter and this class shrinks.
  */
 @Configuration
 public class KodikSdkConfiguration {
 
-    /**
-     * Centralises the desktop User-Agent pool used by every Kodik HTTP path (iframe HTML, player
-     * JS, decoder POST, CDN HLS fetch, Playwright stealth context). The provider is stateless and
-     * thread-safe — a single bean is shared across the app.
-     */
+    private final OrinunoProperties properties;
+    private final KodikTokenLifecycle tokenLifecycle;
+
+    public KodikSdkConfiguration(OrinunoProperties properties, KodikTokenLifecycle tokenLifecycle) {
+        this.properties = properties;
+        this.tokenLifecycle = tokenLifecycle;
+    }
+
     @Bean
     public RotatingUserAgentProvider rotatingUserAgentProvider() {
         return new RotatingUserAgentProvider();
     }
 
-    /**
-     * Outbound rate budget for every call into Kodik's REST API. The SDK takes a plain {@code int}
-     * for the per-minute permit count so it has no compile-time link to {@link OrinunoProperties};
-     * we extract the value here and hand it over.
-     */
     @Bean
     public KodikApiRateLimiter kodikApiRateLimiter(OrinunoProperties properties) {
         return new KodikApiRateLimiter(properties.getParse().getRateLimitPerMinute());
     }
 
-    /**
-     * Jackson-based deserialiser for Kodik raw responses, wrapping the {@link DriftDetector}. The
-     * two-arg constructor is the Spring-side one; the no-arg constructor (default drift detector)
-     * is used only by plain unit tests.
-     */
     @Bean
     public KodikResponseMapper kodikResponseMapper(DriftDetector driftDetector) {
         return new KodikResponseMapper(driftDetector);
+    }
+
+    /**
+     * ADR 0018 Phase 1.4b — translates {@link OrinunoProperties.KodikProperties} into the
+     * Spring-free {@link KodikTokenConfig} record consumed by the token classes.
+     */
+    @Bean
+    public KodikTokenConfig kodikTokenConfig(OrinunoProperties properties) {
+        OrinunoProperties.KodikProperties k = properties.getKodik();
+        return KodikTokenConfig.builder()
+                .tokenFile(k.getTokenFile())
+                .bootstrapToken(k.getToken())
+                .bootstrapFromEnv(k.isBootstrapFromEnv())
+                .autoDiscoveryEnabled(k.isAutoDiscoveryEnabled())
+                .validateOnStartup(k.isValidateOnStartup())
+                .deadRevalidationIntervalMinutes(k.getDeadRevalidationIntervalMinutes())
+                .tokenFailoverMaxAttempts(k.getTokenFailoverMaxAttempts())
+                .build();
+    }
+
+    @Bean
+    public KodikTokenAutoDiscovery kodikTokenAutoDiscovery(
+            WebClient.Builder builder, RotatingUserAgentProvider userAgentProvider) {
+        return new KodikTokenAutoDiscovery(builder, userAgentProvider);
+    }
+
+    /**
+     * Registry is the central piece of the token subsystem. The {@link ObjectProvider}-to-{@link
+     * java.util.function.Supplier} adapter preserves the lazy-resolve behaviour that the prior
+     * Spring constructor relied on (auto-discovery is only consulted when the on-disk file is
+     * absent and bootstrap-from-env yields nothing). {@code init()} replaces the SDK class's former
+     * {@code @PostConstruct} and runs after the bean is fully built.
+     */
+    @Bean
+    public KodikTokenRegistry kodikTokenRegistry(
+            KodikTokenConfig config,
+            ObjectProvider<KodikTokenAutoDiscovery> autoDiscoveryProvider) {
+        KodikTokenRegistry registry =
+                new KodikTokenRegistry(config, autoDiscoveryProvider::getIfAvailable);
+        registry.init();
+        return registry;
+    }
+
+    @Bean
+    public KodikTokenValidator kodikTokenValidator(
+            @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
+            KodikTokenConfig config,
+            KodikTokenRegistry registry,
+            KodikResponseMapper responseMapper) {
+        return new KodikTokenValidator(kodikApiWebClient, config, registry, responseMapper);
+    }
+
+    @Bean
+    public KodikTokenLifecycle kodikTokenLifecycle(
+            KodikTokenValidator validator, KodikTokenConfig config) {
+        return new KodikTokenLifecycle(validator, config);
+    }
+
+    @Bean
+    public KodikTokenMetrics kodikTokenMetrics(
+            KodikTokenRegistry registry, MeterRegistry meterRegistry) {
+        KodikTokenMetrics metrics = new KodikTokenMetrics(registry);
+        metrics.init(meterRegistry);
+        return metrics;
+    }
+
+    /**
+     * Replaces the SDK's former {@code @PostConstruct} on {@link KodikTokenLifecycle} — the SDK
+     * class is now Spring-free, so we trigger startup validation from this @Configuration after the
+     * lifecycle bean is wired.
+     */
+    @PostConstruct
+    public void onStart() {
+        tokenLifecycle.onStart();
+    }
+
+    /**
+     * Replaces the SDK's former {@code @Scheduled} on {@link KodikTokenLifecycle}. The same {@code
+     * orinuno.kodik.validation-interval-minutes} property drives the cadence — the property layout
+     * did not change, only where the annotation lives.
+     */
+    @Scheduled(
+            fixedRateString = "${orinuno.kodik.validation-interval-minutes:360}",
+            timeUnit = java.util.concurrent.TimeUnit.MINUTES,
+            initialDelayString = "${orinuno.kodik.validation-interval-minutes:360}")
+    public void scheduledTokenRevalidation() {
+        tokenLifecycle.scheduledRevalidation();
     }
 }

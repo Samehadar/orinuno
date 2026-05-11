@@ -1,14 +1,8 @@
-package com.orinuno.token;
+package com.kodik.token;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.kodik.token.KodikFunction;
-import com.kodik.token.KodikTokenEntry;
-import com.kodik.token.KodikTokenException;
-import com.kodik.token.KodikTokenTier;
-import com.orinuno.configuration.OrinunoProperties;
-import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,9 +19,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.stereotype.Component;
 
 /**
  * Thread-safe Kodik token registry backed by a single JSON file at {@code
@@ -39,7 +32,6 @@ import org.springframework.stereotype.Component;
  * rewritten under the write lock using a {@code .tmp + ATOMIC_MOVE} pattern.
  */
 @Slf4j
-@Component
 public class KodikTokenRegistry {
 
     private static final List<KodikTokenTier> LIVE_TIERS =
@@ -52,18 +44,23 @@ public class KodikTokenRegistry {
                     KodikFunction.GET_LINK,
                     KodikFunction.GET_M3U8_PLAYLIST_LINK);
 
-    private final OrinunoProperties properties;
-    private final ObjectProvider<KodikTokenAutoDiscovery> autoDiscoveryProvider;
+    private final KodikTokenConfig config;
+    private final Supplier<KodikTokenAutoDiscovery> autoDiscoveryProvider;
     private final ObjectMapper mapper;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     private Path tokenFilePath;
     private KodikTokenRegistryFile state = KodikTokenRegistryFile.empty();
 
+    /**
+     * ADR 0018 Phase 1.4b — constructor takes a plain {@link KodikTokenConfig} record + a {@link
+     * Supplier} for the auto-discovery service (replaces Spring's {@code ObjectProvider}).
+     * orinuno-app's KodikSdkConfiguration translates {@code OrinunoProperties.Kodik} into the
+     * record and supplies the auto-discovery bean lazily via {@code beanFactory::getBean}.
+     */
     public KodikTokenRegistry(
-            OrinunoProperties properties,
-            ObjectProvider<KodikTokenAutoDiscovery> autoDiscoveryProvider) {
-        this.properties = properties;
+            KodikTokenConfig config, Supplier<KodikTokenAutoDiscovery> autoDiscoveryProvider) {
+        this.config = config;
         this.autoDiscoveryProvider = autoDiscoveryProvider;
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
@@ -71,9 +68,12 @@ public class KodikTokenRegistry {
         this.mapper.enable(SerializationFeature.INDENT_OUTPUT);
     }
 
-    @PostConstruct
+    /**
+     * Initialise the on-disk state. Replaces the prior {@code @PostConstruct} hook — orinuno-app's
+     * KodikSdkConfiguration calls this from its own {@code @PostConstruct}.
+     */
     public void init() {
-        tokenFilePath = Paths.get(properties.getKodik().getTokenFile()).toAbsolutePath();
+        tokenFilePath = Paths.get(config.tokenFile()).toAbsolutePath();
         log.info("Kodik token registry path: {}", tokenFilePath);
 
         if (Files.isRegularFile(tokenFilePath)) {
@@ -432,8 +432,8 @@ public class KodikTokenRegistry {
     }
 
     private void bootstrapMissingFile() {
-        String envToken = properties.getKodik().getToken();
-        if (properties.getKodik().isBootstrapFromEnv() && envToken != null && !envToken.isBlank()) {
+        String envToken = config.bootstrapToken();
+        if (config.bootstrapFromEnv() && envToken != null && !envToken.isBlank()) {
             KodikTokenEntry entry =
                     KodikTokenEntry.builder()
                             .value(envToken)
@@ -446,8 +446,9 @@ public class KodikTokenRegistry {
             return;
         }
 
-        if (properties.getKodik().isAutoDiscoveryEnabled()) {
-            KodikTokenAutoDiscovery discovery = autoDiscoveryProvider.getIfAvailable();
+        if (config.autoDiscoveryEnabled()) {
+            KodikTokenAutoDiscovery discovery =
+                    autoDiscoveryProvider == null ? null : autoDiscoveryProvider.get();
             if (discovery != null) {
                 Optional<String> discovered = discovery.discoverLegacyToken();
                 if (discovered.isPresent()) {
