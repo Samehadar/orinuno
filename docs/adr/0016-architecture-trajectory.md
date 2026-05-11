@@ -259,4 +259,4 @@ Nothing — this ADR fixes direction. Code work (`catalog_*` migrations, `Catalo
 
 ## Successor
 
-**ADR 0018 (pending)** — "Per-source service split: Kodik first". Overrides §"Decision" of this ADR: triggers fired (standalone product + OSS community fork + per-parser failure isolation + preventive scaling). Layout B (per-source services + separate OSS meter) becomes the new trajectory. This ADR remains historically valid — it documents the monolith era and the triggers that ended it. Update once ADR 0018 lands.
+**Superseded by [ADR 0018](0018-per-source-service-split-kodik.md)** (2026-05-11) — "Per-source service split: Kodik first". Overrides §"Decision" of this ADR: triggers fired (standalone product + OSS community fork + per-parser failure isolation + preventive scaling). Layout B (per-source services + separate OSS meter + multi-instance `orinuno` gateway over shared catalog DB) becomes the new trajectory. This ADR remains historically valid — it documents the monolith era and the triggers that ended it.
