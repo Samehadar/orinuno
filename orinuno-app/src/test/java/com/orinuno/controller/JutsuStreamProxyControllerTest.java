@@ -2,7 +2,7 @@ package com.orinuno.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.orinuno.client.http.RotatingUserAgentProvider;
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.jutsu.JutsuConfig;
 import com.orinuno.jutsu.auth.JutsuSessionManager;

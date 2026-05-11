@@ -4,8 +4,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.KodikResponseMapper;
 import com.kodik.sdk.drift.DriftRecord;
-import com.orinuno.client.KodikResponseMapper;
 import com.orinuno.model.ParseRequestStatus;
 import com.orinuno.repository.ParseRequestRepository;
 import com.orinuno.service.DecoderHealthTracker;

@@ -1,6 +1,5 @@
-package com.orinuno.client;
+package com.kodik.client;
 
-import com.orinuno.configuration.OrinunoProperties;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.concurrent.Executors;
@@ -8,19 +7,22 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 @Slf4j
-@Component
 public class KodikApiRateLimiter {
 
     private final Semaphore semaphore;
     private final int maxPermits;
     private final ScheduledExecutorService scheduler;
 
-    public KodikApiRateLimiter(OrinunoProperties properties) {
-        this.maxPermits = properties.getParse().getRateLimitPerMinute();
+    /**
+     * ADR 0018 Phase 1.2c — constructor now takes a plain int instead of OrinunoProperties so the
+     * SDK has zero Spring-config dependency. orinuno-app's KodikSdkConfiguration extracts the value
+     * from {@code OrinunoProperties.getParse().getRateLimitPerMinute()} and passes it in.
+     */
+    public KodikApiRateLimiter(int maxPermitsPerMinute) {
+        this.maxPermits = maxPermitsPerMinute;
         this.semaphore = new Semaphore(maxPermits);
         this.scheduler =
                 Executors.newSingleThreadScheduledExecutor(

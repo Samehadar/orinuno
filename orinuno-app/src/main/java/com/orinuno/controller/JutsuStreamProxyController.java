@@ -1,6 +1,6 @@
 package com.orinuno.controller;
 
-import com.orinuno.client.http.RotatingUserAgentProvider;
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.jutsu.auth.JutsuSessionManager;
 import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
 import io.micrometer.core.instrument.Counter;

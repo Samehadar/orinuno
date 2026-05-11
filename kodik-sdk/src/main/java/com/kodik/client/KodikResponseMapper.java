@@ -1,4 +1,4 @@
-package com.orinuno.client;
+package com.kodik.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -13,20 +13,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 /**
  * Thin facade over {@link DriftDetector} that adds Jackson-based deserialization for Kodik raw
  * responses. All drift-tracking state lives in the underlying detector; the legacy getters here
  * delegate to it for backwards-compatible callers (HealthController, tests).
  *
- * <p>Two constructors are kept on purpose: Spring uses {@link #KodikResponseMapper(DriftDetector)}
- * via {@code @Autowired}, while plain unit tests can do {@code new KodikResponseMapper()} and get a
- * default detector with {@link DriftSamplingProperties#defaults()}.
+ * <p>ADR 0018 Phase 1.2c — @Component and @Autowired stripped. orinuno-app's KodikSdkConfiguration
+ * registers the Spring bean via {@link #KodikResponseMapper(DriftDetector)}. Plain unit tests still
+ * use the no-arg constructor.
  */
 @Slf4j
-@Component
 public class KodikResponseMapper {
 
     private final ObjectMapper objectMapper;
@@ -36,7 +33,6 @@ public class KodikResponseMapper {
         this(new DriftDetector(DriftSamplingProperties.defaults()));
     }
 
-    @Autowired
     public KodikResponseMapper(DriftDetector driftDetector) {
         this.driftDetector = driftDetector;
         this.objectMapper = new ObjectMapper();

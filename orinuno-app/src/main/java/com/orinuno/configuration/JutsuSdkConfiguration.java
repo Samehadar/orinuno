@@ -1,6 +1,6 @@
 package com.orinuno.configuration;
 
-import com.orinuno.client.http.RotatingUserAgentProvider;
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.JutsuConfig;
 import com.orinuno.jutsu.auth.JutsuSessionManager;

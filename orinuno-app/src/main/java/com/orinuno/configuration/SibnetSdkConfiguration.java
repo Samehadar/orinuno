@@ -1,6 +1,6 @@
 package com.orinuno.configuration;
 
-import com.orinuno.client.http.RotatingUserAgentProvider;
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.sibnet.SibnetClient;
 import com.orinuno.sibnet.SibnetConfig;
 import org.springframework.context.annotation.Bean;

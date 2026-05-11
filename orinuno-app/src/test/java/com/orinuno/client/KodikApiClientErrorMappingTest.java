@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.KodikApiRateLimiter;
+import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikSearchRequest;
 import com.kodik.client.exception.KodikRateLimitedException;
 import com.kodik.client.exception.KodikUpstreamException;
@@ -57,7 +59,7 @@ class KodikApiClientErrorMappingTest {
         registry.init();
         registry.register(fullScope("test-token"), KodikTokenTier.STABLE);
 
-        rateLimiter = new KodikApiRateLimiter(properties);
+        rateLimiter = new KodikApiRateLimiter(properties.getParse().getRateLimitPerMinute());
     }
 
     @Test

@@ -1,7 +1,7 @@
 package com.orinuno.controller;
 
+import com.kodik.client.KodikResponseMapper;
 import com.kodik.sdk.drift.DriftRecord;
-import com.orinuno.client.KodikResponseMapper;
 import com.orinuno.model.KodikProxy;
 import com.orinuno.model.OrinunoDumpState;
 import com.orinuno.model.ParseRequestStatus;

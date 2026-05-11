@@ -1,4 +1,4 @@
-package com.orinuno.client.http;
+package com.kodik.client.http;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

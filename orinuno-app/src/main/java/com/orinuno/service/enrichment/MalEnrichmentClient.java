@@ -2,7 +2,7 @@ package com.orinuno.service.enrichment;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orinuno.client.http.RotatingUserAgentProvider;
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikContentEnrichment;
 import java.math.BigDecimal;
