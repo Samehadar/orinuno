@@ -1,0 +1,9 @@
+{
+  "time": "9ms",
+  "total": 30,
+  "results": [
+    { "title": "аниме", "count": 24594 },
+    { "title": "боевик", "count": 19246 },
+    { "title": "комедия", "count": 20188 }
+  ]
+}
