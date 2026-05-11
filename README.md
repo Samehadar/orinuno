@@ -63,6 +63,22 @@ The reactor ships two Maven profiles (root `pom.xml`):
   working — they're served by orinuno-app's own controllers against its
   local schema.
 
+### Multi-instance orinuno (Phase 5.8)
+
+orinuno-app is stateless w.r.t. catalog (the shared catalog DB is the
+source of truth, per-instance Caffeine caches are read-side). Scale
+horizontally behind nginx with the `scale` overlay:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --scale app=3
+curl http://localhost:8084/api/v1/health        # nginx round-robins across replicas
+```
+
+Per-instance cache lag is bounded by `orinuno.catalog.cache.expire-after-write-seconds`
+(default 300s) — two replicas may serve different versions of a catalog row
+during that window. Acceptable for catalog reads; documented in ADR 0018
+Phase 5.8.
+
 Provider SDKs are designed for direct consumption — depend on the SDK
 artefact you need without pulling in MySQL, Liquibase, MyBatis, or any
 orinuno-app type. See the per-SDK READMEs for the public API and config
