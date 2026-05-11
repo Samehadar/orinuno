@@ -79,6 +79,16 @@
             <version>${reactor.version}</version>
             <scope>test</scope>
         </dependency>
+        <!--
+            cvh-downloader-sdk pulled in at test scope so end-to-end live tests can hand the MPD
+            URL produced by aksor-sdk to the downloader's DashStrategy. Prod code keeps zero
+            dependency on the downloader.
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>cvh-downloader-sdk</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
