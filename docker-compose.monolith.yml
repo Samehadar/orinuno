@@ -1,0 +1,22 @@
+# ADR 0018 Phase 2.10 — monolith overlay.
+#
+# Drops the standalone source-kodik service and clears the reverse-proxy env
+# on `app` so the Kodik routes are served by orinuno-app's own controllers
+# (orinuno.source-kodik.base-url empty → KodikUpstreamProxyFilter inactive,
+# Phase 2.8). Keeps everything else identical to the default compose stack.
+#
+# Usage (OSS contributor / single-container dev):
+#   docker compose -f docker-compose.yml -f docker-compose.monolith.yml up
+#
+# To verify the overlay flipped the env correctly:
+#   docker compose -f docker-compose.yml -f docker-compose.monolith.yml config | grep -A2 ORINUNO_SOURCE_KODIK_BASE_URL
+services:
+  app:
+    environment:
+      ORINUNO_SOURCE_KODIK_BASE_URL: ""
+
+  source-kodik:
+    # Compose treats `profiles` as opt-in — listing only "never" here means
+    # the service is defined but never started without explicit
+    # `--profile never`, which we never pass. Cleaner than `scale: 0`.
+    profiles: ["never"]

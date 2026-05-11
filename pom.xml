@@ -21,6 +21,26 @@
         SDK module stays Spring-free on purpose.
     -->
 
+    <!--
+        Module set is profile-driven (ADR 0018 Phase 2.10):
+
+          • Default / -P full-split (active when no profile picked):
+              all modules, including the per-source standalone deployables
+              (orinuno-source-kodik, future orinuno-source-jutsu, …).
+
+          • -P monolith:
+              skips the per-source deployables and only builds the libraries
+              + orinuno-app. orinuno-app already carries every Kodik
+              controller/service internally (Phase 2.8 reverse-proxy is gated
+              by orinuno.source-kodik.base-url), so the resulting fat jar is
+              a fully-functional monolith — matches the OSS contributor DX
+              promised in ADR 0018 §"Reference projects".
+
+          • The "core" modules (libraries + orinuno-app) live under the
+            full-split profile too, not under <modules>, so Maven's profile
+            override rules give us the clean "monolith = subset" behaviour
+            without duplicating the module list in two places.
+    -->
     <modules>
         <module>orinuno-source-contract</module>
         <module>kodik-sdk</module>
@@ -29,7 +49,6 @@
         <module>sibnet-sdk</module>
         <module>aniboom-sdk</module>
         <module>orinuno-app</module>
-        <module>orinuno-source-kodik</module>
     </modules>
 
     <properties>
@@ -170,4 +189,39 @@
             </plugins>
         </pluginManagement>
     </build>
+
+    <profiles>
+        <!--
+            full-split (default): build the entire per-source service stack
+            on top of the core libs + orinuno-app. This is the production
+            deployment shape — orinuno gateway in front of standalone
+            per-source services.
+        -->
+        <profile>
+            <id>full-split</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <modules>
+                <module>orinuno-source-kodik</module>
+            </modules>
+        </profile>
+
+        <!--
+            monolith: skips per-source standalone deployables. orinuno-app
+            still ships every Kodik controller/service internally (the
+            Phase 2.8 reverse-proxy filter is gated by
+            orinuno.source-kodik.base-url being set), so leaving that env
+            unset keeps everything in a single Spring Boot process.
+
+            Usage:
+                mvn -P monolith clean package
+                docker compose -f docker-compose.yml -f docker-compose.monolith.yml up
+        -->
+        <profile>
+            <id>monolith</id>
+            <!-- Intentionally empty <modules> — relies on the base list
+                 above for the core build set, omits source-kodik. -->
+        </profile>
+    </profiles>
 </project>
