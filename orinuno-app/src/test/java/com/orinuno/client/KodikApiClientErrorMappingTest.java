@@ -10,12 +10,12 @@ import com.kodik.client.dto.KodikSearchRequest;
 import com.kodik.client.exception.KodikRateLimitedException;
 import com.kodik.client.exception.KodikUpstreamException;
 import com.kodik.client.exception.KodikValidationException;
+import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenEntry;
+import com.kodik.token.KodikTokenTier;
 import com.orinuno.configuration.OrinunoProperties;
-import com.orinuno.token.KodikFunction;
 import com.orinuno.token.KodikTokenAutoDiscovery;
-import com.orinuno.token.KodikTokenEntry;
 import com.orinuno.token.KodikTokenRegistry;
-import com.orinuno.token.KodikTokenTier;
 import java.nio.file.Path;
 import java.util.function.BiFunction;
 import org.junit.jupiter.api.BeforeEach;
@@ -166,7 +166,7 @@ class KodikApiClientErrorMappingTest {
                                 + " attempts, NoWorkingToken if registry was drained mid-loop),"
                                 + " NOT a KodikValidationException — token-failover loop owns this"
                                 + " case")
-                .isInstanceOf(com.orinuno.token.KodikTokenException.class)
+                .isInstanceOf(com.kodik.token.KodikTokenException.class)
                 .isNotInstanceOf(KodikValidationException.class)
                 .isNotInstanceOf(KodikUpstreamException.class);
     }

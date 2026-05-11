@@ -8,10 +8,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.kodik.client.embed.KodikIdType;
+import com.kodik.token.KodikTokenException;
 import com.orinuno.client.embed.KodikEmbedException;
 import com.orinuno.model.dto.EmbedLinkDto;
 import com.orinuno.service.KodikEmbedService;
-import com.orinuno.token.KodikTokenException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

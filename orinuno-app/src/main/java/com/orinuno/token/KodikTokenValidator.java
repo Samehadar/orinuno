@@ -2,6 +2,9 @@ package com.orinuno.token;
 
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikSearchResponse;
+import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenEntry;
+import com.kodik.token.KodikTokenTier;
 import com.orinuno.configuration.OrinunoProperties;
 import java.time.Duration;
 import java.util.EnumMap;
