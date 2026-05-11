@@ -135,7 +135,7 @@ Nothing. Module + emitter + refactor are independent of P1a (jut.su L1) and P1b 
 
 ## Successor context
 
-После ADR 0016 ⇒ Layout A "stay monolith". ADR 0018 (pending) перевернёт направление на Layout B (per-source split + отдельный OSS `meter` сервис). `SourceCatalogEvent` + `SourceEventEmitter` контракт **остаётся неизменным** — он становится единственным API между:
+После ADR 0016 ⇒ Layout A "stay monolith". [ADR 0018](0018-per-source-service-split-kodik.md) (2026-05-11) перевернул направление на Layout B (per-source split + отдельный OSS `meter` сервис). `SourceCatalogEvent` + `SourceEventEmitter` контракт **остаётся неизменным** — он становится единственным API между:
 1. per-source services (`orinuno-source-kodik`, `orinuno-source-jutsu`) и Kin `external bridge`;
 2. теми же per-source services и новым OSS `meter` сервисом.
 
