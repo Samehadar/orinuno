@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.meter.catalog.repository.CatalogContentExternalIdRepository">
+
+    <resultMap id="externalIdResultMap" type="com.orinuno.meter.catalog.model.CatalogContentExternalId">
+        <id property="id" column="id"/>
+        <result property="contentId" column="content_id"/>
+        <result property="sourceType" column="source_type"
+                javaType="com.orinuno.meter.catalog.model.CatalogSourceType"
+                typeHandler="com.orinuno.meter.catalog.repository.CatalogSourceTypeTypeHandler"/>
+        <result property="externalId" column="external_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="findByExternalId" resultMap="externalIdResultMap">
+        SELECT * FROM catalog_content_external_id
+        WHERE source_type = #{sourceType, javaType=com.orinuno.meter.catalog.model.CatalogSourceType, typeHandler=com.orinuno.meter.catalog.repository.CatalogSourceTypeTypeHandler}
+          AND external_id = #{externalId}
+        LIMIT 1
+    </select>
+
+    <select id="findByContentId" resultMap="externalIdResultMap">
+        SELECT * FROM catalog_content_external_id
+        WHERE content_id = #{contentId}
+        ORDER BY id
+    </select>
+
+    <select id="findByContentIdAndSource" resultMap="externalIdResultMap">
+        SELECT * FROM catalog_content_external_id
+        WHERE content_id = #{contentId}
+          AND source_type = #{sourceType, javaType=com.orinuno.meter.catalog.model.CatalogSourceType, typeHandler=com.orinuno.meter.catalog.repository.CatalogSourceTypeTypeHandler}
+        ORDER BY id
+    </select>
+
+    <insert id="insert" parameterType="com.orinuno.meter.catalog.model.CatalogContentExternalId"
+            useGeneratedKeys="true" keyProperty="link.id">
+        INSERT INTO catalog_content_external_id (
+            content_id, source_type, external_id, created_at
+        ) VALUES (
+            #{link.contentId},
+            #{link.sourceType, javaType=com.orinuno.meter.catalog.model.CatalogSourceType, typeHandler=com.orinuno.meter.catalog.repository.CatalogSourceTypeTypeHandler},
+            #{link.externalId},
+            #{link.createdAt}
+        )
+    </insert>
+
+    <update id="reassignContent">
+        UPDATE catalog_content_external_id
+        SET content_id = #{contentId}
+        WHERE source_type = #{sourceType, javaType=com.orinuno.meter.catalog.model.CatalogSourceType, typeHandler=com.orinuno.meter.catalog.repository.CatalogSourceTypeTypeHandler}
+          AND external_id = #{externalId}
+    </update>
+
+    <delete id="deleteByContentId">
+        DELETE FROM catalog_content_external_id WHERE content_id = #{contentId}
+    </delete>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM catalog_content_external_id
+    </select>
+
+</mapper>

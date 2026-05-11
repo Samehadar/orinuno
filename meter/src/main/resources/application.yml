@@ -47,6 +47,12 @@ spring:
     contexts: ${LIQUIBASE_CONTEXTS:default}
     enabled: ${SPRING_LIQUIBASE_ENABLED:true}
 
+mybatis:
+  mapper-locations: classpath:com/orinuno/meter/db/mapper/*.xml,classpath:com/orinuno/meter/db/mapper/**/*.xml
+  type-aliases-package: com.orinuno.meter.catalog.model,com.orinuno.meter.poller
+  configuration:
+    map-underscore-to-camel-case: true
+
 # Per-source service URLs. Empty by default; deploys set these to wire up polling
 # once Phase 5.5 lands the *RemoteEventPoller migration.
 orinuno:

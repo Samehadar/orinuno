@@ -22,7 +22,6 @@ public class ContentService {
 
     private final ContentRepository contentRepository;
     private final EpisodeVariantRepository episodeVariantRepository;
-    private final KodikCatalogIngestion catalogIngestion;
 
     public Optional<ContentDto> findById(Long id) {
         return contentRepository.findById(id).map(ContentMapper::toDto);
@@ -67,11 +66,10 @@ public class ContentService {
      * PF7: Find or create content, with fallback grouping by (title, year) if kinopoisk_id is
      * absent.
      *
-     * <p>After persistence, the row is fed to {@link KodikCatalogIngestion#ingest(KodikContent)}
-     * (ARCH-0016 P1b Step 1.C.B) so the L3 universal catalog gets a synchronous binding for the
-     * Kodik external ids. The bridge is gated by the {@code
-     * orinuno.kodik.catalog-ingestion.enabled} kill-switch and isolates its failures internally, so
-     * this method's contract is unchanged.
+     * <p>ADR 0018 Phase 5.6 — the catalog-ingestion hand-off moved into {@code meter}. orinuno-app
+     * is no longer the L3 writer; it only owns the L1 Kodik row here. The L1 → L3 bridge is served
+     * by {@code orinuno-source-kodik}'s {@code /api/v1/source-events/ready} stream which meter
+     * polls.
      */
     public KodikContent findOrCreateContent(KodikContent content) {
         if (content.getKinopoiskId() != null && !content.getKinopoiskId().isBlank()) {
@@ -81,7 +79,6 @@ public class ContentService {
                 KodikContent found = existing.get();
                 content.setId(found.getId());
                 contentRepository.update(content);
-                catalogIngestion.ingest(content);
                 return content;
             }
         } else {
@@ -97,7 +94,6 @@ public class ContentService {
                     KodikContent found = existing.get();
                     content.setId(found.getId());
                     contentRepository.update(content);
-                    catalogIngestion.ingest(content);
                     return content;
                 }
             }
@@ -105,7 +101,6 @@ public class ContentService {
 
         contentRepository.insert(content);
         log.info("📝 Created new content: id={}, title='{}'", content.getId(), content.getTitle());
-        catalogIngestion.ingest(content);
         return content;
     }
 

@@ -22,3 +22,5 @@ databaseChangeLog:
       file: db/catalog-changelog/scripts/20260508030200_create_catalog_episode.sql
   - include:
       file: db/catalog-changelog/scripts/20260508030300_create_catalog_episode_source_link.sql
+  - include:
+      file: db/catalog-changelog/scripts/20260511020000_create_remote_source_watermark.sql

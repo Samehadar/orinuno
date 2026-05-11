@@ -13,13 +13,25 @@
  */
 package com.orinuno.meter;
 
+import java.time.Clock;
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
+@MapperScan(basePackages = {"com.orinuno.meter.catalog.repository", "com.orinuno.meter.poller"})
 public class Application {
+
+    /** UTC system clock shared by the poller. Overridable in tests via fixed Clock. */
+    @Bean
+    @ConditionalOnMissingBean
+    public Clock systemClock() {
+        return Clock.systemUTC();
+    }
 
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);

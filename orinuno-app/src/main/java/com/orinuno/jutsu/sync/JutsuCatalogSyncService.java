@@ -84,7 +84,6 @@ public class JutsuCatalogSyncService {
     private final JutsuFilmRepository filmRepository;
     private final JutsuSyncStateRepository syncStateRepository;
     private final OrinunoProperties properties;
-    private final JutsuCatalogIngestion catalogIngestion;
 
     public JutsuCatalogSyncService(
             JutsuClient client,
@@ -92,15 +91,13 @@ public class JutsuCatalogSyncService {
             JutsuEpisodeRepository episodeRepository,
             JutsuFilmRepository filmRepository,
             JutsuSyncStateRepository syncStateRepository,
-            OrinunoProperties properties,
-            JutsuCatalogIngestion catalogIngestion) {
+            OrinunoProperties properties) {
         this.client = client;
         this.titleRepository = titleRepository;
         this.episodeRepository = episodeRepository;
         this.filmRepository = filmRepository;
         this.syncStateRepository = syncStateRepository;
         this.properties = properties;
-        this.catalogIngestion = catalogIngestion;
     }
 
     /**
@@ -168,7 +165,6 @@ public class JutsuCatalogSyncService {
                 slot++;
                 JutsuTitle row = toTitle(entry, page, slot, now);
                 titleRepository.upsert(row);
-                catalogIngestion.ingest(row);
                 titlesUpserted++;
             }
             if (!response.hasMore()) {
@@ -350,7 +346,6 @@ public class JutsuCatalogSyncService {
                 if (info == null) continue;
                 JutsuTitle infoRow = infoToTitle(info, LocalDateTime.now());
                 titleRepository.upsert(infoRow);
-                catalogIngestion.ingest(infoRow);
                 List<JutsuEpisode> episodes = infoToEpisodes(info, LocalDateTime.now());
                 if (!episodes.isEmpty()) {
                     episodeRepository.upsertAll(episodes);
@@ -365,7 +360,6 @@ public class JutsuCatalogSyncService {
                 JutsuTitle placeholder =
                         noticeToPlaceholderTitle(sample, slug, LocalDateTime.now());
                 titleRepository.upsert(placeholder);
-                catalogIngestion.ingest(placeholder);
                 placeholderUpserts++;
             }
         }
