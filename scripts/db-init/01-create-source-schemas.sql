@@ -13,6 +13,14 @@ CREATE DATABASE IF NOT EXISTS `orinuno_source_kodik`
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
+-- ADR 0018 Phase 5.2a — shared catalog schema owned (write-side) by `meter`.
+-- orinuno-app currently keeps a parallel copy of catalog_* in the orinuno
+-- schema; Phase 5.4 cuts the read-path over to this shared schema, Phase 5.6
+-- drops the parallel copy from the orinuno schema.
+CREATE DATABASE IF NOT EXISTS `orinuno_catalog`
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+
 -- Reserved for Phase 4 — kept here so the schema list is grep-discoverable.
 -- CREATE DATABASE IF NOT EXISTS `orinuno_source_jutsu`
 --     CHARACTER SET utf8mb4

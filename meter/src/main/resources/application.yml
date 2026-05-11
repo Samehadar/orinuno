@@ -37,11 +37,15 @@ spring:
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  # Liquibase stays disabled in the skeleton — Phase 5.2 ships the actual changelog
-  # take-over from orinuno-app and turns this on. Until then meter MUST NOT race
-  # orinuno-app's migrations.
+  # ADR 0018 Phase 5.2a — meter owns the catalog_* changesets in the SHARED
+  # catalog schema (orinuno_catalog). orinuno-app keeps its own catalog_* copy
+  # in the orinuno schema for the read-path until Phase 5.4 cuts it over.
+  # Default ON in real deploys (fresh shared schema needs the migrations);
+  # override SPRING_LIQUIBASE_ENABLED=false locally if DB isn't reachable.
   liquibase:
-    enabled: ${SPRING_LIQUIBASE_ENABLED:false}
+    change-log: classpath:db/catalog-changelog/liquibase-changelog.yaml
+    contexts: ${LIQUIBASE_CONTEXTS:default}
+    enabled: ${SPRING_LIQUIBASE_ENABLED:true}
 
 # Per-source service URLs. Empty by default; deploys set these to wire up polling
 # once Phase 5.5 lands the *RemoteEventPoller migration.
