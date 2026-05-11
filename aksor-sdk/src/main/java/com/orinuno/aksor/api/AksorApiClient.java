@@ -4,11 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.orinuno.aksor.AksorConfig;
 import com.orinuno.aksor.AksorErrorCodes;
 import com.orinuno.aksor.AksorException;
+import com.orinuno.aksor.drift.AksorDriftDetector;
+import com.orinuno.aksor.drift.AksorDriftSignal;
 import com.orinuno.aksor.model.AksorVideoQualities;
 import com.orinuno.aksor.parser.AksorHashParser;
 import jakarta.annotation.Nullable;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -23,8 +26,14 @@ public final class AksorApiClient {
 
     private final AksorConfig config;
     private final WebClient client;
+    private final AksorDriftDetector drift;
 
     public AksorApiClient(AksorConfig config, WebClient.Builder webClientBuilder) {
+        this(config, webClientBuilder, AksorDriftDetector.disabled());
+    }
+
+    public AksorApiClient(
+            AksorConfig config, WebClient.Builder webClientBuilder, AksorDriftDetector drift) {
         this.config = config;
         this.client =
                 webClientBuilder
@@ -32,6 +41,7 @@ public final class AksorApiClient {
                         .defaultHeader("User-Agent", config.userAgent())
                         .defaultHeader("Accept", "application/json, text/plain, */*")
                         .build();
+        this.drift = drift == null ? AksorDriftDetector.disabled() : drift;
     }
 
     public Mono<AksorVideoQualities> getQualities(String hash) {
@@ -59,7 +69,7 @@ public final class AksorApiClient {
                         })
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .map(AksorApiClient::mapQualities)
+                .map(body -> mapQualities(body, hash, drift))
                 .onErrorResume(
                         ex -> {
                             if (ex instanceof AksorException) {
@@ -72,12 +82,13 @@ public final class AksorApiClient {
                         });
     }
 
-    private static AksorVideoQualities mapQualities(JsonNode body) {
+    static AksorVideoQualities mapQualities(JsonNode body, String hash, AksorDriftDetector drift) {
         if (body == null) {
             throw new AksorException(AksorErrorCodes.AKSOR_API_ERROR, "empty body");
         }
         JsonNode q = body.path("qualities");
         if (q.isMissingNode() || q.isNull()) {
+            drift.record(AksorDriftSignal.AKSOR_QUALITIES_MISSING, Map.of("hash", hash));
             throw new AksorException(AksorErrorCodes.AKSOR_NO_QUALITIES, "no qualities node");
         }
         AksorVideoQualities qualities =
@@ -89,6 +100,7 @@ public final class AksorApiClient {
                         text(q.path("q2k")),
                         text(q.path("q4k")));
         if (qualities.isEmpty()) {
+            drift.record(AksorDriftSignal.AKSOR_QUALITIES_ALL_NULL, Map.of("hash", hash));
             throw new AksorException(AksorErrorCodes.AKSOR_NO_QUALITIES, "all quality slots blank");
         }
         return qualities;

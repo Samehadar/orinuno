@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orinuno.aksor.AksorConfig;
 import com.orinuno.aksor.AksorErrorCodes;
 import com.orinuno.aksor.AksorException;
+import com.orinuno.aksor.drift.AksorDriftDetector;
+import com.orinuno.aksor.drift.AksorDriftSignal;
 import com.orinuno.aksor.host.AksorHostPageParser;
 import com.orinuno.aksor.model.AksorAnime;
 import com.orinuno.aksor.model.AksorEpisode;
@@ -51,15 +53,26 @@ public final class YummyAniHost implements AksorHostPageParser {
 
     private final AksorConfig config;
     private final HttpClient httpClient;
+    private final AksorDriftDetector drift;
 
     @SuppressWarnings("unused")
     public YummyAniHost(AksorConfig config, WebClient.Builder webClientBuilder) {
-        this(config, defaultJdkClient(config));
+        this(config, defaultJdkClient(config), AksorDriftDetector.disabled());
+    }
+
+    public YummyAniHost(
+            AksorConfig config, WebClient.Builder webClientBuilder, AksorDriftDetector drift) {
+        this(config, defaultJdkClient(config), drift);
     }
 
     YummyAniHost(AksorConfig config, HttpClient httpClient) {
+        this(config, httpClient, AksorDriftDetector.disabled());
+    }
+
+    YummyAniHost(AksorConfig config, HttpClient httpClient, AksorDriftDetector drift) {
         this.config = config;
         this.httpClient = httpClient;
+        this.drift = drift == null ? AksorDriftDetector.disabled() : drift;
     }
 
     private static HttpClient defaultJdkClient(AksorConfig config) {
@@ -92,6 +105,9 @@ public final class YummyAniHost implements AksorHostPageParser {
                         html -> {
                             PageMeta meta = parsePage(html, pageUrl);
                             if (meta.animeId() == null) {
+                                drift.record(
+                                        AksorDriftSignal.YUMMY_PAGE_NO_ANIME_ID,
+                                        java.util.Map.of("hostId", hostId(), "pageUrl", pageUrl));
                                 return Mono.error(
                                         new AksorException(
                                                 AksorErrorCodes.AKSOR_PAGE_PARSE_ERROR,
@@ -203,7 +219,7 @@ public final class YummyAniHost implements AksorHostPageParser {
         String url = origin + path;
         return Mono.fromCallable(() -> fetchSync(url, "application/json", pageUrl))
                 .subscribeOn(Schedulers.boundedElastic())
-                .map(json -> buildAnime(meta, pageUrl, json))
+                .map(json -> buildAnime(meta, pageUrl, json, drift))
                 .onErrorMap(
                         ex ->
                                 ex instanceof AksorException
@@ -215,17 +231,25 @@ public final class YummyAniHost implements AksorHostPageParser {
     }
 
     static AksorAnime buildAnime(PageMeta meta, String pageUrl, String videosJson) {
+        return buildAnime(meta, pageUrl, videosJson, AksorDriftDetector.disabled());
+    }
+
+    static AksorAnime buildAnime(
+            PageMeta meta, String pageUrl, String videosJson, AksorDriftDetector drift) {
         try {
             JsonNode root = OBJECT_MAPPER.readTree(videosJson);
             JsonNode response = root.path("response");
             if (!response.isArray()) {
+                drift.record(
+                        AksorDriftSignal.YUMMY_VIDEOS_RESPONSE_NOT_ARRAY,
+                        java.util.Map.of("animeId", String.valueOf(meta.animeId())));
                 throw new AksorException(
                         AksorErrorCodes.AKSOR_PAGE_PARSE_ERROR,
                         "yummyani videos response is not an array");
             }
             List<AksorEpisode> episodes = new ArrayList<>();
             for (JsonNode entry : response) {
-                AksorEpisode ep = mapEpisode(entry);
+                AksorEpisode ep = mapEpisode(entry, drift);
                 if (ep != null) {
                     episodes.add(ep);
                 }
@@ -247,15 +271,28 @@ public final class YummyAniHost implements AksorHostPageParser {
     }
 
     @Nullable
-    private static AksorEpisode mapEpisode(JsonNode entry) {
+    private static AksorEpisode mapEpisode(JsonNode entry, AksorDriftDetector drift) {
         String iframeUrl = textOrNull(entry.path("iframe_url"));
         String player = textOrNull(entry.path("data").path("player"));
         String dubbing = textOrNull(entry.path("data").path("dubbing"));
-        if (player == null || !player.toLowerCase().contains(AKSOR_PLAYER_NAME)) {
+        if (player == null) {
+            return null;
+        }
+        if (!player.toLowerCase().contains(AKSOR_PLAYER_NAME)) {
+            drift.record(
+                    AksorDriftSignal.YUMMY_EPISODE_UNKNOWN_PLAYER,
+                    java.util.Map.of("player", player));
             return null;
         }
         String hash = AksorHashParser.extract(iframeUrl).orElse(null);
         if (hash == null) {
+            drift.record(
+                    AksorDriftSignal.YUMMY_EPISODE_NO_HASH,
+                    java.util.Map.of(
+                            "iframeUrl",
+                            iframeUrl == null ? "(null)" : iframeUrl,
+                            "videoId",
+                            entry.path("video_id").asText("(unknown)")));
             return null;
         }
         JsonNode skips = entry.path("skips");

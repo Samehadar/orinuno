@@ -50,6 +50,21 @@ class AksorClientBuilderTest {
     }
 
     @Test
+    void defaultDriftDetectorIsDisabled() {
+        AksorClient client = AksorClient.builder().build();
+        assertThat(client.driftDetector().isEnabled()).isFalse();
+    }
+
+    @Test
+    void driftDetectorOptInExposedViaAccessor() {
+        com.orinuno.aksor.drift.AksorDriftDetector detector =
+                new com.orinuno.aksor.drift.AksorDriftDetector();
+        AksorClient client = AksorClient.builder().driftDetector(detector).build();
+        assertThat(client.driftDetector()).isSameAs(detector);
+        assertThat(client.driftDetector().isEnabled()).isTrue();
+    }
+
+    @Test
     void replaceHostsDropsDefault() {
         AksorClient client =
                 AksorClient.builder().replaceHosts(List.of(fake("only", "y.test"))).build();

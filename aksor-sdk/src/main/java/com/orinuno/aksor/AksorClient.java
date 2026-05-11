@@ -2,6 +2,7 @@ package com.orinuno.aksor;
 
 import com.orinuno.aksor.api.AksorApiClient;
 import com.orinuno.aksor.decoder.AksorPipelineDecoder;
+import com.orinuno.aksor.drift.AksorDriftDetector;
 import com.orinuno.aksor.host.AksorHostPageParser;
 import com.orinuno.aksor.host.AksorHostRegistry;
 import com.orinuno.aksor.host.yummy.YummyAniHost;
@@ -32,16 +33,19 @@ public final class AksorClient {
     private final AksorHostRegistry hostRegistry;
     private final AksorApiClient apiClient;
     private final AksorPipelineDecoder decoder;
+    private final AksorDriftDetector driftDetector;
 
     private AksorClient(
             AksorConfig config,
             AksorHostRegistry hostRegistry,
             AksorApiClient apiClient,
-            AksorPipelineDecoder decoder) {
+            AksorPipelineDecoder decoder,
+            AksorDriftDetector driftDetector) {
         this.config = config;
         this.hostRegistry = hostRegistry;
         this.apiClient = apiClient;
         this.decoder = decoder;
+        this.driftDetector = driftDetector;
     }
 
     public static Builder builder() {
@@ -85,9 +89,20 @@ public final class AksorClient {
         return decoder;
     }
 
+    /**
+     * Exposes the {@link AksorDriftDetector} this client emits signals into. Poll {@link
+     * AksorDriftDetector#snapshot()} for dashboards / health checks. Returns {@link
+     * AksorDriftDetector#disabled()} when the caller did not opt in via {@link
+     * Builder#driftDetector(AksorDriftDetector)}.
+     */
+    public AksorDriftDetector driftDetector() {
+        return driftDetector;
+    }
+
     public static final class Builder {
         private AksorConfig config;
         private WebClient.Builder webClientBuilder;
+        private AksorDriftDetector driftDetector;
         private final List<AksorHostPageParser> extraHosts = new ArrayList<>();
         private List<AksorHostPageParser> replacementHosts;
 
@@ -100,6 +115,16 @@ public final class AksorClient {
 
         public Builder webClientBuilder(WebClient.Builder webClientBuilder) {
             this.webClientBuilder = webClientBuilder;
+            return this;
+        }
+
+        /**
+         * Opt into drift detection. Pass {@code new AksorDriftDetector()} to start collecting
+         * signals from the default {@link YummyAniHost} and {@link AksorApiClient}. Default is a
+         * no-op so the cost stays at zero for callers that do not care.
+         */
+        public Builder driftDetector(AksorDriftDetector driftDetector) {
+            this.driftDetector = driftDetector;
             return this;
         }
 
@@ -123,20 +148,22 @@ public final class AksorClient {
             AksorConfig effectiveConfig = config != null ? config : AksorConfig.builder().build();
             WebClient.Builder builder =
                     webClientBuilder != null ? webClientBuilder : WebClient.builder();
-            AksorApiClient apiClient = new AksorApiClient(effectiveConfig, builder);
+            AksorDriftDetector effectiveDrift =
+                    driftDetector != null ? driftDetector : AksorDriftDetector.disabled();
+            AksorApiClient apiClient = new AksorApiClient(effectiveConfig, builder, effectiveDrift);
 
             List<AksorHostPageParser> hosts;
             if (replacementHosts != null) {
                 hosts = replacementHosts;
             } else {
                 hosts = new ArrayList<>();
-                hosts.add(new YummyAniHost(effectiveConfig, builder));
+                hosts.add(new YummyAniHost(effectiveConfig, builder, effectiveDrift));
                 hosts.addAll(extraHosts);
             }
             AksorHostRegistry registry = new AksorHostRegistry(hosts);
             AksorPipelineDecoder decoder =
                     new AksorPipelineDecoder(effectiveConfig, registry, apiClient);
-            return new AksorClient(effectiveConfig, registry, apiClient, decoder);
+            return new AksorClient(effectiveConfig, registry, apiClient, decoder, effectiveDrift);
         }
     }
 }
