@@ -22,6 +22,17 @@ management:
 spring:
   application:
     name: orinuno-source-kodik
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:orinuno_source_kodik}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  liquibase:
+    change-log: classpath:db/changelog/liquibase-changelog.yaml
+    contexts: ${LIQUIBASE_CONTEXTS:default}
+    # Skip Liquibase at boot when DB isn't reachable (dev / smoke). Production keeps the
+    # default true; override via SPRING_LIQUIBASE_ENABLED=false locally.
+    enabled: ${SPRING_LIQUIBASE_ENABLED:true}
 
 kodik:
   sdk:
