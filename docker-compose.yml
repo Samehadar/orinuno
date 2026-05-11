@@ -44,6 +44,32 @@ services:
       - ./data:/app/data
     restart: unless-stopped
 
+  # ADR 0018 Phase 5.1 — OSS meter, the catalog collector. Skeleton-only today;
+  # Phase 5.2+ moves the catalog_* Liquibase changelogs over from orinuno-app and
+  # turns meter into the single writer of the shared catalog schema. Currently it
+  # boots a healthy actuator and does nothing else, so it stays as a no-op service
+  # in the stack — keeps the docker-compose contract stable for the upcoming work.
+  meter:
+    build:
+      context: .
+      target: meter-runtime
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8089:8089"
+      - "8090:8090"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: orinuno_catalog
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      # Phase 5.5 will wire these to the actual per-source service URLs so meter
+      # starts polling /api/v1/source-events/ready. Empty until then.
+      ORINUNO_SOURCE_KODIK_BASE_URL: http://source-kodik:8086
+    restart: unless-stopped
+
   # ADR 0018 Phase 2 — orinuno-source-kodik standalone deployable. Owns the
   # kodik_* schema and serves /api/v1/kodik/*, /api/v1/embed/*, /api/v1/reference/*,
   # /api/v1/source-events/* directly. `app` reverse-proxies these routes here.
