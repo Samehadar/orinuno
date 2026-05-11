@@ -6,9 +6,9 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.orinuno.client.dto.calendar.KodikCalendarAnimeDto;
-import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
-import com.orinuno.client.dto.calendar.KodikCalendarImageDto;
+import com.kodik.client.dto.calendar.KodikCalendarAnimeDto;
+import com.kodik.client.dto.calendar.KodikCalendarEntryDto;
+import com.kodik.client.dto.calendar.KodikCalendarImageDto;
 import com.orinuno.model.dto.CalendarResponse;
 import com.orinuno.model.dto.CalendarResponse.EnrichedCalendarEntryDto;
 import com.orinuno.repository.KodikCalendarOutboxRepository;

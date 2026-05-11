@@ -4,12 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.orinuno.client.dto.KodikReferenceRequest;
-import com.orinuno.client.dto.reference.KodikCountryDto;
-import com.orinuno.client.dto.reference.KodikGenreDto;
-import com.orinuno.client.dto.reference.KodikQualityDto;
-import com.orinuno.client.dto.reference.KodikTranslationDto;
-import com.orinuno.client.dto.reference.KodikYearDto;
+import com.kodik.client.dto.KodikReferenceRequest;
+import com.kodik.client.dto.reference.KodikCountryDto;
+import com.kodik.client.dto.reference.KodikGenreDto;
+import com.kodik.client.dto.reference.KodikQualityDto;
+import com.kodik.client.dto.reference.KodikTranslationDto;
+import com.kodik.client.dto.reference.KodikYearDto;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.token.KodikFunction;
 import com.orinuno.token.KodikTokenAutoDiscovery;

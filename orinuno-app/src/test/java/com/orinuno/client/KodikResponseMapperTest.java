@@ -3,10 +3,10 @@ package com.orinuno.client;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.orinuno.client.dto.reference.KodikGenreDto;
-import com.orinuno.client.dto.reference.KodikReferenceResponse;
-import com.orinuno.client.dto.reference.KodikTranslationDto;
-import com.orinuno.client.dto.reference.KodikYearDto;
+import com.kodik.client.dto.reference.KodikGenreDto;
+import com.kodik.client.dto.reference.KodikReferenceResponse;
+import com.kodik.client.dto.reference.KodikTranslationDto;
+import com.kodik.client.dto.reference.KodikYearDto;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -169,7 +169,7 @@ class KodikResponseMapperTest {
                                                 "unexpected_md_field",
                                                 "v"))));
 
-        mapper.detectSchemaChanges(raw, com.orinuno.client.dto.KodikSearchResponse.class);
+        mapper.detectSchemaChanges(raw, com.kodik.client.dto.KodikSearchResponse.class);
 
         assertThat(mapper.getDetectedDrifts()).containsKey("MaterialData[anime-serial]");
         assertThat(mapper.getDetectedDrifts().get("MaterialData[anime-serial]").unknownFields())
@@ -193,7 +193,7 @@ class KodikResponseMapperTest {
                                         "material_data",
                                         Map.of("title", "X", "rogue_md", "v"))));
 
-        mapper.detectSchemaChanges(raw, com.orinuno.client.dto.KodikSearchResponse.class);
+        mapper.detectSchemaChanges(raw, com.kodik.client.dto.KodikSearchResponse.class);
 
         assertThat(mapper.getDetectedDrifts()).containsKey("MaterialData[unknown]");
     }
@@ -217,7 +217,7 @@ class KodikResponseMapperTest {
                                         "material_data",
                                         Map.of("title", "X", "year", 2024))));
 
-        mapper.detectSchemaChanges(raw, com.orinuno.client.dto.KodikSearchResponse.class);
+        mapper.detectSchemaChanges(raw, com.kodik.client.dto.KodikSearchResponse.class);
 
         assertThat(mapper.getDetectedDrifts()).isEmpty();
     }

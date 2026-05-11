@@ -1,4 +1,4 @@
-package com.orinuno.client.dto;
+package com.kodik.client.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

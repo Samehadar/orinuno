@@ -1,4 +1,4 @@
-package com.orinuno.client.dto;
+package com.kodik.client.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,21 +9,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class KodikSearchRequest {
+public class KodikListRequest {
 
-    private String title;
-    private String titleOrig;
-    private Boolean strict;
-    private Boolean fullMatch;
-    private String id;
-    private String playerLink;
-    private String kinopoiskId;
-    private String imdbId;
-    private String mdlId;
-    private String worldartAnimationId;
-    private String worldartCinemaId;
-    private String worldartLink;
-    private String shikimoriId;
     private Integer limit;
     private String types;
     private String year;
@@ -77,50 +64,52 @@ public class KodikSearchRequest {
     private String order;
 
     /**
-     * Custom Lombok builder extension (API-7) — adds fluent type-shortcut methods that compile to
-     * the correct comma-separated {@code types} param without callers having to remember the
-     * literal API strings.
-     *
-     * <p>Lombok still generates setters for every other field; only methods explicitly declared
-     * here override Lombok's defaults.
+     * Forward-pagination cursor returned by Kodik in the {@code next_page} field of a previous
+     * {@code /list} response. When set, all other fields are ignored — Kodik replays the original
+     * query.
      */
-    public static class KodikSearchRequestBuilder {
+    private String nextPageUrl;
 
-        /**
-         * Backward-compatible String setter — Lombok skips its own {@code types(String)} once any
-         * {@code types(...)} method exists in this inner class, so we restore it explicitly.
-         */
-        public KodikSearchRequestBuilder types(String types) {
+    /**
+     * Backward-pagination cursor returned by Kodik in the {@code prev_page} field. Mirror of {@link
+     * #nextPageUrl}; same semantics. Added in API-4 so callers can step back through paginated
+     * lists without rebuilding state.
+     */
+    private String prevPageUrl;
+
+    /**
+     * Custom Lombok builder extension (API-7) — adds fluent type-shortcut methods. See
+     * KodikSearchRequest's analogous extension for context.
+     */
+    public static class KodikListRequestBuilder {
+
+        /** Backward-compatible String setter — see KodikSearchRequest comment. */
+        public KodikListRequestBuilder types(String types) {
             this.types = types;
             return this;
         }
 
-        /** Filter by an explicit set of types. */
-        public KodikSearchRequestBuilder types(KodikType... types) {
+        public KodikListRequestBuilder types(KodikType... types) {
             this.types = KodikType.csv(types);
             return this;
         }
 
-        /** Filter by both anime kinds (serial + movie). */
-        public KodikSearchRequestBuilder anime() {
+        public KodikListRequestBuilder anime() {
             this.types = KodikType.csv(KodikType.ANIME_KINDS);
             return this;
         }
 
-        /** Filter by all serial kinds (anime + foreign + russian). */
-        public KodikSearchRequestBuilder serials() {
+        public KodikListRequestBuilder serials() {
             this.types = KodikType.csv(KodikType.SERIAL_KINDS);
             return this;
         }
 
-        /** Filter by all non-anime feature-length kinds + anime movies. */
-        public KodikSearchRequestBuilder movies() {
+        public KodikListRequestBuilder movies() {
             this.types = KodikType.csv(KodikType.MOVIE_KINDS);
             return this;
         }
 
-        /** Filter by all cartoon kinds (russian + foreign + soviet). */
-        public KodikSearchRequestBuilder cartoons() {
+        public KodikListRequestBuilder cartoons() {
             this.types = KodikType.csv(KodikType.CARTOON_KINDS);
             return this;
         }

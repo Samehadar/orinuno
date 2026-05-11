@@ -1,8 +1,8 @@
 package com.orinuno.service;
 
+import com.kodik.client.dto.KodikSearchRequest;
+import com.kodik.client.dto.KodikSearchResponse;
 import com.orinuno.client.KodikApiClient;
-import com.orinuno.client.dto.KodikSearchRequest;
-import com.orinuno.client.dto.KodikSearchResponse;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.mapper.EntityFactory;
 import com.orinuno.model.KodikContent;

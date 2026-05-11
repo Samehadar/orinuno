@@ -1,4 +1,4 @@
-package com.orinuno.client.dto.reference;
+package com.kodik.client.dto.reference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

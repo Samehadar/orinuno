@@ -1,6 +1,6 @@
 package com.orinuno.service.dumps;
 
-import com.orinuno.client.dto.KodikSearchResponse;
+import com.kodik.client.dto.KodikSearchResponse;
 import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.configuration.OrinunoProperties.DumpsProperties.DumpEntry;

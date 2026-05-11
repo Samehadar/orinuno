@@ -50,6 +50,16 @@
             <version>${project.version}</version>
         </dependency>
         <!--
+            kodik-sdk — ADR 0018 Phase 1.2a. DTO + exception leaves moved under com.kodik.client.*
+            so orinuno-app callers import from the standalone SDK module. Phases 1.2b-1.5 bring the
+            HTTP client / rate limiter / response mapper / decoder / token / embed code over.
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>kodik-sdk</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--
             jutsu-sdk — Step 2 of the API/module split. Carries the rate limiter, session
             manager, decoder and source parser. orinuno-app keeps a thin
             JutsuSdkConfiguration that wires SDK beans from OrinunoProperties so the rest of the

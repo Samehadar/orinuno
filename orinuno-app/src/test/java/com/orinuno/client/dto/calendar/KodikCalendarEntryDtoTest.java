@@ -1,4 +1,4 @@
-package com.orinuno.client.dto.calendar;
+package com.kodik.client.dto.calendar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -1,6 +1,6 @@
 package com.orinuno.controller;
 
-import com.orinuno.client.dto.KodikListRequest;
+import com.kodik.client.dto.KodikListRequest;
 import com.orinuno.model.dto.KodikListPageView;
 import com.orinuno.service.KodikListProxyService;
 import io.swagger.v3.oas.annotations.Operation;

@@ -6,7 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orinuno.client.dto.KodikSearchRequest;
+import com.kodik.client.dto.KodikSearchRequest;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.token.KodikFunction;
 import com.orinuno.token.KodikTokenAutoDiscovery;
