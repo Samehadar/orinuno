@@ -2,9 +2,9 @@ package com.orinuno.service.decoder;
 
 import com.kodik.decoder.DecodeAttemptResult;
 import com.kodik.decoder.DecodeMethod;
+import com.kodik.decoder.KodikDecoderMetrics;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.KodikVideoDecoderService;
-import com.orinuno.service.metrics.KodikDecoderMetrics;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

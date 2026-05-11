@@ -1,4 +1,4 @@
-package com.orinuno.service.metrics;
+package com.kodik.decoder;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.Tags;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 /**
  * Visibility for the {@link com.orinuno.service.KodikVideoDecoderService} pipeline.
@@ -29,7 +28,6 @@ import org.springframework.stereotype.Component;
  * fit comfortably under Prometheus' soft cardinality budget.
  */
 @Slf4j
-@Component
 public class KodikDecoderMetrics {
 
     static final String PATH_METRIC = "orinuno.decoder.path";

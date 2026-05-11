@@ -1,6 +1,6 @@
 package com.orinuno.service;
 
-import com.orinuno.service.metrics.KodikDecoderMetrics.UpstreamErrorClass;
+import com.kodik.decoder.KodikDecoderMetrics.UpstreamErrorClass;
 
 /**
  * Maps a Kodik upstream error response body (Russian-language JSON / HTML) to a small enum that

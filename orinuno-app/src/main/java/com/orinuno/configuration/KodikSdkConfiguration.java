@@ -5,6 +5,7 @@ import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.embed.KodikEmbedHttpClient;
 import com.kodik.client.http.RotatingUserAgentProvider;
+import com.kodik.decoder.KodikDecoderMetrics;
 import com.kodik.sdk.drift.DriftDetector;
 import com.kodik.token.KodikTokenAutoDiscovery;
 import com.kodik.token.KodikTokenConfig;
@@ -137,6 +138,16 @@ public class KodikSdkConfiguration {
             KodikTokenRegistry tokenRegistry) {
         return new KodikApiClient(
                 kodikApiWebClient, tokenConfig, responseMapper, rateLimiter, tokenRegistry);
+    }
+
+    /**
+     * ADR 0018 Phase 1.3b — decoder metrics live in the SDK so a future standalone
+     * orinuno-source-kodik service ships its own Prometheus surface without a hard dependency on
+     * orinuno-app's metrics package.
+     */
+    @Bean
+    public KodikDecoderMetrics kodikDecoderMetrics(MeterRegistry meterRegistry) {
+        return new KodikDecoderMetrics(meterRegistry);
     }
 
     @Bean

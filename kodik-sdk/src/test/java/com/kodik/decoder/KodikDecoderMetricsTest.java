@@ -1,4 +1,4 @@
-package com.orinuno.service.metrics;
+package com.kodik.decoder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
