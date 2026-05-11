@@ -45,18 +45,29 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+# ADR 0018 Phase 1.7 — kodik-sdk-spring-boot-starter consumes kodik.sdk.*. The
+# env var contract is preserved verbatim; only the property tree shape moved
+# from orinuno.kodik.* to kodik.sdk.* for the SDK-managed slice (rate limit +
+# token subsystem). Non-SDK keys (api-url, request-delay-ms,
+# validation-interval-minutes, catalog-ingestion gate) keep the orinuno.kodik
+# prefix because OrinunoProperties still owns them.
+kodik:
+  sdk:
+    rate-limit-per-minute: ${PARSE_RATE_LIMIT_PER_MINUTE:30}
+    token:
+      file: ${KODIK_TOKEN_FILE:./data/kodik_tokens.json}
+      bootstrap-value: ${KODIK_TOKEN:}
+      bootstrap-from-env: ${KODIK_TOKEN_BOOTSTRAP_FROM_ENV:true}
+      auto-discovery-enabled: ${KODIK_TOKEN_AUTO_DISCOVERY_ENABLED:true}
+      validate-on-startup: ${KODIK_TOKEN_VALIDATE_ON_STARTUP:true}
+      dead-revalidation-interval-minutes: ${KODIK_TOKEN_DEAD_REVALIDATION_INTERVAL_MINUTES:1440}
+      failover-max-attempts: ${KODIK_TOKEN_FAILOVER_MAX_ATTEMPTS:3}
+
 orinuno:
   kodik:
     api-url: ${KODIK_API_URL:https://kodik-api.com}
-    token: ${KODIK_TOKEN:}
     request-delay-ms: ${KODIK_REQUEST_DELAY_MS:500}
-    token-file: ${KODIK_TOKEN_FILE:./data/kodik_tokens.json}
     validation-interval-minutes: ${KODIK_TOKEN_VALIDATION_INTERVAL_MINUTES:360}
-    dead-revalidation-interval-minutes: ${KODIK_TOKEN_DEAD_REVALIDATION_INTERVAL_MINUTES:1440}
-    auto-discovery-enabled: ${KODIK_TOKEN_AUTO_DISCOVERY_ENABLED:true}
-    bootstrap-from-env: ${KODIK_TOKEN_BOOTSTRAP_FROM_ENV:true}
-    token-failover-max-attempts: ${KODIK_TOKEN_FAILOVER_MAX_ATTEMPTS:3}
-    validate-on-startup: ${KODIK_TOKEN_VALIDATE_ON_STARTUP:true}
     catalog-ingestion:
       enabled: ${KODIK_CATALOG_INGESTION_ENABLED:false}
   parse:
