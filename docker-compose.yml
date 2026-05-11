@@ -8,6 +8,9 @@ services:
       - "3316:3306"
     volumes:
       - orinuno-db:/var/lib/mysql
+      # ADR 0018 Phase 2.9 — additional per-source schemas (orinuno_source_kodik)
+      # are bootstrapped via init scripts; MYSQL_DATABASE only handles one.
+      - ./scripts/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
@@ -15,7 +18,9 @@ services:
       retries: 10
 
   app:
-    build: .
+    build:
+      context: .
+      target: app-runtime
     depends_on:
       db:
         condition: service_healthy
@@ -31,6 +36,35 @@ services:
       KODIK_TOKEN: ${KODIK_TOKEN:-}
       KODIK_TOKEN_FILE: /app/data/kodik_tokens.json
       SPRING_PROFILES_ACTIVE: local
+      # ADR 0018 Phase 2.8 — activate KodikUpstreamProxyFilter so /api/v1/kodik/*,
+      # /api/v1/embed/*, /api/v1/reference/*, /api/v1/source-events/* forward to
+      # the standalone service. Leave blank to keep orinuno-app's local controllers.
+      ORINUNO_SOURCE_KODIK_BASE_URL: http://source-kodik:8086
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # ADR 0018 Phase 2 — orinuno-source-kodik standalone deployable. Owns the
+  # kodik_* schema and serves /api/v1/kodik/*, /api/v1/embed/*, /api/v1/reference/*,
+  # /api/v1/source-events/* directly. `app` reverse-proxies these routes here.
+  source-kodik:
+    build:
+      context: .
+      target: source-kodik-runtime
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8087:8086"
+      - "8088:8087"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: orinuno_source_kodik
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      KODIK_TOKEN: ${KODIK_TOKEN:-}
+      KODIK_TOKEN_FILE: /app/data/kodik_tokens.json
     volumes:
       - ./data:/app/data
     restart: unless-stopped
