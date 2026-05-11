@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.14</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.orinuno</groupId>
+    <artifactId>orinuno-source-kodik</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>orinuno-source-kodik</name>
+    <description>
+        Standalone Spring Boot deployable: a per-source service for Kodik (ADR 0018 Phase 2).
+
+        Consumes kodik-sdk + kodik-sdk-spring-boot-starter to wire the HTTP client / token
+        registry / decoder metrics in one line; owns its own MySQL schema (kodik_*),
+        exposes the historical /api/v1/kodik/*, /api/v1/embed/*, /api/v1/calendar*,
+        /api/v1/download/*, /api/v1/hls/*, /api/v1/stream/* endpoints plus the canonical
+        /api/v1/source-events/ready event stream that both downstream-repo/meter and the
+        future OSS meter aggregator subscribe to.
+
+        Per Phase 2 of the per-source services split, this artefact is the unit of
+        independent deploy + open-source publication; orinuno (the monolith renamed
+        downstream) acts as a reverse-proxy gateway so external URLs stay stable.
+    </description>
+
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+
+    <dependencies>
+        <!--
+            Pull the Kodik SDK + auto-config in one shot. KodikSdkAutoConfiguration wires
+            the HTTP client, token registry, decoder metrics, embed shortcut, etc. from
+            the kodik.sdk.* property prefix.
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>kodik-sdk-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--
+            Producer-side event contract for /api/v1/source-events/ready. orinuno-source-kodik
+            emits SourceCatalogEvent payloads identical in shape to what orinuno-app emits
+            today; consumers (external-bridge, OSS meter) require no change to subscribe.
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>orinuno-source-contract</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>orinuno-source-kodik</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.46.1</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <googleJavaFormat>
+                            <version>1.22.0</version>
+                            <style>AOSP</style>
+                            <reflowLongStrings>true</reflowLongStrings>
+                        </googleJavaFormat>
+                        <removeUnusedImports/>
+                        <trimTrailingWhitespace/>
+                        <endWithNewline/>
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

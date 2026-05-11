@@ -29,6 +29,7 @@
         <module>sibnet-sdk</module>
         <module>aniboom-sdk</module>
         <module>orinuno-app</module>
+        <module>orinuno-source-kodik</module>
     </modules>
 
     <properties>
