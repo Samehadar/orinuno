@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.repository.RemoteSourceWatermarkRepository">
+
+    <resultMap id="watermarkResultMap" type="com.orinuno.model.RemoteSourceWatermark">
+        <id property="sourceType" column="source_type"/>
+        <result property="lastFetchedAt" column="last_fetched_at"/>
+        <result property="lastPolledAt" column="last_polled_at"/>
+        <result property="lastEventCount" column="last_event_count"/>
+        <result property="lastError" column="last_error"/>
+    </resultMap>
+
+    <select id="findBySourceType" resultMap="watermarkResultMap">
+        SELECT * FROM orinuno_remote_source_watermark WHERE source_type = #{sourceType}
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO orinuno_remote_source_watermark (
+            source_type, last_fetched_at, last_polled_at, last_event_count, last_error
+        ) VALUES (
+            #{sourceType}, #{lastFetchedAt}, #{lastPolledAt}, #{lastEventCount}, #{lastError}
+        )
+        ON DUPLICATE KEY UPDATE
+            last_fetched_at  = COALESCE(VALUES(last_fetched_at), last_fetched_at),
+            last_polled_at   = VALUES(last_polled_at),
+            last_event_count = VALUES(last_event_count),
+            last_error       = VALUES(last_error)
+    </insert>
+
+</mapper>

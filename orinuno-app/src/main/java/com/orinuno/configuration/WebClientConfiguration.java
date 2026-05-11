@@ -1,7 +1,9 @@
 package com.orinuno.configuration;
 
 import com.kodik.client.http.RotatingUserAgentProvider;
+import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
@@ -11,6 +13,18 @@ import reactor.netty.http.client.HttpClient;
 
 @Configuration
 public class WebClientConfiguration {
+
+    /**
+     * UTC system clock shared by scheduled jobs ({@link
+     * com.orinuno.service.orchestration.KodikRemoteEventPoller} today, more to come). Marked
+     * {@code @ConditionalOnMissingBean} so a {@code @TestConfiguration} can swap in a fixed clock
+     * without colliding.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
 
     @Bean
     public WebClient kodikApiWebClient(
