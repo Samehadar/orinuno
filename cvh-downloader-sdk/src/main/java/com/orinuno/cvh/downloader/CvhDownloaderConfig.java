@@ -15,6 +15,12 @@ import java.nio.file.Path;
  *   <li>{@code ffmpegBinary = "ffmpeg"} — resolved via PATH.
  *   <li>{@code ffmpegTimeoutSeconds = 600} — bound runaway processes.
  *   <li>{@code maxBytesPerFile = 5 GB} — guard against malicious or runaway segment lists.
+ *   <li>{@code mp4ParallelChunks = 4} — number of parallel {@code Range} GETs for direct MP4.
+ *       Empirically the CVH CDN ({@code ok6-1.vkuser.net}) caps a single TCP stream around ~1 MB/s,
+ *       so 4 parallel chunks deliver ~4x throughput.
+ *   <li>{@code mp4MinChunkBytes = 1 MB} — minimum size of one parallel chunk. Below this the
+ *       strategy falls back to a single-stream GET to avoid overhead from N small connections.
+ *   <li>{@code mp4ParallelEnabled = true} — feature flag for the parallel path.
  * </ul>
  */
 public record CvhDownloaderConfig(
@@ -25,7 +31,10 @@ public record CvhDownloaderConfig(
         String ffmpegBinary,
         int ffmpegTimeoutSeconds,
         long maxBytesPerFile,
-        String userAgent) {
+        String userAgent,
+        int mp4ParallelChunks,
+        long mp4MinChunkBytes,
+        boolean mp4ParallelEnabled) {
 
     public static Builder builder() {
         return new Builder();
@@ -42,6 +51,9 @@ public record CvhDownloaderConfig(
         private String userAgent =
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like"
                         + " Gecko) Chrome/147.0.0.0 Safari/537.36";
+        private int mp4ParallelChunks = 4;
+        private long mp4MinChunkBytes = 1024L * 1024L;
+        private boolean mp4ParallelEnabled = true;
 
         private Builder() {}
 
@@ -85,6 +97,21 @@ public record CvhDownloaderConfig(
             return this;
         }
 
+        public Builder mp4ParallelChunks(int chunks) {
+            this.mp4ParallelChunks = chunks;
+            return this;
+        }
+
+        public Builder mp4MinChunkBytes(long bytes) {
+            this.mp4MinChunkBytes = bytes;
+            return this;
+        }
+
+        public Builder mp4ParallelEnabled(boolean enabled) {
+            this.mp4ParallelEnabled = enabled;
+            return this;
+        }
+
         public CvhDownloaderConfig build() {
             if (outputBaseDir == null) {
                 throw new IllegalArgumentException("outputBaseDir is required");
@@ -110,6 +137,12 @@ public record CvhDownloaderConfig(
             if (userAgent == null || userAgent.isBlank()) {
                 throw new IllegalArgumentException("userAgent is required");
             }
+            if (mp4ParallelChunks < 1) {
+                throw new IllegalArgumentException("mp4ParallelChunks must be >= 1");
+            }
+            if (mp4MinChunkBytes < 1) {
+                throw new IllegalArgumentException("mp4MinChunkBytes must be >= 1");
+            }
             return new CvhDownloaderConfig(
                     outputBaseDir,
                     segmentConcurrency,
@@ -118,7 +151,10 @@ public record CvhDownloaderConfig(
                     ffmpegBinary,
                     ffmpegTimeoutSeconds,
                     maxBytesPerFile,
-                    userAgent);
+                    userAgent,
+                    mp4ParallelChunks,
+                    mp4MinChunkBytes,
+                    mp4ParallelEnabled);
         }
     }
 }
