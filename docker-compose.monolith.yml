@@ -20,3 +20,9 @@ services:
     # the service is defined but never started without explicit
     # `--profile never`, which we never pass. Cleaner than `scale: 0`.
     profiles: ["never"]
+
+  meter:
+    # OSS catalog collector — only meaningful in the full-split topology
+    # (ADR 0018 Phase 5). In monolith mode orinuno-app still owns the catalog
+    # write-path, so meter has nothing to do here.
+    profiles: ["never"]

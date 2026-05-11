@@ -1,6 +1,7 @@
-# Multi-stage build that produces two runtime images out of one reactor build:
+# Multi-stage build that produces three runtime images out of one reactor build:
 #   target: app-runtime          → orinuno-app (Playwright + Chromium for HTML drift / live scrape)
 #   target: source-kodik-runtime → orinuno-source-kodik (slim JRE — no browser deps)
+#   target: meter-runtime        → meter OSS catalog collector (slim JRE)
 #
 # Reactor layout (see pom.xml `<modules>`):
 #   orinuno-source-contract        — sealed SourceCatalogEvent contract
@@ -10,6 +11,7 @@
 #   sibnet-sdk / aniboom-sdk       — decoder-only source SDKs
 #   orinuno-app                    — public API gateway / monolith host
 #   orinuno-source-kodik           — standalone Kodik deployable (ADR 0018 Phase 2)
+#   meter                          — OSS catalog collector (ADR 0018 Phase 5)
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
@@ -22,6 +24,7 @@ COPY sibnet-sdk/pom.xml sibnet-sdk/pom.xml
 COPY aniboom-sdk/pom.xml aniboom-sdk/pom.xml
 COPY orinuno-app/pom.xml orinuno-app/pom.xml
 COPY orinuno-source-kodik/pom.xml orinuno-source-kodik/pom.xml
+COPY meter/pom.xml meter/pom.xml
 RUN mvn -B -q dependency:go-offline -DskipTests || true
 
 COPY orinuno-source-contract/src orinuno-source-contract/src
@@ -33,6 +36,7 @@ COPY aniboom-sdk/src aniboom-sdk/src
 COPY orinuno-app/src orinuno-app/src
 COPY orinuno-app/spotbugs-exclude.xml orinuno-app/spotbugs-exclude.xml
 COPY orinuno-source-kodik/src orinuno-source-kodik/src
+COPY meter/src meter/src
 RUN mvn -B -q -DskipTests package
 
 
@@ -66,4 +70,16 @@ WORKDIR /app
 COPY --from=build /app/orinuno-source-kodik/target/orinuno-source-kodik.jar app.jar
 
 EXPOSE 8086 8087
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+
+# ─── meter runtime ─────────────────────────────────────────────────────────
+# OSS catalog collector (ADR 0018 Phase 5). Slim JRE — no public REST surface
+# yet, only actuator + the upcoming catalog write-path.
+FROM eclipse-temurin:21-jre AS meter-runtime
+WORKDIR /app
+
+COPY --from=build /app/meter/target/meter.jar app.jar
+
+EXPOSE 8089 8090
 ENTRYPOINT ["java", "-jar", "app.jar"]
