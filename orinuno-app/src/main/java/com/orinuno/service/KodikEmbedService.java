@@ -1,8 +1,8 @@
 package com.orinuno.service;
 
+import com.kodik.client.embed.KodikIdType;
 import com.orinuno.client.embed.KodikEmbedException;
 import com.orinuno.client.embed.KodikEmbedHttpClient;
-import com.orinuno.client.embed.KodikIdType;
 import com.orinuno.model.dto.EmbedLinkDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

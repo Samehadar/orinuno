@@ -1,4 +1,4 @@
-package com.orinuno.client.exception;
+package com.kodik.client.exception;
 
 /**
  * Application-level validation failure reported by Kodik. The request reached Kodik's app code, was

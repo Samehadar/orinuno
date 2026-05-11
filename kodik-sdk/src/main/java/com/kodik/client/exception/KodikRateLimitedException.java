@@ -1,4 +1,4 @@
-package com.orinuno.client.exception;
+package com.kodik.client.exception;
 
 /**
  * Kodik issued HTTP 429 (Too Many Requests). Caller should back off and retry later. Today

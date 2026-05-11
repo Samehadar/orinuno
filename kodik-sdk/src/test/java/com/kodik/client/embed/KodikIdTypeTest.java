@@ -1,4 +1,4 @@
-package com.orinuno.client.embed;
+package com.kodik.client.embed;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
