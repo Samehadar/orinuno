@@ -179,7 +179,7 @@ flowchart LR
 | 2.* | `orinuno-source-kodik` standalone deployable; reverse-proxy in `orinuno`; external bridge cutover; demo UI continues working unchanged | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
 | 3 | Validation gate (14 days prod stability of `orinuno-source-kodik`) | ⏳ pending |
 | 4.* | `orinuno-source-jutsu` extraction (mirror of Phase 2) | ⏳ pending |
-| 5.* | `meter` OSS service; catalog write-path moves into `meter`; `orinuno` read-only repository + Caffeine cache; multi-instance `orinuno`; DB user separation; full split docker-compose | 🚧 nearly done (5.1, 5.2a, 5.3, 5.4, 5.5, 5.6, 5.7, 5.7a, 5.8, 5.9, 5.10, 5.11 ✅; 5.12 + 5.13 ⏳) |
+| 5.* | `meter` OSS service; catalog write-path moves into `meter`; `orinuno` read-only repository + Caffeine cache; multi-instance `orinuno`; DB user separation; full split docker-compose | ✅ done (5.1, 5.2a, 5.3, 5.4, 5.5, 5.6, 5.7, 5.7a, 5.8, 5.9, 5.10, 5.11, 5.13 ✅; 5.12 deferred per ADR 0020) |
 | 6 | Kafka outbox + event sourcing (future ADR, triggered by §"Future evolution") | ⏳ deferred |
 
 ### Phase 2 migration recipe — Kin downstream consumer / external bridge cutover
