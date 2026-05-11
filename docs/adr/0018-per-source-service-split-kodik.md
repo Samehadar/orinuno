@@ -175,7 +175,7 @@ flowchart LR
 | 0.2 | ADR 0018 (this ADR) + index update | ✅ done |
 | 0.3 | ArchUnit + Liquibase boundary guards | ✅ done |
 | 0.4 | `kodik_episode_variant` L1+L2 split (ADR 0016 §"Known tech debt" → unblocks Kodik extraction) | ✅ done |
-| 1.* | Kodik SDK extraction into `kodik-sdk` (+ `kodik-sdk-spring-boot-starter`); absorb `kodik-sdk-drift` | ✅ done (Phases 1.1–1.4, 1.6, 1.7, 1.8) |
+| 1.* | Kodik SDK extraction into `kodik-sdk` (+ `kodik-sdk-spring-boot-starter`); absorb `kodik-sdk-drift` | ✅ done (Phases 1.1–1.4, 1.6, 1.7, 1.8, 1.9) |
 | 2.* | `orinuno-source-kodik` standalone deployable; reverse-proxy in `orinuno`; external bridge cutover; demo UI continues working unchanged | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
 | 3 | Validation gate (14 days prod stability of `orinuno-source-kodik`) | ⏳ pending |
 | 4.* | `orinuno-source-jutsu` extraction (mirror of Phase 2) | ⏳ pending |
