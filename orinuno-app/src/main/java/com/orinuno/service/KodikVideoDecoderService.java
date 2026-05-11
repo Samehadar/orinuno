@@ -3,9 +3,9 @@ package com.orinuno.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kodik.client.http.RotatingUserAgentProvider;
+import com.kodik.decoder.KodikDecoderMetrics;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.decoder.DecoderPathCache;
-import com.orinuno.service.metrics.KodikDecoderMetrics;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -87,9 +87,9 @@ public class KodikVideoDecoderService {
                             if (decoderMetrics != null) {
                                 decoderMetrics.recordOutcome(
                                         result.isEmpty()
-                                                ? com.orinuno.service.metrics.KodikDecoderMetrics
+                                                ? com.kodik.decoder.KodikDecoderMetrics
                                                         .DecodeOutcome.EMPTY_LINKS
-                                                : com.orinuno.service.metrics.KodikDecoderMetrics
+                                                : com.kodik.decoder.KodikDecoderMetrics
                                                         .DecodeOutcome.SUCCESS);
                             }
                             log.info("✅ Decode complete: {} qualities found", result.size());
@@ -99,8 +99,8 @@ public class KodikVideoDecoderService {
                             healthTracker.recordFailure("unknown", error.getMessage());
                             if (decoderMetrics != null) {
                                 decoderMetrics.recordOutcome(
-                                        com.orinuno.service.metrics.KodikDecoderMetrics
-                                                .DecodeOutcome.UPSTREAM_ERROR);
+                                        com.kodik.decoder.KodikDecoderMetrics.DecodeOutcome
+                                                .UPSTREAM_ERROR);
                             }
                             log.error("❌ Decode failed for {}: {}", kodikLink, error.getMessage());
                         })
@@ -323,10 +323,10 @@ public class KodikVideoDecoderService {
     /**
      * DECODE-7 (500-handling): consume the response body even on 4xx/5xx so we can classify Kodik's
      * Russian-language error message into a small enum (see {@link
-     * com.orinuno.service.metrics.KodikDecoderMetrics.UpstreamErrorClass}). Successful (2xx)
-     * responses are returned unchanged. Errors are logged and propagated as a typed runtime
-     * exception so the surrounding retry/onErrorResume chain still gets the chance to fall back to
-     * other video-info paths.
+     * com.kodik.decoder.KodikDecoderMetrics.UpstreamErrorClass}). Successful (2xx) responses are
+     * returned unchanged. Errors are logged and propagated as a typed runtime exception so the
+     * surrounding retry/onErrorResume chain still gets the chance to fall back to other video-info
+     * paths.
      */
     private Mono<String> handleVideoResponse(
             org.springframework.web.reactive.function.client.ClientResponse response) {
@@ -338,7 +338,7 @@ public class KodikVideoDecoderService {
                 .defaultIfEmpty("")
                 .flatMap(
                         body -> {
-                            com.orinuno.service.metrics.KodikDecoderMetrics.UpstreamErrorClass cls =
+                            com.kodik.decoder.KodikDecoderMetrics.UpstreamErrorClass cls =
                                     KodikUpstreamErrorClassifier.classifyForDecoder(status, body);
                             if (decoderMetrics != null) {
                                 decoderMetrics.recordUpstreamError(status, cls);
@@ -392,7 +392,7 @@ public class KodikVideoDecoderService {
                     videoLinks.size());
             if (decoderMetrics != null) {
                 decoderMetrics.recordOutcome(
-                        com.orinuno.service.metrics.KodikDecoderMetrics.DecodeOutcome.GEO_BLOCKED);
+                        com.kodik.decoder.KodikDecoderMetrics.DecodeOutcome.GEO_BLOCKED);
             }
             return new HashMap<>();
         }

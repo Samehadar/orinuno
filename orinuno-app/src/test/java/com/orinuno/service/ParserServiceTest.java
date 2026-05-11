@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 
 import com.kodik.client.KodikApiClient;
 import com.kodik.client.dto.KodikSearchResponse;
+import com.kodik.decoder.KodikDecoderMetrics;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikEpisodeVariant;
@@ -14,7 +15,6 @@ import com.orinuno.model.dto.ParseRequestDto;
 import com.orinuno.repository.EpisodeVariantRepository;
 import com.orinuno.service.decoder.KodikDecodeOrchestrator;
 import com.orinuno.service.metrics.KodikCdnHostMetrics;
-import com.orinuno.service.metrics.KodikDecoderMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.HashMap;
 import java.util.List;

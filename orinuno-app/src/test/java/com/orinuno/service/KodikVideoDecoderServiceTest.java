@@ -85,14 +85,11 @@ class KodikVideoDecoderServiceTest {
                         KodikVideoDecoderService.decodeVideoUrlWithProvenance(
                                         "https://example.com/720.mp4")
                                 .path())
-                .isEqualTo(
-                        com.orinuno.service.metrics.KodikDecoderMetrics.DecodePath
-                                .SHORT_CIRCUIT_HTTP);
+                .isEqualTo(com.kodik.decoder.KodikDecoderMetrics.DecodePath.SHORT_CIRCUIT_HTTP);
 
         assertThat(KodikVideoDecoderService.decodeVideoUrlWithProvenance("").path())
                 .isEqualTo(
-                        com.orinuno.service.metrics.KodikDecoderMetrics.DecodePath
-                                .FALLBACK_NO_SHIFT_WORKED);
+                        com.kodik.decoder.KodikDecoderMetrics.DecodePath.FALLBACK_NO_SHIFT_WORKED);
     }
 
     @Test
