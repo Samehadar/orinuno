@@ -1,10 +1,19 @@
-# ADR 0019 Phase 4.2 — placeholder for the jutsu_* changelog migrations.
-# Phase 4.2 adds:
-#   - jutsu_title
-#   - jutsu_episode
-#   - jutsu_sync_state
-#   - jutsu_title catalog-position alter
-#   - jutsu_title years-age-rating alter
-#   - jutsu_film
-# Until then, this empty changelog keeps Liquibase happy on fresh boots.
-databaseChangeLog: []
+# ADR 0019 Phase 4.2 — orinuno-source-jutsu owns the jutsu_* schema in its
+# dedicated orinuno_source_jutsu MySQL DB. orinuno-app keeps the legacy
+# changesets in its own changelog for the existing monolith schema until
+# Phase 4.* cuts over fully. Liquibase tracks changesets by file path +
+# author + id; the two parallel copies stay isolated because they run
+# against different databases.
+databaseChangeLog:
+  - include:
+      file: db/changelog/scripts/20260508010000_create_jutsu_title.sql
+  - include:
+      file: db/changelog/scripts/20260508010100_create_jutsu_episode.sql
+  - include:
+      file: db/changelog/scripts/20260508010200_create_jutsu_sync_state.sql
+  - include:
+      file: db/changelog/scripts/20260508020000_alter_jutsu_title_add_catalog_position.sql
+  - include:
+      file: db/changelog/scripts/20260508040000_alter_jutsu_title_add_years_age_rating.sql
+  - include:
+      file: db/changelog/scripts/20260508050000_create_jutsu_film.sql
