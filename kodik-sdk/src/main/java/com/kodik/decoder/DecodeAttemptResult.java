@@ -1,4 +1,4 @@
-package com.orinuno.service.decoder;
+package com.kodik.decoder;
 
 import java.util.Map;
 
