@@ -3,7 +3,7 @@ package com.orinuno.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orinuno.client.dto.KodikSearchResponse;
+import com.kodik.client.dto.KodikSearchResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

@@ -9,11 +9,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.dto.calendar.KodikCalendarAnimeDto;
+import com.kodik.client.dto.calendar.KodikCalendarEntryDto;
+import com.kodik.client.dto.calendar.KodikCalendarImageDto;
 import com.orinuno.client.calendar.CalendarFetchResult;
 import com.orinuno.client.calendar.KodikCalendarHttpClient;
-import com.orinuno.client.dto.calendar.KodikCalendarAnimeDto;
-import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
-import com.orinuno.client.dto.calendar.KodikCalendarImageDto;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikCalendarOutboxEvent;
 import com.orinuno.model.KodikCalendarState;

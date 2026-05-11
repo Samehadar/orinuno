@@ -1,6 +1,6 @@
 package com.orinuno.client.calendar;
 
-import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
+import com.kodik.client.dto.calendar.KodikCalendarEntryDto;
 import java.time.Instant;
 import java.util.List;
 

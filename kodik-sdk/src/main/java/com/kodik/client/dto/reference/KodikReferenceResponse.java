@@ -1,4 +1,4 @@
-package com.orinuno.client.dto.reference;
+package com.kodik.client.dto.reference;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;

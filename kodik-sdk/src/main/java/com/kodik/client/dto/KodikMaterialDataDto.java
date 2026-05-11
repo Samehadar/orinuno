@@ -1,4 +1,4 @@
-package com.orinuno.client.dto;
+package com.kodik.client.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

@@ -1,8 +1,8 @@
 package com.orinuno.service.calendar;
 
+import com.kodik.client.dto.calendar.KodikCalendarEntryDto;
 import com.orinuno.client.calendar.CalendarFetchResult;
 import com.orinuno.client.calendar.KodikCalendarHttpClient;
-import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikCalendarOutboxEvent;
 import com.orinuno.model.KodikCalendarState;

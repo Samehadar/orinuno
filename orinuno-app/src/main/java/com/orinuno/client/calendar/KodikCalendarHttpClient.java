@@ -2,8 +2,8 @@ package com.orinuno.client.calendar;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kodik.client.dto.calendar.KodikCalendarEntryDto;
 import com.kodik.sdk.drift.DriftDetector;
-import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
 import com.orinuno.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.metrics.KodikCalendarMetrics;
@@ -191,7 +191,7 @@ public class KodikCalendarHttpClient {
                     Map<String, Object> coerced = (Map<String, Object>) animeMap;
                     driftDetector.detect(
                             coerced,
-                            com.orinuno.client.dto.calendar.KodikCalendarAnimeDto.class,
+                            com.kodik.client.dto.calendar.KodikCalendarAnimeDto.class,
                             "KodikCalendarAnimeDto");
                     Object imageRaw = coerced.get("image");
                     if (imageRaw instanceof Map<?, ?> imageMap) {
@@ -199,7 +199,7 @@ public class KodikCalendarHttpClient {
                         Map<String, Object> coercedImage = (Map<String, Object>) imageMap;
                         driftDetector.detect(
                                 coercedImage,
-                                com.orinuno.client.dto.calendar.KodikCalendarImageDto.class,
+                                com.kodik.client.dto.calendar.KodikCalendarImageDto.class,
                                 "KodikCalendarImageDto");
                     }
                 }

@@ -2,7 +2,7 @@ package com.orinuno.mapper;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orinuno.client.dto.KodikSearchResponse;
+import com.kodik.client.dto.KodikSearchResponse;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikEpisodeVariant;
 import java.util.ArrayList;

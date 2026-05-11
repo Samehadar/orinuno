@@ -2,9 +2,9 @@ package com.orinuno.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.orinuno.client.dto.KodikListRequest;
-import com.orinuno.client.dto.KodikReferenceRequest;
-import com.orinuno.client.dto.KodikSearchRequest;
+import com.kodik.client.dto.KodikListRequest;
+import com.kodik.client.dto.KodikReferenceRequest;
+import com.kodik.client.dto.KodikSearchRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.util.MultiValueMap;

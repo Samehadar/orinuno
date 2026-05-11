@@ -4,11 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.dto.calendar.KodikCalendarAnimeDto;
+import com.kodik.client.dto.calendar.KodikCalendarEntryDto;
+import com.kodik.client.dto.calendar.KodikCalendarImageDto;
 import com.orinuno.client.calendar.CalendarFetchResult;
 import com.orinuno.client.calendar.KodikCalendarHttpClient;
-import com.orinuno.client.dto.calendar.KodikCalendarAnimeDto;
-import com.orinuno.client.dto.calendar.KodikCalendarEntryDto;
-import com.orinuno.client.dto.calendar.KodikCalendarImageDto;
 import com.orinuno.model.dto.CalendarResponse;
 import com.orinuno.model.dto.CalendarResponse.EnrichedCalendarEntryDto;
 import com.orinuno.repository.ContentRepository;

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.orinuno.client.dto.KodikSearchRequest;
+import com.kodik.client.dto.KodikSearchRequest;
 import com.orinuno.client.exception.KodikRateLimitedException;
 import com.orinuno.client.exception.KodikUpstreamException;
 import com.orinuno.client.exception.KodikValidationException;

@@ -1,8 +1,8 @@
 package com.orinuno.service;
 
+import com.kodik.client.dto.KodikListRequest;
 import com.kodik.sdk.drift.DriftDetector;
 import com.orinuno.client.KodikApiClient;
-import com.orinuno.client.dto.KodikListRequest;
 import com.orinuno.model.dto.KodikListItemView;
 import com.orinuno.model.dto.KodikListPageView;
 import java.net.URLEncoder;
@@ -17,8 +17,8 @@ import reactor.core.publisher.Mono;
 
 /**
  * Thin proxy over Kodik /list — exposes the minimal {@link KodikListItemView} subset that
- * downstream consumer needs for discovery (gap-fill, ongoing detection). Tracks whether schema
- * drift was observed during this call so the controller can surface a Warning header.
+ * downstream consumer needs for discovery (gap-fill, ongoing detection). Tracks whether schema drift was
+ * observed during this call so the controller can surface a Warning header.
  */
 @Slf4j
 @Service

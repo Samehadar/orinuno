@@ -1,16 +1,16 @@
 package com.orinuno.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.orinuno.client.dto.KodikListRequest;
-import com.orinuno.client.dto.KodikReferenceRequest;
-import com.orinuno.client.dto.KodikSearchRequest;
-import com.orinuno.client.dto.KodikSearchResponse;
-import com.orinuno.client.dto.reference.KodikCountryDto;
-import com.orinuno.client.dto.reference.KodikGenreDto;
-import com.orinuno.client.dto.reference.KodikQualityDto;
-import com.orinuno.client.dto.reference.KodikReferenceResponse;
-import com.orinuno.client.dto.reference.KodikTranslationDto;
-import com.orinuno.client.dto.reference.KodikYearDto;
+import com.kodik.client.dto.KodikListRequest;
+import com.kodik.client.dto.KodikReferenceRequest;
+import com.kodik.client.dto.KodikSearchRequest;
+import com.kodik.client.dto.KodikSearchResponse;
+import com.kodik.client.dto.reference.KodikCountryDto;
+import com.kodik.client.dto.reference.KodikGenreDto;
+import com.kodik.client.dto.reference.KodikQualityDto;
+import com.kodik.client.dto.reference.KodikReferenceResponse;
+import com.kodik.client.dto.reference.KodikTranslationDto;
+import com.kodik.client.dto.reference.KodikYearDto;
 import com.orinuno.client.exception.KodikApiException;
 import com.orinuno.client.exception.KodikApiResponseErrorMapper;
 import com.orinuno.client.exception.KodikRateLimitedException;

@@ -1,17 +1,17 @@
-package com.orinuno.client.dto;
+package com.kodik.client.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.kodik.client.dto.reference.KodikCountryDto;
+import com.kodik.client.dto.reference.KodikGenreDto;
+import com.kodik.client.dto.reference.KodikQualityDto;
+import com.kodik.client.dto.reference.KodikReferenceResponse;
+import com.kodik.client.dto.reference.KodikTranslationDto;
+import com.kodik.client.dto.reference.KodikYearDto;
 import com.kodik.sdk.drift.DtoFieldExtractor;
-import com.orinuno.client.dto.reference.KodikCountryDto;
-import com.orinuno.client.dto.reference.KodikGenreDto;
-import com.orinuno.client.dto.reference.KodikQualityDto;
-import com.orinuno.client.dto.reference.KodikReferenceResponse;
-import com.orinuno.client.dto.reference.KodikTranslationDto;
-import com.orinuno.client.dto.reference.KodikYearDto;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

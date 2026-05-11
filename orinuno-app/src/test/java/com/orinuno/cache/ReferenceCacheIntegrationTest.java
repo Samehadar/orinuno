@@ -7,10 +7,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.dto.reference.KodikGenreDto;
+import com.kodik.client.dto.reference.KodikReferenceResponse;
+import com.kodik.client.dto.reference.KodikTranslationDto;
 import com.orinuno.client.KodikApiClient;
-import com.orinuno.client.dto.reference.KodikGenreDto;
-import com.orinuno.client.dto.reference.KodikReferenceResponse;
-import com.orinuno.client.dto.reference.KodikTranslationDto;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.configuration.ReferenceCacheConfig;
 import com.orinuno.service.ReferenceService;

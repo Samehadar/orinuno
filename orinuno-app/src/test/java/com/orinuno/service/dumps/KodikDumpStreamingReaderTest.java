@@ -3,7 +3,7 @@ package com.orinuno.service.dumps;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.orinuno.client.dto.KodikSearchResponse;
+import com.kodik.client.dto.KodikSearchResponse;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
