@@ -14,12 +14,10 @@ import com.kodik.token.KodikTokenMetrics;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenValidator;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
@@ -38,11 +36,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class KodikSdkConfiguration {
 
     private final OrinunoProperties properties;
-    private final KodikTokenLifecycle tokenLifecycle;
 
-    public KodikSdkConfiguration(OrinunoProperties properties, KodikTokenLifecycle tokenLifecycle) {
+    public KodikSdkConfiguration(OrinunoProperties properties) {
         this.properties = properties;
-        this.tokenLifecycle = tokenLifecycle;
     }
 
     @Bean
@@ -157,28 +153,5 @@ public class KodikSdkConfiguration {
             KodikTokenRegistry tokenRegistry,
             KodikApiRateLimiter rateLimiter) {
         return new KodikEmbedHttpClient(kodikApiWebClient, tokenConfig, tokenRegistry, rateLimiter);
-    }
-
-    /**
-     * Replaces the SDK's former {@code @PostConstruct} on {@link KodikTokenLifecycle} — the SDK
-     * class is now Spring-free, so we trigger startup validation from this @Configuration after the
-     * lifecycle bean is wired.
-     */
-    @PostConstruct
-    public void onStart() {
-        tokenLifecycle.onStart();
-    }
-
-    /**
-     * Replaces the SDK's former {@code @Scheduled} on {@link KodikTokenLifecycle}. The same {@code
-     * orinuno.kodik.validation-interval-minutes} property drives the cadence — the property layout
-     * did not change, only where the annotation lives.
-     */
-    @Scheduled(
-            fixedRateString = "${orinuno.kodik.validation-interval-minutes:360}",
-            timeUnit = java.util.concurrent.TimeUnit.MINUTES,
-            initialDelayString = "${orinuno.kodik.validation-interval-minutes:360}")
-    public void scheduledTokenRevalidation() {
-        tokenLifecycle.scheduledRevalidation();
     }
 }

@@ -33,7 +33,9 @@ spring:
 mybatis:
   mapper-locations: classpath:com/orinuno/db/mapper/*.xml
   type-aliases-package: com.orinuno.model
-  type-handlers-package: com.orinuno.catalog.repository
+  # ADR 0018 Phase 5.6 — catalog type handlers moved into `meter`. orinuno-app
+  # no longer owns the catalog write-path; the read-only repo uses JdbcTemplate
+  # directly (no MyBatis type-handler magic needed).
   configuration:
     map-underscore-to-camel-case: true
 
