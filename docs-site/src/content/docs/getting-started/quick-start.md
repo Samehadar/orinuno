@@ -71,11 +71,55 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Once the stack is up:
+The default stack is the **full-split topology** (ADR 0018):
+
+| Container | Host port | Role |
+| --- | --- | --- |
+| `orinuno-app` | 8085 (API), 8086 (actuator) | Public API gateway, multi-instance capable |
+| `orinuno-source-kodik` | 8087 (API), 8088 (actuator) | Standalone Kodik service |
+| `meter` | 8089 (API), 8090 (actuator) | OSS catalog collector (single DB writer) |
+| `db` (MySQL 8.0) | 3316 | Shared MySQL — separate schemas per role |
+| `demo` (nginx + Vue) | 3000 | Demo UI |
+
+Once up:
 
 - REST API: `http://localhost:8085/api/v1/health`
 - Swagger UI: `http://localhost:8085/swagger-ui.html`
 - Demo UI: `http://localhost:3000`
+- Topology background: [Per-source service split](/orinuno/architecture/per-source-split/).
+
+### Monolith mode (single-container dev)
+
+For casual contributors who don't want the 5-container stack on their laptop:
+
+```sh
+mvn -P monolith clean package
+docker compose -f docker-compose.yml -f docker-compose.monolith.yml up -d
+```
+
+The overlay drops `orinuno-source-kodik` and `meter` from the stack and
+clears `ORINUNO_SOURCE_KODIK_BASE_URL` so `orinuno-app`'s own controllers
+serve the Kodik routes locally. Trade-off: monolith mode loses
+`/api/v1/catalog/*` (the canonical L3 surface lives only in `meter`).
+Per-source endpoints (`/api/v1/kodik/*`, `/api/v1/embed/*`, etc.) keep
+working.
+
+### Multi-instance gateway (horizontal scale-out)
+
+`orinuno-app` is stateless w.r.t. the canonical catalog and trivially
+horizontally scalable. The `scale` overlay adds an nginx load balancer
+on host port 8084:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d --scale app=3
+curl http://localhost:8084/api/v1/health   # nginx round-robins across replicas
+```
+
+Per-instance Caffeine cache TTL bounds the eventual-consistency window
+between replicas (default 300 s, override
+`orinuno.catalog.cache.expire-after-write-seconds`). See
+[Per-source service split](/orinuno/architecture/per-source-split/#multi-instance-orinuno-app)
+for the failure-isolation model.
 
 ## Manual run
 

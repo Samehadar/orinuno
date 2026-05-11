@@ -3,18 +3,27 @@ title: Architecture Overview
 description: High-level map of Orinuno — context, containers, components, and how data flows through the system.
 ---
 
-Orinuno is a single-process Spring Boot WebFlux service that fronts the public
-Kodik API, decodes obfuscated video URLs, stores metadata in MySQL, and
-exposes a versioned REST surface for consumers. The diagrams on this page
-cover three levels: system context, internal components, and the PlantUML
-container view.
+Orinuno is a Spring Boot WebFlux stack that fronts the public Kodik API,
+decodes obfuscated video URLs, stores metadata in MySQL, and exposes a
+versioned REST surface for consumers. This page focuses on the inner
+workings of one `orinuno-app` instance; for the cross-process topology
+(per-source services, OSS meter, multi-instance gateway) see
+[Per-source service split](/orinuno/architecture/per-source-split/).
 
-The codebase is a multi-module Maven reactor — `orinuno-app` (the Spring Boot
-service) plus four standalone SDK modules (`kodik-sdk-drift`, `jutsu-sdk`,
-`sibnet-sdk`, `aniboom-sdk`). The SDKs are reusable outside this repo and
-have no dependency on Spring Boot, MySQL, or any orinuno-specific type. See
-[Project Structure](/orinuno/development/project-structure/) for the file-tree
-view and the [CHANGELOG](https://github.com/Samehadar/orinuno/blob/master/CHANGELOG.md)
+The codebase is a multi-module Maven reactor:
+
+- **`orinuno-app`** — public API gateway (this page).
+- **`orinuno-source-kodik`** — standalone Kodik deployable.
+- **`meter`** — OSS catalog collector + single writer of the shared
+  catalog schema.
+- **`orinuno-source-contract`** — sealed `SourceCatalogEvent` contract.
+- **`kodik-sdk`** (+ Spring Boot starter), **`jutsu-sdk`**, **`sibnet-sdk`**,
+  **`aniboom-sdk`** — reusable SDK artefacts with no Spring / MySQL /
+  orinuno-specific dependencies.
+
+See [Project Structure](/orinuno/development/project-structure/) for the
+file-tree view and the
+[CHANGELOG](https://github.com/Samehadar/orinuno/blob/master/CHANGELOG.md)
 `SDK-SPLIT 2026-05-03` entry for the migration history.
 
 ## System context (C4)

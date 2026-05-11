@@ -3,13 +3,37 @@ title: Project Structure
 description: Map of the source tree — where each responsibility lives and where to look first when investigating a bug.
 ---
 
-Orinuno is a multi-module Maven reactor. Five modules live side-by-side:
+Orinuno is a multi-module Maven reactor. As of ADR 0018 / 0020 (per-source
+service split) the modules are:
 
-- `orinuno-app/` — the Spring Boot service: controllers, MyBatis,
-  Liquibase, the demo UI, REST/HTTP surface, Kodik client.
-- `kodik-sdk-drift/` — domain-neutral schema-drift detector. Spring-free,
-  reusable elsewhere. See
+**Deployables:**
+
+- `orinuno-app/` — public API gateway. Controllers, the demo-facing REST
+  surface, reverse-proxy to per-source services, read-only canonical
+  catalog access through a Caffeine cache.
+- `orinuno-source-kodik/` — standalone Kodik service. Owns the `kodik_*`
+  MySQL schema, serves `/api/v1/kodik/*`, `/api/v1/embed/*`,
+  `/api/v1/reference/*`, `/api/v1/source-events/*`. See
+  [`docs/adr/0018-per-source-service-split-kodik.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0018-per-source-service-split-kodik.md).
+- `meter/` — OSS catalog collector. Single writer of the shared
+  `catalog_*` schema. Polls each per-source service's
+  `/api/v1/source-events/ready`. See
+  [`docs/adr/0020-oss-meter-extraction.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0020-oss-meter-extraction.md).
+- *(planned)* `orinuno-source-jutsu/` — standalone JutSu service. See
+  [`docs/adr/0019-per-source-service-split-jutsu.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0019-per-source-service-split-jutsu.md).
+
+**Libraries:**
+
+- `orinuno-source-contract/` — sealed `SourceCatalogEvent` contract
+  shared with every consumer (meter, kodik-parser, future OSS
+  aggregators). See
+  [`docs/adr/0017-source-event-contract.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0017-source-event-contract.md).
+- `kodik-sdk/` — Spring-free Kodik HTTP client + decoder + token registry +
+  drift detector (absorbed the former `kodik-sdk-drift` module). See
   [`docs/adr/0001-kodik-sdk-extraction.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0001-kodik-sdk-extraction.md).
+- `kodik-sdk-spring-boot-starter/` — auto-configures kodik-sdk beans
+  (Kodik HTTP client, token registry, decoder metrics, drift detector,
+  startup token validation `LifecycleRunner`) for any Spring Boot host.
 - `jutsu-sdk/` — standalone JutSu client (DLE auth, sticky cookies, 1 RPS
   rate-limit, premium decode). See
   [`docs/adr/0012-jutsu-sdk-extraction.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0012-jutsu-sdk-extraction.md).
