@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kodik.decoder.DecodeMethod;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.KodikVideoDecoderService;
 import com.orinuno.service.metrics.KodikDecoderMetrics;

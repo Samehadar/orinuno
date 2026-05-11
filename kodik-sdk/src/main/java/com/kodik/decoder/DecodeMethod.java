@@ -1,4 +1,4 @@
-package com.orinuno.service.decoder;
+package com.kodik.decoder;
 
 /**
  * DECODE-8 — discriminator stored in {@code kodik_episode_variant.decode_method}. Stored as a

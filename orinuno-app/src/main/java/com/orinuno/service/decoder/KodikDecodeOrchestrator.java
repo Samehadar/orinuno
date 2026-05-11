@@ -1,5 +1,7 @@
 package com.orinuno.service.decoder;
 
+import com.kodik.decoder.DecodeAttemptResult;
+import com.kodik.decoder.DecodeMethod;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.KodikVideoDecoderService;
 import com.orinuno.service.metrics.KodikDecoderMetrics;

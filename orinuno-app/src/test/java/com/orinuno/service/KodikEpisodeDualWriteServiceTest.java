@@ -10,12 +10,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kodik.decoder.DecodeAttemptResult;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
 import com.orinuno.model.KodikEpisodeVariant;
 import com.orinuno.repository.EpisodeSourceRepository;
 import com.orinuno.repository.EpisodeVideoRepository;
-import com.orinuno.service.decoder.DecodeAttemptResult;
 import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
