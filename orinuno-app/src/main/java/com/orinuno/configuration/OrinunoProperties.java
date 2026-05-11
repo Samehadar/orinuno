@@ -29,7 +29,7 @@ public class OrinunoProperties {
         private boolean validateOnStartup = true;
 
         /**
-         * Cooldown before {@link com.orinuno.token.KodikTokenValidator#validateAll()} re-probes
+         * Cooldown before {@link com.kodik.token.KodikTokenValidator#validateAll()} re-probes
          * tokens that currently sit in the {@code dead} tier. Without this, a single transient
          * network failure during the first {@code validate-on-startup} run would permanently exile
          * a token: {@code validateAll()} historically skipped DEAD entirely. Default 24h gives
@@ -67,8 +67,8 @@ public class OrinunoProperties {
     /**
      * Inbound rate limit applied to {@code POST /api/v1/parse/requests}. Per-consumer
      * (X-Created-By) token bucket. Surfaced as the {@code orinuno_inbound_throttle_total}
-     * Prometheus counter and the integration health endpoint. See operations/downstream
-     * consumer-integration.
+     * Prometheus counter and the integration health endpoint. See
+     * operations/downstream consumer-integration.
      */
     @Data
     public static class InboundRateLimitProperties {

@@ -9,10 +9,10 @@
  * Rules:
  *   1. catalog.internal sealed — only catalog.* may reference com.orinuno.catalog.internal..
  *   2. catalog is source-agnostic — must not import com.orinuno.jutsu.., com.orinuno.client..,
- *      com.orinuno.token.. (Kodik internals). Cross-source data enters via SourceCatalogEvent
+ *      com.kodik.token.. (Kodik internals). Cross-source data enters via SourceCatalogEvent
  *      (orinuno-source-contract) or CatalogIdentityRequest, never via L1 entities.
  *   3. jutsu↛kodik isolation — com.orinuno.jutsu.. must not import com.orinuno.client..
- *      or com.orinuno.token.. (Kodik internals). Same principle, opposite direction.
+ *      or com.kodik.token.. (Kodik internals). Same principle, opposite direction.
  *
  * SDK types (com.kodik.., com.jutsu.., com.sibnet.., com.aniboom..) and source-contract
  * types (com.orinuno.contract.source..) are library-level — allowed everywhere.
@@ -52,7 +52,7 @@ class BoundedContextArchitectureTest {
                     .should()
                     .dependOnClassesThat()
                     .resideInAnyPackage(
-                            "com.orinuno.jutsu..", "com.orinuno.client..", "com.orinuno.token..")
+                            "com.orinuno.jutsu..", "com.orinuno.client..", "com.kodik.token..")
                     .because(
                             "Catalog must stay source-agnostic per ADR 0017. Per-source data enters"
                                 + " via com.orinuno.contract.source.SourceCatalogEvent (handled by"
@@ -66,7 +66,7 @@ class BoundedContextArchitectureTest {
                     .resideInAPackage("com.orinuno.jutsu..")
                     .should()
                     .dependOnClassesThat()
-                    .resideInAnyPackage("com.orinuno.client..", "com.orinuno.token..")
+                    .resideInAnyPackage("com.orinuno.client..", "com.kodik.token..")
                     .because(
                             "jut.su context must not reach into Kodik internals — symmetric to ADR"
                                 + " 0018 per-source service isolation. After the split each source"

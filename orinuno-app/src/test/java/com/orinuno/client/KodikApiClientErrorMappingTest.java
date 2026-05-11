@@ -1,8 +1,6 @@
 package com.orinuno.client;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.KodikResponseMapper;
@@ -12,17 +10,15 @@ import com.kodik.client.exception.KodikUpstreamException;
 import com.kodik.client.exception.KodikValidationException;
 import com.kodik.token.KodikFunction;
 import com.kodik.token.KodikTokenEntry;
+import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
 import com.orinuno.configuration.OrinunoProperties;
-import com.orinuno.token.KodikTokenAutoDiscovery;
-import com.orinuno.token.KodikTokenRegistry;
 import java.nio.file.Path;
 import java.util.function.BiFunction;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -52,10 +48,9 @@ class KodikApiClientErrorMappingTest {
         properties.getKodik().setBootstrapFromEnv(false);
         properties.getKodik().setAutoDiscoveryEnabled(false);
 
-        ObjectProvider<KodikTokenAutoDiscovery> noDiscovery =
-                (ObjectProvider<KodikTokenAutoDiscovery>) mock(ObjectProvider.class);
-        when(noDiscovery.getIfAvailable()).thenReturn(null);
-        registry = new KodikTokenRegistry(properties, noDiscovery);
+        registry =
+                new KodikTokenRegistry(
+                        com.orinuno.token.TokenConfigTestSupport.toConfig(properties), () -> null);
         registry.init();
         registry.register(fullScope("test-token"), KodikTokenTier.STABLE);
 

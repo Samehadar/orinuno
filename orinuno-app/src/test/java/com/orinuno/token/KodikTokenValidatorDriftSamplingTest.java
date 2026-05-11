@@ -1,12 +1,12 @@
 package com.orinuno.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.sdk.drift.DriftDetector;
 import com.kodik.sdk.drift.DriftSamplingProperties;
+import com.kodik.token.KodikTokenRegistry;
+import com.kodik.token.KodikTokenValidator;
 import com.orinuno.configuration.OrinunoProperties;
 import java.nio.file.Path;
 import java.util.function.BiFunction;
@@ -14,7 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.util.LinkedMultiValueMap;
@@ -40,10 +39,7 @@ class KodikTokenValidatorDriftSamplingTest {
         properties.getKodik().setBootstrapFromEnv(false);
         properties.getKodik().setAutoDiscoveryEnabled(false);
 
-        ObjectProvider<KodikTokenAutoDiscovery> noDiscovery =
-                (ObjectProvider<KodikTokenAutoDiscovery>) mock(ObjectProvider.class);
-        when(noDiscovery.getIfAvailable()).thenReturn(null);
-        registry = new KodikTokenRegistry(properties, noDiscovery);
+        registry = new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), () -> null);
         registry.init();
     }
 
@@ -61,7 +57,8 @@ class KodikTokenValidatorDriftSamplingTest {
                                         ],"probe_only_field":"yes"}"""));
         KodikResponseMapper mapper = new KodikResponseMapper();
         KodikTokenValidator validator =
-                new KodikTokenValidator(webClient, properties, registry, mapper);
+                new KodikTokenValidator(
+                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
@@ -84,7 +81,8 @@ class KodikTokenValidatorDriftSamplingTest {
                                                 + "\",\"unexpected\":\"drift-ish\"}"));
         KodikResponseMapper mapper = new KodikResponseMapper();
         KodikTokenValidator validator =
-                new KodikTokenValidator(webClient, properties, registry, mapper);
+                new KodikTokenValidator(
+                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
 
         boolean ok = validator.probe("/search", params("bad", "title", "x"), "bad", "probe");
 
@@ -100,7 +98,8 @@ class KodikTokenValidatorDriftSamplingTest {
                 stubWebClient((m, u) -> respond(HttpStatus.INTERNAL_SERVER_ERROR, "{\"oops\":1}"));
         KodikResponseMapper mapper = new KodikResponseMapper();
         KodikTokenValidator validator =
-                new KodikTokenValidator(webClient, properties, registry, mapper);
+                new KodikTokenValidator(
+                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
@@ -123,7 +122,8 @@ class KodikTokenValidatorDriftSamplingTest {
         cfg.setEnabled(false);
         KodikResponseMapper mapper = new KodikResponseMapper(new DriftDetector(cfg));
         KodikTokenValidator validator =
-                new KodikTokenValidator(webClient, properties, registry, mapper);
+                new KodikTokenValidator(
+                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
