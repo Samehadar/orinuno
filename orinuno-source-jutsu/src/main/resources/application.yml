@@ -1,0 +1,50 @@
+# orinuno-source-jutsu — default configuration (ADR 0019 Phase 4.1).
+#
+# Port allocation in the bundled docker-compose stack:
+#   orinuno-app          host 8085 → container 8080
+#   orinuno-app actuator host 8086 → container 8081
+#   orinuno-source-kodik host 8087 → container 8086
+#   orinuno-source-kodik act host 8088 → container 8087
+#   meter                host 8089 → container 8089
+#   meter actuator       host 8090 → container 8090
+#   orinuno-source-jutsu host 8091 → container 8086
+#   orinuno-source-jutsu act host 8092 → container 8087
+
+server:
+  port: ${APP_PORT:8086}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,prometheus"
+  server:
+    port: ${APP_ACTUATOR:8087}
+
+spring:
+  application:
+    name: orinuno-source-jutsu
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:orinuno_source_jutsu}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  liquibase:
+    change-log: classpath:db/changelog/liquibase-changelog.yaml
+    contexts: ${LIQUIBASE_CONTEXTS:default}
+    # Skip Liquibase at boot when DB isn't reachable (dev / smoke). Production keeps
+    # the default true; override via SPRING_LIQUIBASE_ENABLED=false locally.
+    enabled: ${SPRING_LIQUIBASE_ENABLED:true}
+
+mybatis:
+  mapper-locations: classpath:com/orinuno/source/jutsu/db/mapper/*.xml
+  type-aliases-package: com.orinuno.source.jutsu.model
+  configuration:
+    map-underscore-to-camel-case: true
+
+# Empty changelog directory at Phase 4.1; Phase 4.2 moves the four jutsu_*
+# migrations from orinuno-app into this service's classpath under
+# db/changelog/scripts/.

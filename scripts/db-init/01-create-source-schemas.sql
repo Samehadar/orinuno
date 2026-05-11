@@ -21,7 +21,9 @@ CREATE DATABASE IF NOT EXISTS `orinuno_catalog`
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
--- Reserved for Phase 4 — kept here so the schema list is grep-discoverable.
--- CREATE DATABASE IF NOT EXISTS `orinuno_source_jutsu`
---     CHARACTER SET utf8mb4
---     COLLATE utf8mb4_unicode_ci;
+-- ADR 0019 Phase 4.1 — orinuno-source-jutsu schema. Owns jutsu_title,
+-- jutsu_episode, jutsu_sync_state, jutsu_film; populated by jutsu-sdk's
+-- catalog crawl + notice-walk + live-fallback (Playwright) paths.
+CREATE DATABASE IF NOT EXISTS `orinuno_source_jutsu`
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
