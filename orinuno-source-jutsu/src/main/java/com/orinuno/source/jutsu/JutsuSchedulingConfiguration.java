@@ -7,6 +7,8 @@
  */
 package com.orinuno.source.jutsu;
 
+import java.time.Clock;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.TaskScheduler;
@@ -14,6 +16,16 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 @Configuration
 public class JutsuSchedulingConfiguration {
+
+    /**
+     * UTC system clock shared by scheduled jobs + the SourceCatalogEvent
+     * projection. @ConditionalOnMissingBean so tests can swap in a fixed clock.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
 
     /**
      * Dedicated pool for jut.su sync workers (full-crawl + notice-walk). 2 threads is plenty — the
