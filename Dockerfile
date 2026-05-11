@@ -1,6 +1,7 @@
-# Multi-stage build that produces three runtime images out of one reactor build:
+# Multi-stage build that produces four runtime images out of one reactor build:
 #   target: app-runtime          → orinuno-app (Playwright + Chromium for HTML drift / live scrape)
 #   target: source-kodik-runtime → orinuno-source-kodik (slim JRE — no browser deps)
+#   target: source-jutsu-runtime → orinuno-source-jutsu (slim JRE — no browser deps)
 #   target: meter-runtime        → meter OSS catalog collector (slim JRE)
 #
 # Reactor layout (see pom.xml `<modules>`):
@@ -11,6 +12,7 @@
 #   sibnet-sdk / aniboom-sdk       — decoder-only source SDKs
 #   orinuno-app                    — public API gateway / monolith host
 #   orinuno-source-kodik           — standalone Kodik deployable (ADR 0018 Phase 2)
+#   orinuno-source-jutsu           — standalone jut.su deployable (ADR 0019 Phase 4)
 #   meter                          — OSS catalog collector (ADR 0018 Phase 5)
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
@@ -24,6 +26,7 @@ COPY sibnet-sdk/pom.xml sibnet-sdk/pom.xml
 COPY aniboom-sdk/pom.xml aniboom-sdk/pom.xml
 COPY orinuno-app/pom.xml orinuno-app/pom.xml
 COPY orinuno-source-kodik/pom.xml orinuno-source-kodik/pom.xml
+COPY orinuno-source-jutsu/pom.xml orinuno-source-jutsu/pom.xml
 COPY meter/pom.xml meter/pom.xml
 RUN mvn -B -q dependency:go-offline -DskipTests || true
 
@@ -36,6 +39,7 @@ COPY aniboom-sdk/src aniboom-sdk/src
 COPY orinuno-app/src orinuno-app/src
 COPY orinuno-app/spotbugs-exclude.xml orinuno-app/spotbugs-exclude.xml
 COPY orinuno-source-kodik/src orinuno-source-kodik/src
+COPY orinuno-source-jutsu/src orinuno-source-jutsu/src
 COPY meter/src meter/src
 RUN mvn -B -q -DskipTests package
 
@@ -73,6 +77,19 @@ FROM eclipse-temurin:21-jre AS source-kodik-runtime
 WORKDIR /app
 
 COPY --from=build /app/orinuno-source-kodik/target/orinuno-source-kodik.jar app.jar
+
+EXPOSE 8086 8087
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+
+# ─── orinuno-source-jutsu runtime ──────────────────────────────────────────
+# Pure REST + sync workers + live-fallback. ADR 0019 originally called the
+# fallback path "Playwright live-fallback" but the actual JutsuLiveFallbackService
+# is pure SDK reactive client — no Chromium runtime needed. Slim JRE.
+FROM eclipse-temurin:21-jre AS source-jutsu-runtime
+WORKDIR /app
+
+COPY --from=build /app/orinuno-source-jutsu/target/orinuno-source-jutsu.jar app.jar
 
 EXPOSE 8086 8087
 ENTRYPOINT ["java", "-jar", "app.jar"]

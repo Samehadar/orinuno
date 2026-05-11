@@ -40,6 +40,11 @@ services:
       # /api/v1/embed/*, /api/v1/reference/*, /api/v1/source-events/* forward to
       # the standalone service. Leave blank to keep orinuno-app's local controllers.
       ORINUNO_SOURCE_KODIK_BASE_URL: http://source-kodik:8086
+      # ADR 0019 Phase 4.8 — activate JutsuUpstreamProxyFilter so
+      # /api/v1/sources/jutsu/* + /api/v1/providers/jutsu/* forward to
+      # orinuno-source-jutsu. Leave blank to keep orinuno-app's local
+      # JutsuApiController + JutsuStreamProxyController.
+      ORINUNO_SOURCE_JUTSU_BASE_URL: http://source-jutsu:8086
     volumes:
       - ./data:/app/data
     restart: unless-stopped
@@ -65,9 +70,11 @@ services:
       DB_NAME: orinuno_catalog
       DB_USERNAME: root
       DB_PASSWORD: root
-      # Phase 5.5 will wire these to the actual per-source service URLs so meter
-      # starts polling /api/v1/source-events/ready. Empty until then.
+      # Phase 5.5 / Phase 4.11 — per-source service URLs that meter's
+      # *RemoteEventPoller beans hit. Phase 4.11 lands the jut.su poller; until
+      # then the JUTSU url is just declared so the env contract is set.
       ORINUNO_SOURCE_KODIK_BASE_URL: http://source-kodik:8086
+      ORINUNO_SOURCE_JUTSU_BASE_URL: http://source-jutsu:8086
     restart: unless-stopped
 
   # ADR 0018 Phase 2 — orinuno-source-kodik standalone deployable. Owns the
@@ -93,6 +100,34 @@ services:
       KODIK_TOKEN_FILE: /app/data/kodik_tokens.json
     volumes:
       - ./data:/app/data
+    restart: unless-stopped
+
+  # ADR 0019 Phase 4 — orinuno-source-jutsu standalone deployable. Owns the
+  # jutsu_* schema and serves /api/v1/sources/jutsu/*, /api/v1/providers/jutsu/*,
+  # /api/v1/source-events/* directly. `app` reverse-proxies these routes here
+  # when ORINUNO_SOURCE_JUTSU_BASE_URL is set.
+  source-jutsu:
+    build:
+      context: .
+      target: source-jutsu-runtime
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8091:8086"
+      - "8092:8087"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: orinuno_source_jutsu
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      # Credentials for jut.su premium decode. Inherits the existing
+      # PROVIDERS_JUTSU_* env names from orinuno-app's contract so deploys
+      # don't need a second secret set.
+      JUTSU_USERNAME: ${PROVIDERS_JUTSU_USERNAME:-}
+      JUTSU_PASSWORD: ${PROVIDERS_JUTSU_PASSWORD:-}
+      JUTSU_BASE_URL: ${PROVIDERS_JUTSU_BASE_URL:-https://jut.su}
     restart: unless-stopped
 
   demo:
