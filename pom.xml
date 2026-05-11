@@ -24,6 +24,7 @@
     <modules>
         <module>orinuno-source-contract</module>
         <module>kodik-sdk-drift</module>
+        <module>kodik-sdk</module>
         <module>jutsu-sdk</module>
         <module>sibnet-sdk</module>
         <module>aniboom-sdk</module>
@@ -72,6 +73,11 @@
             <dependency>
                 <groupId>com.orinuno</groupId>
                 <artifactId>kodik-sdk-drift</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orinuno</groupId>
+                <artifactId>kodik-sdk</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
