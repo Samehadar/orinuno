@@ -30,15 +30,6 @@
 
     <dependencies>
         <!--
-            kodik-sdk-drift — schema-drift detector. Phase 1.8 absorbs this into com.kodik.drift
-            and the dependency goes away; until then KodikResponseMapper depends on it directly.
-        -->
-        <dependency>
-            <groupId>com.orinuno</groupId>
-            <artifactId>kodik-sdk-drift</artifactId>
-        </dependency>
-
-        <!--
             HTTP client + reactive primitives. spring-context is needed because WebClient.Builder
             transitively reaches SmartLifecycle when wiring its default exchange function on
             Spring 6.x; explicitly declared here so the SDK is usable without a Spring Boot

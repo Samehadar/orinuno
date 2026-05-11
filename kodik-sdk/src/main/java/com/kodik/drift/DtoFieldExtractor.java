@@ -1,4 +1,4 @@
-package com.kodik.sdk.drift;
+package com.kodik.drift;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;

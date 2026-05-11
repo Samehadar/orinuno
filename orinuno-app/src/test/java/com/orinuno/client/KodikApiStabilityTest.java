@@ -13,7 +13,7 @@ import com.kodik.client.dto.reference.KodikQualityDto;
 import com.kodik.client.dto.reference.KodikReferenceResponse;
 import com.kodik.client.dto.reference.KodikTranslationDto;
 import com.kodik.client.dto.reference.KodikYearDto;
-import com.kodik.sdk.drift.DtoFieldExtractor;
+import com.kodik.drift.DtoFieldExtractor;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;

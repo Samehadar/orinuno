@@ -3,8 +3,8 @@ package com.orinuno.token;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.kodik.client.KodikResponseMapper;
-import com.kodik.sdk.drift.DriftDetector;
-import com.kodik.sdk.drift.DriftSamplingProperties;
+import com.kodik.drift.DriftDetector;
+import com.kodik.drift.DriftSamplingProperties;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenValidator;
 import com.orinuno.configuration.OrinunoProperties;

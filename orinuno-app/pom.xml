@@ -39,20 +39,8 @@
 
     <dependencies>
         <!--
-            kodik-sdk-drift — extracted in PR3 of the transparency roadmap.
-            The orinuno-app module re-exports the same drift API under
-            com.kodik.sdk.drift; pre-extraction imports under
-            com.orinuno.drift no longer exist.
-        -->
-        <dependency>
-            <groupId>com.orinuno</groupId>
-            <artifactId>kodik-sdk-drift</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <!--
-            kodik-sdk — ADR 0018 Phase 1.2a. DTO + exception leaves moved under com.kodik.client.*
-            so orinuno-app callers import from the standalone SDK module. Phases 1.2b-1.5 bring the
-            HTTP client / rate limiter / response mapper / decoder / token / embed code over.
+            kodik-sdk — ADR 0018 Phase 1. Hosts every Kodik HTTP client, token, decoder metric, and
+            schema-drift type under com.kodik.* (the kodik-sdk-drift module was merged in 1.8).
         -->
         <dependency>
             <groupId>com.orinuno</groupId>

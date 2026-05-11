@@ -11,7 +11,7 @@ import com.kodik.client.dto.reference.KodikQualityDto;
 import com.kodik.client.dto.reference.KodikReferenceResponse;
 import com.kodik.client.dto.reference.KodikTranslationDto;
 import com.kodik.client.dto.reference.KodikYearDto;
-import com.kodik.sdk.drift.DtoFieldExtractor;
+import com.kodik.drift.DtoFieldExtractor;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

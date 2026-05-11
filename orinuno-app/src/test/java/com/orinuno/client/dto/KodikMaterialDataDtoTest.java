@@ -2,7 +2,7 @@ package com.kodik.client.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.kodik.sdk.drift.DtoFieldExtractor;
+import com.kodik.drift.DtoFieldExtractor;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

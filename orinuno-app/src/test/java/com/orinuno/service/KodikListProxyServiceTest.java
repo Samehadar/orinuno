@@ -6,8 +6,8 @@ import static org.mockito.Mockito.when;
 
 import com.kodik.client.KodikApiClient;
 import com.kodik.client.dto.KodikListRequest;
-import com.kodik.sdk.drift.DriftDetector;
-import com.kodik.sdk.drift.DriftSamplingProperties;
+import com.kodik.drift.DriftDetector;
+import com.kodik.drift.DriftSamplingProperties;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

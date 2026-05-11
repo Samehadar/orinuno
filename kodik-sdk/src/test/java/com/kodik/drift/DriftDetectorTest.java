@@ -1,4 +1,4 @@
-package com.kodik.sdk.drift;
+package com.kodik.drift;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
