@@ -1,0 +1,42 @@
+# orinuno-source-kodik — default configuration (ADR 0018 Phase 2.1).
+#
+# Boot port 8086 to avoid clashing with orinuno (8085) and the demo UI (3000)
+# in the docker-compose stack. kodik.sdk.* maps into KodikSdkProperties via
+# kodik-sdk-spring-boot-starter; phases 2.2+ add datasource + liquibase +
+# orinuno.kodik.* compatibility once the kodik_* migrations move in.
+
+server:
+  port: ${APP_PORT:8086}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,prometheus"
+  server:
+    port: ${APP_ACTUATOR:8087}
+
+spring:
+  application:
+    name: orinuno-source-kodik
+
+kodik:
+  sdk:
+    rate-limit-per-minute: ${KODIK_RATE_LIMIT_PER_MINUTE:30}
+    token:
+      file: ${KODIK_TOKEN_FILE:./data/kodik_tokens.json}
+      bootstrap-value: ${KODIK_TOKEN:}
+      bootstrap-from-env: ${KODIK_TOKEN_BOOTSTRAP_FROM_ENV:true}
+      auto-discovery-enabled: ${KODIK_TOKEN_AUTO_DISCOVERY_ENABLED:true}
+      validate-on-startup: ${KODIK_TOKEN_VALIDATE_ON_STARTUP:false}
+      dead-revalidation-interval-minutes: ${KODIK_TOKEN_DEAD_REVALIDATION_INTERVAL_MINUTES:1440}
+      failover-max-attempts: ${KODIK_TOKEN_FAILOVER_MAX_ATTEMPTS:3}
+
+orinuno:
+  kodik:
+    # Cadence for KodikSdkAutoConfiguration.scheduledTokenRevalidation. Held under the
+    # legacy prefix so deployments switching from orinuno-app keep the same env override.
+    validation-interval-minutes: ${KODIK_TOKEN_VALIDATION_INTERVAL_MINUTES:360}
