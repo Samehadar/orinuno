@@ -102,6 +102,21 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Testcontainers MySQL — Phase 5.2a smoke test runs Liquibase against
+             a real MySQL 8.0 container so the catalog_* changelog can't drift
+             from what production sees. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
+            <version>1.21.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.21.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -125,6 +140,21 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Include *IT classes alongside *Test/*Tests; e2e-tagged
+                         tests (Testcontainers, slow) are opt-in via -Dgroups=e2e.
+                         Default `mvn test` skips them via excludedGroups=e2e. -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <excludedGroups>e2e</excludedGroups>
                 </configuration>
             </plugin>
             <plugin>

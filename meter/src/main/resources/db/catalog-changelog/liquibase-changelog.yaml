@@ -1,0 +1,24 @@
+# ADR 0018 Phase 5.2a — meter owns the catalog_* schema in the shared catalog DB
+# (orinuno_catalog). For now this is a parallel copy of the catalog_* changesets
+# from orinuno-app/src/main/resources/com/orinuno/db/changelog/scripts/; fresh
+# deploys creating the new `orinuno_catalog` schema get these tables applied by
+# meter on startup. orinuno-app still owns the catalog_* tables in the legacy
+# orinuno schema until Phase 5.4 cuts over the read-path and Phase 5.6 drops
+# them from the orinuno schema.
+#
+# Liquibase tracks changesets by file path + author + id. Because meter's
+# changelog lives under a different classpath (db/catalog-changelog/scripts/...
+# vs com/orinuno/db/changelog/scripts/...), the same SQL applied from both
+# modules to the same DB would be re-executed — which is why this changelog
+# runs against a DIFFERENT schema (orinuno_catalog) than orinuno-app's
+# (orinuno). The two schemas stay isolated until Phase 5.4 hands the read path
+# over.
+databaseChangeLog:
+  - include:
+      file: db/catalog-changelog/scripts/20260508030000_create_catalog_content.sql
+  - include:
+      file: db/catalog-changelog/scripts/20260508030100_create_catalog_content_external_id.sql
+  - include:
+      file: db/catalog-changelog/scripts/20260508030200_create_catalog_episode.sql
+  - include:
+      file: db/catalog-changelog/scripts/20260508030300_create_catalog_episode_source_link.sql
