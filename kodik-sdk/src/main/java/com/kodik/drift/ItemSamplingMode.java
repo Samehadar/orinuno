@@ -1,4 +1,4 @@
-package com.kodik.sdk.drift;
+package com.kodik.drift;
 
 /**
  * Strategy for how many items inside a paginated {@code results} array to inspect during drift

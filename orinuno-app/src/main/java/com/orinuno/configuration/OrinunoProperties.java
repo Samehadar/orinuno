@@ -1,6 +1,6 @@
 package com.orinuno.configuration;
 
-import com.kodik.sdk.drift.DriftSamplingProperties;
+import com.kodik.drift.DriftSamplingProperties;
 import java.util.List;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

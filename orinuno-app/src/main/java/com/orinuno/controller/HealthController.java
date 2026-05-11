@@ -1,7 +1,7 @@
 package com.orinuno.controller;
 
 import com.kodik.client.KodikResponseMapper;
-import com.kodik.sdk.drift.DriftRecord;
+import com.kodik.drift.DriftRecord;
 import com.kodik.token.KodikTokenEntry;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;

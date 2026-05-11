@@ -1,4 +1,4 @@
-package com.kodik.sdk.drift;
+package com.kodik.drift;
 
 import java.time.Instant;
 import java.util.Set;

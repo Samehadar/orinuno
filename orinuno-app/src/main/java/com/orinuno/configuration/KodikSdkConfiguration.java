@@ -6,7 +6,7 @@ import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.embed.KodikEmbedHttpClient;
 import com.kodik.client.http.RotatingUserAgentProvider;
 import com.kodik.decoder.KodikDecoderMetrics;
-import com.kodik.sdk.drift.DriftDetector;
+import com.kodik.drift.DriftDetector;
 import com.kodik.token.KodikTokenAutoDiscovery;
 import com.kodik.token.KodikTokenConfig;
 import com.kodik.token.KodikTokenLifecycle;

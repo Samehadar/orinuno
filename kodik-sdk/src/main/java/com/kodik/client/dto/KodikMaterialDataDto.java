@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * results[*].material_data}. The record is used in two ways:
  *
  * <ul>
- *   <li>{@link com.kodik.sdk.drift.DtoFieldExtractor} introspects its components to produce the
+ *   <li>{@link com.kodik.drift.DtoFieldExtractor} introspects its components to produce the
  *       canonical set of known field names (snake_case via Jackson fallback).
  *   <li>Stability tests ({@code KodikApiStabilityTest}) and the runtime drift sampler in {@code
  *       KodikResponseMapper} both use this set — keep them in sync by adding new components here
