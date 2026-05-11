@@ -2,6 +2,7 @@ package com.orinuno.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.kodik.client.KodikApiClient;
 import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikReferenceRequest;
@@ -239,7 +240,12 @@ class KodikApiClientReferenceTest {
 
         KodikResponseMapper mapper = new KodikResponseMapper();
         KodikApiClient client =
-                new KodikApiClient(webClient, properties, mapper, rateLimiter, registry);
+                new KodikApiClient(
+                        webClient,
+                        com.orinuno.token.TokenConfigTestSupport.toConfig(properties),
+                        mapper,
+                        rateLimiter,
+                        registry);
 
         client.genres().block();
 
@@ -251,7 +257,11 @@ class KodikApiClientReferenceTest {
 
     private KodikApiClient buildClient(WebClient webClient) {
         return new KodikApiClient(
-                webClient, properties, new KodikResponseMapper(), rateLimiter, registry);
+                webClient,
+                com.orinuno.token.TokenConfigTestSupport.toConfig(properties),
+                new KodikResponseMapper(),
+                rateLimiter,
+                registry);
     }
 
     private static KodikTokenEntry fullScope(String value) {

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kodik.client.KodikApiClient;
 import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikSearchRequest;
@@ -129,7 +130,11 @@ class KodikApiClientFailoverTest {
 
     private KodikApiClient buildClient(WebClient webClient) {
         return new KodikApiClient(
-                webClient, properties, new KodikResponseMapper(), passthroughLimiter, registry);
+                webClient,
+                com.orinuno.token.TokenConfigTestSupport.toConfig(properties),
+                new KodikResponseMapper(),
+                passthroughLimiter,
+                registry);
     }
 
     private static KodikTokenEntry fullScope(String value) {

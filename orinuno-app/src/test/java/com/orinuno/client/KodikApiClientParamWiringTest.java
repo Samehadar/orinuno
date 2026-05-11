@@ -2,6 +2,7 @@ package com.orinuno.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.kodik.client.KodikApiClient;
 import com.kodik.client.dto.KodikListRequest;
 import com.kodik.client.dto.KodikReferenceRequest;
 import com.kodik.client.dto.KodikSearchRequest;

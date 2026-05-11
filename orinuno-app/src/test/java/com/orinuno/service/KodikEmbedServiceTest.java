@@ -7,9 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.embed.KodikEmbedException;
+import com.kodik.client.embed.KodikEmbedHttpClient;
 import com.kodik.client.embed.KodikIdType;
-import com.orinuno.client.embed.KodikEmbedException;
-import com.orinuno.client.embed.KodikEmbedHttpClient;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;

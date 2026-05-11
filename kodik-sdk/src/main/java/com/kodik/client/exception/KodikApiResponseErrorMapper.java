@@ -1,8 +1,5 @@
-package com.orinuno.client.exception;
+package com.kodik.client.exception;
 
-import com.kodik.client.exception.KodikApiException;
-import com.kodik.client.exception.KodikUpstreamException;
-import com.kodik.client.exception.KodikValidationException;
 import com.kodik.token.KodikTokenValidator;
 import java.util.Map;
 

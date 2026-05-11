@@ -1,18 +1,15 @@
-package com.orinuno.client.embed;
+package com.kodik.client.embed;
 
 import com.kodik.client.KodikApiRateLimiter;
-import com.kodik.client.embed.KodikIdType;
 import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenConfig;
 import com.kodik.token.KodikTokenException;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenValidator;
-import com.orinuno.configuration.OrinunoProperties;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
@@ -45,24 +42,23 @@ import reactor.core.publisher.Mono;
  * byte-compatible with AnimeParsers.
  */
 @Slf4j
-@Component
 public class KodikEmbedHttpClient {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
             new ParameterizedTypeReference<>() {};
 
     private final WebClient kodikApiWebClient;
-    private final OrinunoProperties properties;
+    private final KodikTokenConfig tokenConfig;
     private final KodikTokenRegistry tokenRegistry;
     private final KodikApiRateLimiter rateLimiter;
 
     public KodikEmbedHttpClient(
-            @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
-            OrinunoProperties properties,
+            WebClient kodikApiWebClient,
+            KodikTokenConfig tokenConfig,
             KodikTokenRegistry tokenRegistry,
             KodikApiRateLimiter rateLimiter) {
         this.kodikApiWebClient = kodikApiWebClient;
-        this.properties = properties;
+        this.tokenConfig = tokenConfig;
         this.tokenRegistry = tokenRegistry;
         this.rateLimiter = rateLimiter;
     }
@@ -118,11 +114,7 @@ public class KodikEmbedHttpClient {
                                             error.toString())) {
                                 tokenRegistry.markInvalid(token, KodikFunction.GET_INFO);
                                 int maxAttempts =
-                                        Math.max(
-                                                1,
-                                                properties
-                                                        .getKodik()
-                                                        .getTokenFailoverMaxAttempts());
+                                        Math.max(1, tokenConfig.tokenFailoverMaxAttempts());
                                 if (attempt + 1 >= maxAttempts) {
                                     return Mono.error(
                                             new KodikTokenException.TokenRejectedException(
