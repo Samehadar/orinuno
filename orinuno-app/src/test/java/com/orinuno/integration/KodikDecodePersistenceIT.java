@@ -19,10 +19,13 @@ package com.orinuno.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.orinuno.model.KodikEpisodeVariant;
+import com.orinuno.repository.EpisodeVariantRepository;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -73,6 +76,24 @@ class KodikDecodePersistenceIT {
     }
 
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private EpisodeVariantRepository variantRepository;
+
+    /**
+     * Wipe the tables under test before each method. Spring shares the application context (and
+     * therefore the Testcontainers MySQL instance) across @Test methods within the class, so
+     * without this hook each test would see leftovers from its predecessors. FK cascades
+     * (kodik_episode_variant → kodik_content, episode_video → episode_source) mean we only need to
+     * delete the roots.
+     */
+    @BeforeEach
+    void resetTables() {
+        jdbc.execute("SET FOREIGN_KEY_CHECKS=0");
+        jdbc.execute("TRUNCATE TABLE episode_video");
+        jdbc.execute("TRUNCATE TABLE episode_source");
+        jdbc.execute("TRUNCATE TABLE kodik_episode_variant");
+        jdbc.execute("TRUNCATE TABLE kodik_content");
+        jdbc.execute("SET FOREIGN_KEY_CHECKS=1");
+    }
 
     /**
      * Mirrors the exact SQL shipped in
@@ -199,5 +220,110 @@ class KodikDecodePersistenceIT {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM episode_video", Integer.class))
                 .as("second backfill must not duplicate episode_video")
                 .isOne();
+    }
+
+    @Test
+    @DisplayName(
+            "ADR 0018 Phase 0.4b — pending-decode predicate now reads episode_video, not"
+                    + " kodik_episode_variant.mp4_link")
+    void pendingDecodeReadsEpisodeVideoNotVariantMp4Link() {
+        // Seed parent content row.
+        jdbc.update(
+                "INSERT INTO kodik_content (id, kodik_id, type, title, year)"
+                        + " VALUES (?, ?, ?, ?, ?)",
+                42L,
+                "ksid-42",
+                "anime",
+                "Phase 0.4b Title",
+                2024);
+
+        // Insert a variant with a *populated* mp4_link but NO mirrored episode_video row.
+        // Pre-0.4b this row would be filtered out as "already decoded". Post-0.4b it must
+        // surface as "needs decode" because the source of truth is episode_video.video_url.
+        jdbc.update(
+                "INSERT INTO kodik_episode_variant"
+                        + " (content_id, season_number, episode_number, translation_id,"
+                        + " translation_title, translation_type, quality, kodik_link, mp4_link)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                42L,
+                1,
+                1,
+                610,
+                "AniDUB",
+                "voice",
+                "720",
+                "https://kodik.info/seria/p04b/720p",
+                "https://cdn.example.com/stale-but-present.mp4");
+
+        List<KodikEpisodeVariant> pendingBeforeMirror =
+                variantRepository.findByContentIdWithoutMp4(42L);
+        assertThat(pendingBeforeMirror)
+                .as(
+                        "variant with mp4_link but no episode_video row must still be reported as"
+                                + " pending decode")
+                .hasSize(1);
+        assertThat(pendingBeforeMirror.get(0).getMp4Link())
+                .isEqualTo("https://cdn.example.com/stale-but-present.mp4");
+
+        // Now mirror into episode_video — query must drop the row from the pending set.
+        runBackfill();
+
+        List<KodikEpisodeVariant> pendingAfterMirror =
+                variantRepository.findByContentIdWithoutMp4(42L);
+        assertThat(pendingAfterMirror)
+                .as("once episode_video has a populated video_url the variant exits pending")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName(
+            "ADR 0018 Phase 0.4b — findExpiredLinks reads episode_video.decoded_at, not"
+                    + " kodik_episode_variant.mp4_link_decoded_at")
+    void expiredDecodeReadsEpisodeVideo() {
+        jdbc.update(
+                "INSERT INTO kodik_content (id, kodik_id, type, title, year)"
+                        + " VALUES (?, ?, ?, ?, ?)",
+                73L,
+                "ksid-73",
+                "anime",
+                "Phase 0.4b Expired",
+                2024);
+
+        // Stale decoded_at on the variant column, but freshly decoded in episode_video. The
+        // new query joins on episode_video.decoded_at, so this row must NOT be flagged as
+        // expired even though the legacy variant column suggests it is.
+        LocalDateTime fresh = LocalDateTime.now().minusMinutes(5).withNano(0);
+        LocalDateTime stale = LocalDateTime.now().minusDays(2).withNano(0);
+        jdbc.update(
+                "INSERT INTO kodik_episode_variant"
+                        + " (content_id, season_number, episode_number, translation_id,"
+                        + " translation_title, translation_type, quality, kodik_link, mp4_link,"
+                        + " mp4_link_decoded_at, decode_method)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                73L,
+                1,
+                1,
+                610,
+                "AniDUB",
+                "voice",
+                "720",
+                "https://kodik.info/seria/p04b-exp/720p",
+                "https://cdn.example.com/fresh.mp4",
+                Timestamp.valueOf(stale),
+                "REGEX");
+
+        // Backfill — but then update episode_video.decoded_at to fresh, leaving variant.
+        runBackfill();
+        jdbc.update(
+                "UPDATE episode_video SET decoded_at = ? WHERE video_url = ?",
+                Timestamp.valueOf(fresh),
+                "https://cdn.example.com/fresh.mp4");
+
+        // 24h threshold — variant column says stale (>24h old) but episode_video says fresh.
+        // Query joins on episode_video.decoded_at, so the row must NOT be returned.
+        List<KodikEpisodeVariant> expired = variantRepository.findExpiredLinks(24, 100);
+        assertThat(expired)
+                .as("episode_video.decoded_at is fresh, so the row is not expired")
+                .isEmpty();
     }
 }

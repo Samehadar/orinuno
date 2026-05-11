@@ -29,10 +29,28 @@
         ORDER BY season_number, episode_number, translation_id
     </select>
 
+    <!--
+        ADR 0018 Phase 0.4b — pending-decode predicate moved from kodik_episode_variant.mp4_link
+        to episode_video.video_url. The L2 columns on the variant table are scheduled for drop
+        in Phase 0.4c; until then they remain populated as a dual-write fallback, but they no
+        longer drive the read-side decision of "needs decode?". The COLLATE clause on the
+        CAST(translation_id) matches the table-level utf8mb4_unicode_ci to avoid MySQL 8's
+        illegal-mix-of-collations error when joining against episode_source.translator_id.
+    -->
     <select id="findByContentIdWithoutMp4" resultMap="variantResultMap">
-        SELECT * FROM kodik_episode_variant
-        WHERE content_id = #{contentId} AND mp4_link IS NULL
-        ORDER BY season_number, episode_number
+        SELECT v.* FROM kodik_episode_variant v
+        LEFT JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        LEFT JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.content_id = #{contentId}
+          AND ev.id IS NULL
+        ORDER BY v.season_number, v.episode_number
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
@@ -86,19 +104,48 @@
         WHERE id = #{id}
     </update>
 
+    <!--
+        ADR 0018 Phase 0.4b — TTL expiry source-of-truth is episode_video.decoded_at, populated
+        by KodikEpisodeDualWriteService. The legacy mp4_link_decoded_at column stays in place
+        until Phase 0.4c so a rollback to the old query is a single XML revert.
+    -->
     <select id="findExpiredLinks" resultMap="variantResultMap">
-        SELECT * FROM kodik_episode_variant
-        WHERE mp4_link IS NOT NULL
-          AND mp4_link_decoded_at IS NOT NULL
-          AND mp4_link_decoded_at &lt; DATE_SUB(NOW(), INTERVAL #{hoursThreshold} HOUR)
-        ORDER BY mp4_link_decoded_at ASC
+        SELECT v.* FROM kodik_episode_variant v
+        INNER JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        INNER JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+            AND ev.decoded_at IS NOT NULL
+            AND ev.decoded_at &lt; DATE_SUB(NOW(), INTERVAL #{hoursThreshold} HOUR)
+        ORDER BY ev.decoded_at ASC
         LIMIT #{limit}
     </select>
 
+    <!--
+        ADR 0018 Phase 0.4b — failed-decode candidates: a variant has an upstream iframe
+        (kodik_link IS NOT NULL) but no successful decoded video row in episode_video.
+        LEFT JOIN + ev.id IS NULL captures both "no mirror row yet" and "mirror row exists
+        but video_url is NULL after a failed write attempt".
+    -->
     <select id="findFailedDecode" resultMap="variantResultMap">
-        SELECT * FROM kodik_episode_variant
-        WHERE mp4_link IS NULL AND kodik_link IS NOT NULL
-        ORDER BY updated_at ASC
+        SELECT v.* FROM kodik_episode_variant v
+        LEFT JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        LEFT JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.kodik_link IS NOT NULL
+          AND ev.id IS NULL
+        ORDER BY v.updated_at ASC
         LIMIT #{limit}
     </select>
 
