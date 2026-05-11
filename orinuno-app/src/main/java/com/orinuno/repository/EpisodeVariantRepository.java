@@ -15,23 +15,29 @@ public interface EpisodeVariantRepository {
 
     List<KodikEpisodeVariant> findByContentIdWithoutMp4(@Param("contentId") Long contentId);
 
+    /**
+     * ADR 0018 Phase 0.4c — fetch a single variant joined with its decoded episode_video row.
+     * Returns empty if no populated video_url exists for the variant. Populates {@code mp4Link},
+     * {@code mp4LinkDecodedAt} and {@code decodeMethod} on the returned variant via column aliases
+     * in the JOIN. Use this when a caller needs both the L1 row and the decoded URL — {@link
+     * #findById(Long)} no longer carries those fields after the column drop.
+     */
+    Optional<KodikEpisodeVariant> findByIdWithDecodedVideo(@Param("id") Long id);
+
+    /**
+     * ADR 0018 Phase 0.4c — fetch every variant for a given content that has a populated decoded
+     * video URL in episode_video. The returned variants carry {@code mp4Link} / {@code
+     * mp4LinkDecodedAt} / {@code decodeMethod} populated from the joined columns; variants without
+     * a successful decode are filtered out at the SQL level. Use for export and any other read that
+     * needs the decoded URL alongside the L1 row.
+     */
+    List<KodikEpisodeVariant> findByContentIdWithDecodedVideo(@Param("contentId") Long contentId);
+
     void insert(KodikEpisodeVariant variant);
 
     void upsertWithCoalesce(KodikEpisodeVariant variant);
 
     void batchUpsertWithCoalesce(@Param("list") List<KodikEpisodeVariant> variants);
-
-    void updateMp4Link(@Param("id") Long id, @Param("mp4Link") String mp4Link);
-
-    /**
-     * DECODE-8 — set mp4_link AND record which decoder produced it. Used by the {@code
-     * KodikDecodeOrchestrator} so we can Prometheus-track the REGEX vs SNIFF ratio and backfill
-     * SNIFF rows once the regex layer is fixed.
-     */
-    void updateMp4LinkAndMethod(
-            @Param("id") Long id,
-            @Param("mp4Link") String mp4Link,
-            @Param("decodeMethod") String decodeMethod);
 
     void updateLocalFilepath(@Param("id") Long id, @Param("localFilepath") String localFilepath);
 

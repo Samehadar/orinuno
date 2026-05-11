@@ -2,6 +2,12 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.orinuno.repository.EpisodeVariantRepository">
 
+    <!--
+        ADR 0018 Phase 0.4c — variant table is L1-only after the column drop. mp4Link /
+        decodeMethod / mp4LinkDecodedAt fields stay on the KodikEpisodeVariant model and are
+        populated only by JOIN queries that alias episode_video columns (findByIdWithDecodedVideo,
+        findByContentIdWithDecodedVideo). Plain SELECTs return them as null.
+    -->
     <resultMap id="variantResultMap" type="com.orinuno.model.KodikEpisodeVariant">
         <id property="id" column="id"/>
         <result property="contentId" column="content_id"/>
@@ -53,56 +59,86 @@
         ORDER BY v.season_number, v.episode_number
     </select>
 
+    <!--
+        ADR 0018 Phase 0.4c — INSERT no longer writes mp4_link. Decoded URLs live in
+        episode_video, written by KodikEpisodeDualWriteService (sole writer post-0.4c).
+    -->
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
-            translation_id, translation_title, translation_type, quality, kodik_link, mp4_link)
+            translation_id, translation_title, translation_type, quality, kodik_link)
         VALUES (#{contentId}, #{seasonNumber}, #{episodeNumber},
-            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink}, #{mp4Link})
+            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink})
     </insert>
 
-    <!-- PF3: COALESCE, never overwrite valid mp4_link with NULL -->
     <insert id="upsertWithCoalesce">
         INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
-            translation_id, translation_title, translation_type, quality, kodik_link, mp4_link)
+            translation_id, translation_title, translation_type, quality, kodik_link)
         VALUES (#{contentId}, #{seasonNumber}, #{episodeNumber},
-            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink}, #{mp4Link})
+            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink})
         ON DUPLICATE KEY UPDATE
             translation_title = VALUES(translation_title),
             translation_type = VALUES(translation_type),
             quality = VALUES(quality),
-            kodik_link = VALUES(kodik_link),
-            mp4_link = COALESCE(VALUES(mp4_link), mp4_link)
+            kodik_link = VALUES(kodik_link)
     </insert>
 
     <insert id="batchUpsertWithCoalesce">
         <foreach collection="list" item="v" separator=";">
             INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
-                translation_id, translation_title, translation_type, quality, kodik_link, mp4_link)
+                translation_id, translation_title, translation_type, quality, kodik_link)
             VALUES (#{v.contentId}, #{v.seasonNumber}, #{v.episodeNumber},
                 #{v.translationId}, #{v.translationTitle}, #{v.translationType},
-                #{v.quality}, #{v.kodikLink}, #{v.mp4Link})
+                #{v.quality}, #{v.kodikLink})
             ON DUPLICATE KEY UPDATE
                 translation_title = VALUES(translation_title),
                 translation_type = VALUES(translation_type),
                 quality = VALUES(quality),
-                kodik_link = VALUES(kodik_link),
-                mp4_link = COALESCE(VALUES(mp4_link), mp4_link)
+                kodik_link = VALUES(kodik_link)
         </foreach>
     </insert>
 
-    <update id="updateMp4Link">
-        UPDATE kodik_episode_variant
-        SET mp4_link = #{mp4Link}, mp4_link_decoded_at = NOW()
-        WHERE id = #{id}
-    </update>
+    <!--
+        ADR 0018 Phase 0.4c — JOIN-based reads that populate variant.mp4Link / decodeMethod /
+        mp4LinkDecodedAt from episode_video. Used by export, parser skip-check and any other
+        caller that needs the decoded URL alongside the L1 row. INNER JOIN — only returns
+        variants with a populated episode_video row. For "all variants regardless of decode
+        state" callers, use findByContentId (no JOIN, mp4Link will be null).
+    -->
+    <select id="findByIdWithDecodedVideo" resultMap="variantResultMap">
+        SELECT v.*, ev.video_url AS mp4_link,
+               ev.decoded_at AS mp4_link_decoded_at,
+               ev.decode_method AS decode_method
+        FROM kodik_episode_variant v
+        INNER JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        INNER JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.id = #{id}
+        LIMIT 1
+    </select>
 
-    <update id="updateMp4LinkAndMethod">
-        UPDATE kodik_episode_variant
-        SET mp4_link = #{mp4Link},
-            decode_method = #{decodeMethod},
-            mp4_link_decoded_at = NOW()
-        WHERE id = #{id}
-    </update>
+    <select id="findByContentIdWithDecodedVideo" resultMap="variantResultMap">
+        SELECT v.*, ev.video_url AS mp4_link,
+               ev.decoded_at AS mp4_link_decoded_at,
+               ev.decode_method AS decode_method
+        FROM kodik_episode_variant v
+        INNER JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        INNER JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.content_id = #{contentId}
+        ORDER BY v.season_number, v.episode_number, v.translation_id
+    </select>
 
     <!--
         ADR 0018 Phase 0.4b — TTL expiry source-of-truth is episode_video.decoded_at, populated

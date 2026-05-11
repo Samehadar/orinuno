@@ -86,7 +86,7 @@ class ExportDataServiceTest {
                                 .build());
 
         when(contentRepository.findById(1L)).thenReturn(Optional.of(content));
-        when(episodeVariantRepository.findByContentId(1L)).thenReturn(variants);
+        when(episodeVariantRepository.findByContentIdWithDecodedVideo(1L)).thenReturn(variants);
 
         Optional<ContentExportDto> result = exportDataService.getExportData(1L);
 
@@ -112,11 +112,17 @@ class ExportDataServiceTest {
     }
 
     @Test
-    @DisplayName("Should filter out variants without mp4 links")
-    void shouldFilterVariantsWithoutMp4() {
+    @DisplayName(
+            "Variants without an episode_video row are filtered at the SQL JOIN level (ADR 0018"
+                    + " Phase 0.4c). The service trusts the repository to return only decoded"
+                    + " variants and no longer filters in-memory.")
+    void shouldRelyOnRepositoryToFilterUndecodedVariants() {
         KodikContent content = KodikContent.builder().id(1L).type("movie").title("Test").build();
 
-        List<KodikEpisodeVariant> variants =
+        // findByContentIdWithDecodedVideo INNER-JOINs episode_video, so it only ever returns
+        // variants with a populated mp4Link. The "undecoded" variant from the pre-0.4c version
+        // of this test simply never crosses the repository boundary.
+        List<KodikEpisodeVariant> decodedVariants =
                 List.of(
                         KodikEpisodeVariant.builder()
                                 .id(1L)
@@ -125,18 +131,11 @@ class ExportDataServiceTest {
                                 .episodeNumber(0)
                                 .translationId(1)
                                 .mp4Link("https://cdn.com/v.mp4")
-                                .build(),
-                        KodikEpisodeVariant.builder()
-                                .id(2L)
-                                .contentId(1L)
-                                .seasonNumber(0)
-                                .episodeNumber(0)
-                                .translationId(2)
-                                .mp4Link(null)
                                 .build());
 
         when(contentRepository.findById(1L)).thenReturn(Optional.of(content));
-        when(episodeVariantRepository.findByContentId(1L)).thenReturn(variants);
+        when(episodeVariantRepository.findByContentIdWithDecodedVideo(1L))
+                .thenReturn(decodedVariants);
 
         ContentExportDto dto = exportDataService.getExportData(1L).orElseThrow();
         assertThat(dto.seasons().get(0).episodes().get(0).variants()).hasSize(1);
@@ -163,7 +162,7 @@ class ExportDataServiceTest {
                         .build();
 
         when(contentRepository.findById(1L)).thenReturn(Optional.of(content));
-        when(episodeVariantRepository.findByContentId(1L))
+        when(episodeVariantRepository.findByContentIdWithDecodedVideo(1L))
                 .thenReturn(
                         List.of(
                                 KodikEpisodeVariant.builder()
@@ -190,7 +189,7 @@ class ExportDataServiceTest {
                         .build();
 
         when(contentRepository.findById(2L)).thenReturn(Optional.of(content));
-        when(episodeVariantRepository.findByContentId(2L))
+        when(episodeVariantRepository.findByContentIdWithDecodedVideo(2L))
                 .thenReturn(
                         List.of(
                                 KodikEpisodeVariant.builder()
@@ -217,7 +216,7 @@ class ExportDataServiceTest {
                         .build();
 
         when(contentRepository.findById(3L)).thenReturn(Optional.of(content));
-        when(episodeVariantRepository.findByContentId(3L))
+        when(episodeVariantRepository.findByContentIdWithDecodedVideo(3L))
                 .thenReturn(
                         List.of(
                                 KodikEpisodeVariant.builder()

@@ -53,3 +53,5 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260508050000_create_jutsu_film.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260511000000_backfill_episode_video_from_kodik_variant.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260511010000_drop_kodik_variant_l2_columns.sql

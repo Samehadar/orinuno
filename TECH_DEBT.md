@@ -1,10 +1,34 @@
 # Technical Debt
 
-## ARCH-0016: `kodik_episode_variant` is an L1+L2 hybrid
+## ARCH-0018: JIT decode — stop persisting decoded mp4 URLs entirely
 
-**Priority:** Low (informational — recorded for the future split)
+**Priority:** Medium (architectural, follow-up to ADR 0018 Phase 0.4c)
+**Discovered:** 2026-05-11
+**Reference:** [`docs/adr/0018-per-source-service-split-kodik.md`](docs/adr/0018-per-source-service-split-kodik.md)
+
+**Context:** Kodik decoded URLs are TTL-bound (≤24h, often ≤1h depending on CDN). The current architecture stores them in `episode_video.video_url` (single writer = `KodikEpisodeDualWriteService`). Most consumers read the stored URL hours after decode — by then the URL is stale and the consumer must trigger another decode anyway.
+
+A cleaner contract: **decode JIT (just-in-time) on every consumer request**, never persist the decoded URL. Implications:
+
+- `episode_video.video_url` becomes vestigial for Kodik (Sibnet/Aniboom may still benefit because of their longer or unbounded TTLs — keep the schema, change the Kodik write path).
+- `KodikEpisodeDualWriteService` either stops writing `episode_video` for Kodik decodes, or the table becomes a Kodik-specific decode-cache with explicit TTL eviction.
+- `/api/v1/export/ready` switches from returning a stored `mp4Link` to returning the `kodikLink` (iframe URL); consumers call `/api/v1/parse/decode/variant/{id}` or `/api/v1/stream/{id}` when they actually need the bytes.
+- `external-bridge` (downstream-repo) adapts to the new `SourceCatalogEvent` shape — `mediaUrl` field semantics flip from "stored decoded URL" to "iframe URL that the consumer must decode".
+
+**Why deferred:** this is a public contract change (`/export/ready` payload, `SourceCatalogEvent.mediaUrl` semantics) and breaks kodik-parser until downstream-repo ships its bridge update. Needs its own ADR with coordinated rollout — likely Phase 5/6 of the per-source-services-split work, when the OSS meter service is the active consumer.
+
+**Recorded mitigations until then:** in-memory Caffeine cache for repeated reads within a short window (≤5 min) — buys low-latency without persistence. See Phase 6 of ADR 0018 for the Kafka-driven follow-up.
+
+## ARCH-0016: `kodik_episode_variant` is an L1+L2 hybrid (RESOLVED — Phase 0.4c)
+
+**Status:** ✅ Resolved 2026-05-11 (ADR 0018 Phase 0.4 — backfill + read-path migration + column drop landed in commits 2af23c7, c05094c, and Phase 0.4c).
+**Priority:** Was Low (informational).
 **Discovered:** 2026-05-07 (ADR 0016 audit)
 **Reference:** [`docs/adr/0016-architecture-trajectory.md`](docs/adr/0016-architecture-trajectory.md) §"Known tech debt"
+
+**Resolution summary:** Phase 0.4 of ADR 0018 dropped `mp4_link` / `mp4_link_decoded_at` / `decode_method` from `kodik_episode_variant` and moved the read-path onto `episode_video` (single writer = `KodikEpisodeDualWriteService`). Backfill migration `20260511000000_backfill_episode_video_from_kodik_variant.sql` covers legacy rows; drop migration `20260511010000_drop_kodik_variant_l2_columns.sql` removes the columns. Variant table is now L1-only. The deeper question of "should we persist the decoded URL at all" is tracked above as ARCH-0018 (JIT decode).
+
+**Historical context (kept for future readers):**
 
 **Context:** Per ADR 0016, the project follows a three-layer data model:
 
