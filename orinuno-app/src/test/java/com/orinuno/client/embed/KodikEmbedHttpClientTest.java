@@ -6,8 +6,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.embed.KodikIdType;
-import com.orinuno.client.KodikApiRateLimiter;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.token.KodikFunction;
 import com.orinuno.token.KodikTokenException;

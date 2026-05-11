@@ -6,6 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kodik.client.KodikApiRateLimiter;
+import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikSearchRequest;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.token.KodikFunction;
@@ -61,7 +63,7 @@ class KodikApiClientFailoverTest {
         registry = new KodikTokenRegistry(properties, noDiscovery);
         registry.init();
 
-        passthroughLimiter = new KodikApiRateLimiter(properties);
+        passthroughLimiter = new KodikApiRateLimiter(properties.getParse().getRateLimitPerMinute());
     }
 
     @Test

@@ -2,7 +2,7 @@ package com.orinuno.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.orinuno.client.http.RotatingUserAgentProvider;
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;

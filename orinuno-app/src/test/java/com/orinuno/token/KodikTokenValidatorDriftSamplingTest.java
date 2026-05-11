@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.KodikResponseMapper;
 import com.kodik.sdk.drift.DriftDetector;
 import com.kodik.sdk.drift.DriftSamplingProperties;
-import com.orinuno.client.KodikResponseMapper;
 import com.orinuno.configuration.OrinunoProperties;
 import java.nio.file.Path;
 import java.util.function.BiFunction;

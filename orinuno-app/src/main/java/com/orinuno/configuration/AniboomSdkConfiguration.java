@@ -1,8 +1,8 @@
 package com.orinuno.configuration;
 
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.aniboom.AniboomClient;
 import com.orinuno.aniboom.AniboomConfig;
-import com.orinuno.client.http.RotatingUserAgentProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;

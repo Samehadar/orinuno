@@ -1,9 +1,8 @@
-package com.orinuno.client.http;
+package com.kodik.client.http;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
-import org.springframework.stereotype.Component;
 
 /**
  * Single source of truth for the User-Agent strings orinuno sends to Kodik (iframe HTML, player JS,
@@ -38,7 +37,6 @@ import org.springframework.stereotype.Component;
  * the right contract there. We expose {@link #orinunoBot(String)} for that case so the literal is
  * still owned by this class.
  */
-@Component
 public class RotatingUserAgentProvider {
 
     /**

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.orinuno.client.KodikResponseMapper;
+import com.kodik.client.KodikResponseMapper;
 import com.orinuno.configuration.OrinunoProperties;
 import java.io.IOException;
 import java.nio.file.Files;

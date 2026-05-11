@@ -1,6 +1,8 @@
 package com.orinuno.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.kodik.client.KodikApiRateLimiter;
+import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikListRequest;
 import com.kodik.client.dto.KodikReferenceRequest;
 import com.kodik.client.dto.KodikSearchRequest;

@@ -2,7 +2,7 @@ package com.orinuno.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orinuno.client.http.RotatingUserAgentProvider;
+import com.kodik.client.http.RotatingUserAgentProvider;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.service.decoder.DecoderPathCache;
 import com.orinuno.service.metrics.KodikDecoderMetrics;

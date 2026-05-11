@@ -3,6 +3,7 @@ package com.orinuno.client;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.reference.KodikGenreDto;
 import com.kodik.client.dto.reference.KodikReferenceResponse;
 import com.kodik.client.dto.reference.KodikTranslationDto;

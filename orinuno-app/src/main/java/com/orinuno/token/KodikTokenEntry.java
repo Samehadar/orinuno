@@ -30,8 +30,8 @@ public class KodikTokenEntry {
     /**
      * Snake-case map matching AnimeParsers' {@code functions_availability}. Stored as {@code
      * Map<String, Boolean>} (not {@code EnumMap<KodikFunction, Boolean>}) so forward-compatibility
-     * with unknown keys is preserved, similarly to how {@link
-     * com.orinuno.client.KodikResponseMapper} tolerates unknown fields.
+     * with unknown keys is preserved, similarly to how {@link com.kodik.client.KodikResponseMapper}
+     * tolerates unknown fields.
      */
     @JsonProperty("functions_availability")
     @Builder.Default
