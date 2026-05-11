@@ -47,8 +47,8 @@ The reactor ships two Maven profiles (root `pom.xml`):
 - **`full-split`** *(default, no flag needed)* — builds every module, including
   `orinuno-source-kodik`. Matches the `docker compose up` production shape:
   orinuno-app reverse-proxies Kodik routes to the standalone service.
-- **`-P monolith`** — skips `orinuno-source-kodik` and produces only the
-  libraries + `orinuno-app`. orinuno-app already carries every Kodik
+- **`-P monolith`** — skips `orinuno-source-kodik` and `meter`, builds only
+  the libraries + `orinuno-app`. orinuno-app keeps every Kodik
   controller/service internally; with `ORINUNO_SOURCE_KODIK_BASE_URL` unset
   the Phase 2.8 reverse-proxy filter stays dormant and orinuno-app serves
   Kodik routes locally. Pair with the compose overlay for single-container
@@ -57,6 +57,11 @@ The reactor ships two Maven profiles (root `pom.xml`):
   mvn -P monolith clean package
   docker compose -f docker-compose.yml -f docker-compose.monolith.yml up
   ```
+  Trade-off after the Phase 5 catalog cutover: monolith mode no longer
+  exposes `/api/v1/catalog/*` (the canonical L3 surface lives in `meter`).
+  Per-source endpoints (`/api/v1/kodik/*`, `/api/v1/embed/*`, etc.) keep
+  working — they're served by orinuno-app's own controllers against its
+  local schema.
 
 Provider SDKs are designed for direct consumption — depend on the SDK
 artefact you need without pulling in MySQL, Liquibase, MyBatis, or any
