@@ -1,0 +1,41 @@
+# orinuno-source-kodik Liquibase changelog (ADR 0018 Phase 2.2).
+#
+# Duplicates the kodik_* + orinuno_parse_request migrations from orinuno-app so this
+# service owns its own MySQL schema. Both modules can run against the historical content
+# of these scripts independently (each has its own DATABASECHANGELOG tracking). The
+# orinuno-app copies stay in place until the per-source mappers move out in Phase 2.3 —
+# at that point the orinuno-app side can be pruned in a follow-up cleanup commit.
+#
+# NOT included: episode_source / episode_video (provider-agnostic L2; orinuno-app DB
+# owns them until ADR 0018 Phase 5 moves them into the OSS meter shared catalog DB),
+# backfill_episode_video_from_kodik_variant + drop_kodik_variant_l2_columns are
+# Kodik-specific so DO ship here.
+databaseChangeLog:
+  - include:
+      file: db/changelog/scripts/20260410120000_create_kodik_content.sql
+  - include:
+      file: db/changelog/scripts/20260410120100_create_kodik_episode_variant.sql
+  - include:
+      file: db/changelog/scripts/20260410120200_create_kodik_proxy.sql
+  - include:
+      file: db/changelog/scripts/20260410120300_add_mp4_link_decoded_at.sql
+  - include:
+      file: db/changelog/scripts/20260411120000_add_local_filepath.sql
+  - include:
+      file: db/changelog/scripts/20260416120000_add_material_data.sql
+  - include:
+      file: db/changelog/scripts/20260425010000_cleanup_invalid_mp4_link.sql
+  - include:
+      file: db/changelog/scripts/20260426010000_create_orinuno_parse_request.sql
+  - include:
+      file: db/changelog/scripts/20260502020000_create_kodik_decoder_path_cache.sql
+  - include:
+      file: db/changelog/scripts/20260502030000_create_kodik_calendar_state.sql
+  - include:
+      file: db/changelog/scripts/20260502030100_create_kodik_calendar_outbox.sql
+  - include:
+      file: db/changelog/scripts/20260502040000_add_decode_method_to_episode_variant.sql
+  - include:
+      file: db/changelog/scripts/20260502060000_create_kodik_content_enrichment.sql
+  - include:
+      file: db/changelog/scripts/20260511010000_drop_kodik_variant_l2_columns.sql
