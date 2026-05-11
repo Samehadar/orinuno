@@ -41,17 +41,22 @@ RUN mvn -B -q -DskipTests package
 
 
 # ─── orinuno-app runtime ───────────────────────────────────────────────────
-# Keeps Playwright + Chromium for the jut.su live-fallback / HTML drift paths.
+# Optional Playwright + Chromium for the jut.su live-fallback / HTML drift
+# paths. Toggle via build-arg INSTALL_PLAYWRIGHT=true (default false to keep
+# image cold-build fast for the demo / smoke flows that don't exercise the
+# live scrape path).
 FROM eclipse-temurin:21-jre AS app-runtime
+ARG INSTALL_PLAYWRIGHT=false
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nodejs npm \
-    && npm i -g playwright@1.58.0 \
-    && npx playwright install chromium --with-deps \
-    && apt-get remove -y nodejs npm \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* /root/.npm /tmp/*
+RUN if [ "$INSTALL_PLAYWRIGHT" = "true" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends nodejs npm \
+        && npm i -g playwright@1.58.0 \
+        && npx playwright install chromium --with-deps \
+        && apt-get remove -y nodejs npm \
+        && apt-get autoremove -y \
+        && rm -rf /var/lib/apt/lists/* /root/.npm /tmp/*; \
+    fi
 
 COPY --from=build /app/orinuno-app/target/orinuno.jar app.jar
 

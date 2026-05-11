@@ -23,6 +23,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
@@ -44,13 +45,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 @EnableConfigurationProperties(KodikSdkProperties.class)
 public class KodikSdkAutoConfiguration {
 
-    private final KodikTokenLifecycle tokenLifecycle;
-
-    public KodikSdkAutoConfiguration(ObjectProvider<KodikTokenLifecycle> lifecycleProvider) {
-        // ObjectProvider keeps the dependency lazy — the lifecycle bean is created below, and
-        // the @PostConstruct hook resolves it on application start.
-        this.tokenLifecycle = lifecycleProvider.getIfAvailable();
-    }
+    public KodikSdkAutoConfiguration() {}
 
     @Bean
     @ConditionalOnMissingBean
@@ -155,28 +150,29 @@ public class KodikSdkAutoConfiguration {
     }
 
     /**
-     * Triggers KodikTokenLifecycle.onStart() once the application context finishes wiring. Mirrors
-     * orinuno-app's KodikSdkConfiguration.onStart hook.
+     * Lifecycle runner — separate @Component so the startup + scheduled hooks don't create a
+     * self-referencing cycle on this @AutoConfiguration (Spring 6.2 prohibits ctor injection of a
+     * same-class @Bean even via ObjectProvider). Mirrors orinuno-app's KodikTokenLifecycleRunner.
      */
-    @PostConstruct
-    public void onStart() {
-        if (tokenLifecycle != null) {
-            tokenLifecycle.onStart();
-        }
-    }
+    @Component
+    public static class LifecycleRunner {
+        private final KodikTokenLifecycle lifecycle;
 
-    /**
-     * Periodic token revalidation. Cadence configured via the existing {@code
-     * orinuno.kodik.validation-interval-minutes} property — kept under the orinuno-prefixed key for
-     * backwards-compatible deployments; OSS consumers can override with the same key.
-     */
-    @Scheduled(
-            fixedRateString = "${orinuno.kodik.validation-interval-minutes:360}",
-            timeUnit = java.util.concurrent.TimeUnit.MINUTES,
-            initialDelayString = "${orinuno.kodik.validation-interval-minutes:360}")
-    public void scheduledTokenRevalidation() {
-        if (tokenLifecycle != null) {
-            tokenLifecycle.scheduledRevalidation();
+        public LifecycleRunner(KodikTokenLifecycle lifecycle) {
+            this.lifecycle = lifecycle;
+        }
+
+        @PostConstruct
+        public void onStart() {
+            lifecycle.onStart();
+        }
+
+        @Scheduled(
+                fixedRateString = "${orinuno.kodik.validation-interval-minutes:360}",
+                timeUnit = java.util.concurrent.TimeUnit.MINUTES,
+                initialDelayString = "${orinuno.kodik.validation-interval-minutes:360}")
+        public void scheduledTokenRevalidation() {
+            lifecycle.scheduledRevalidation();
         }
     }
 }
