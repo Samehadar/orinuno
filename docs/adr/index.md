@@ -24,6 +24,7 @@ This directory holds the architectural decision records (ADRs) for orinuno. Each
 | [0016](0016-architecture-trajectory.md) | Architecture trajectory: modular monolith now, per-source split on triggers (L1 per-source cache + L3 universal canonical catalog inside `orinuno-app`) | Superseded by [ADR 0018](0018-per-source-service-split-kodik.md) | architecture |
 | [0017](0017-source-event-contract.md) | `orinuno-source-contract`: producer-side event contract as a first-class Maven artifact; in-process `CatalogSinkEventEmitter` is the default L1 → L3 hand-off | Accepted | architecture |
 | [0018](0018-per-source-service-split-kodik.md) | Per-source service split: Kodik first; OSS `meter` as separate service; `orinuno` becomes multi-instance API gateway over shared catalog DB (overrides ADR 0016 §"Decision") | Accepted | architecture |
+| [0019](0019-per-source-service-split-jutsu.md) | Per-source service split: JutSu next; mirrors ADR 0018 Phase 2 + 5 patterns; ships Playwright live-fallback inside the standalone service | Accepted (deferred) | architecture |
 
 ## Status legend
 
