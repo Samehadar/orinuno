@@ -1,9 +1,9 @@
-# ADR 0018 Phase 2.10 — monolith overlay.
+# ADR 0018 Phase 2.10 + ADR 0019 Phase 4.10 — monolith overlay.
 #
-# Drops the standalone source-kodik service and clears the reverse-proxy env
-# on `app` so the Kodik routes are served by orinuno-app's own controllers
-# (orinuno.source-kodik.base-url empty → KodikUpstreamProxyFilter inactive,
-# Phase 2.8). Keeps everything else identical to the default compose stack.
+# Drops every per-source standalone service (source-kodik, source-jutsu) and
+# the OSS meter; clears the reverse-proxy env on `app` so Kodik + jut.su
+# routes are served by orinuno-app's own controllers (filters dormant when
+# their base-url props are unset).
 #
 # Usage (OSS contributor / single-container dev):
 #   docker compose -f docker-compose.yml -f docker-compose.monolith.yml up
@@ -14,11 +14,19 @@ services:
   app:
     environment:
       ORINUNO_SOURCE_KODIK_BASE_URL: ""
+      ORINUNO_SOURCE_JUTSU_BASE_URL: ""
 
   source-kodik:
     # Compose treats `profiles` as opt-in — listing only "never" here means
     # the service is defined but never started without explicit
     # `--profile never`, which we never pass. Cleaner than `scale: 0`.
+    profiles: ["never"]
+
+  source-jutsu:
+    # ADR 0019 Phase 4.10 — same opt-out as source-kodik. orinuno-app still
+    # ships JutsuApiController + JutsuStreamProxyController internally, so
+    # leaving ORINUNO_SOURCE_JUTSU_BASE_URL empty above keeps the Phase 4.8
+    # filter dormant and the legacy in-process path serves the routes.
     profiles: ["never"]
 
   meter:
