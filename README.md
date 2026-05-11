@@ -25,15 +25,37 @@ Swagger UI: <http://localhost:8085/swagger-ui.html> · Demo UI: <http://localhos
 
 ## Repository layout
 
-Orinuno is a multi-module Maven reactor. Five modules ship from the same repo:
+Orinuno is a multi-module Maven reactor. ADR 0018 split the Kodik path into
+its own standalone deployable, so the reactor now ships these modules:
 
 | Module | Purpose | Spring? |
 |--------|---------|---------|
-| [`orinuno-app/`](./orinuno-app/) | The Spring Boot service: controllers, MyBatis, Liquibase, REST surface, Kodik client. | ✅ Boot |
-| [`kodik-sdk-drift/`](./kodik-sdk-drift/) | Domain-neutral schema-drift detector (used by orinuno-app + reusable elsewhere). | ❌ pure Java |
+| [`orinuno-app/`](./orinuno-app/) | Public API gateway + monolith fallback: controllers, MyBatis, Liquibase, REST surface, reverse-proxy to per-source services. | ✅ Boot |
+| [`orinuno-source-kodik/`](./orinuno-source-kodik/) | Standalone Kodik deployable (ADR 0018 Phase 2). Owns the `kodik_*` schema and serves `/api/v1/kodik/*`, `/api/v1/embed/*`, `/api/v1/reference/*`, `/api/v1/source-events/*`. | ✅ Boot |
+| [`orinuno-source-contract/`](./orinuno-source-contract/) | Sealed `SourceCatalogEvent` contract shared with meter consumers (ADR 0017). | ❌ pure Java |
+| [`kodik-sdk/`](./kodik-sdk/) | Spring-free Kodik HTTP/decoder/token SDK + drift detector. | ❌ Reactor + WebFlux only |
+| [`kodik-sdk-spring-boot-starter/`](./kodik-sdk-spring-boot-starter/) | Auto-config glue: wires kodik-sdk beans into any Spring Boot host. | ✅ auto-config |
 | [`jutsu-sdk/`](./jutsu-sdk/) | Standalone JutSu client: DLE auth, sticky cookies, 1 RPS rate-limit, premium decode. | ❌ Reactor + WebFlux only |
 | [`sibnet-sdk/`](./sibnet-sdk/) | Standalone Sibnet decoder (`shell.php` + `player.src(...)` regex). Stateless. | ❌ Reactor + WebFlux only |
 | [`aniboom-sdk/`](./aniboom-sdk/) | Standalone Aniboom decoder (`<input id="video-data">` + Jackson). Stateless. | ❌ Reactor + WebFlux only |
+
+### Build profiles
+
+The reactor ships two Maven profiles (root `pom.xml`):
+
+- **`full-split`** *(default, no flag needed)* — builds every module, including
+  `orinuno-source-kodik`. Matches the `docker compose up` production shape:
+  orinuno-app reverse-proxies Kodik routes to the standalone service.
+- **`-P monolith`** — skips `orinuno-source-kodik` and produces only the
+  libraries + `orinuno-app`. orinuno-app already carries every Kodik
+  controller/service internally; with `ORINUNO_SOURCE_KODIK_BASE_URL` unset
+  the Phase 2.8 reverse-proxy filter stays dormant and orinuno-app serves
+  Kodik routes locally. Pair with the compose overlay for single-container
+  dev:
+  ```sh
+  mvn -P monolith clean package
+  docker compose -f docker-compose.yml -f docker-compose.monolith.yml up
+  ```
 
 Provider SDKs are designed for direct consumption — depend on the SDK
 artefact you need without pulling in MySQL, Liquibase, MyBatis, or any
