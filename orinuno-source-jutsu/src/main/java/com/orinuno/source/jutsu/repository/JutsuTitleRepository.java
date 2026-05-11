@@ -24,6 +24,15 @@ public interface JutsuTitleRepository {
     List<JutsuTitle> findRecentlySeen(@Param("limit") int limit, @Param("offset") int offset);
 
     /**
+     * ADR 0019 Phase 4.6 — incremental SourceCatalogEvent projection. Page through rows whose
+     * {@code last_seen_at} is at or after the supplied watermark, oldest first; {@code null}
+     * watermark returns everything. Used by the standalone source-jutsu's
+     * /api/v1/source-events/ready endpoint.
+     */
+    List<JutsuTitle> findReadyForExport(
+            @Param("limit") int limit, @Param("updatedSince") LocalDateTime updatedSince);
+
+    /**
      * Count titles whose {@code info_fetched_at} is older than the given watermark (or NULL). Used
      * by the sync worker to size its per-tick "refresh-info" batch.
      */
