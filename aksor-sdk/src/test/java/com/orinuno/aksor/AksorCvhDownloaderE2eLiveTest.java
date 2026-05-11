@@ -18,6 +18,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -57,10 +59,12 @@ class AksorCvhDownloaderE2eLiveTest {
 
     @Test
     void aksorMpdUrlDownloadsThroughDashStrategy(@TempDir Path baseDir) throws IOException {
+        Optional<String> ffmpegBinary = resolveDashCapableFfmpeg();
         assumeTrue(
-                ffmpegHasDashDemuxer(),
-                "ffmpeg lacks the DASH demuxer (needs libxml2 in the build). Install a"
-                        + " full ffmpeg (e.g. brew/apt) before running this e2e test.");
+                ffmpegBinary.isPresent(),
+                "No ffmpeg binary on the system exposes a DASH demuxer (needs libxml2 in the"
+                        + " build). Install a full ffmpeg (e.g. brew install ffmpeg) or set"
+                        + " AKSOR_E2E_FFMPEG_BIN to an absolute path.");
 
         // 1. Decode via aksor-sdk, narrow to one episode to keep the download small.
         AksorClient client = AksorClient.builder().build();
@@ -78,10 +82,13 @@ class AksorCvhDownloaderE2eLiveTest {
         String mpdUrl = episode.qualities().bestAvailable();
         assertThat(mpdUrl).startsWith("https://").endsWith(".mpd");
 
-        // 2. Hand the MPD URL to cvh-downloader-sdk's DashStrategy.
+        // 2. Hand the MPD URL to cvh-downloader-sdk's DashStrategy. Pin the ffmpeg binary
+        // explicitly so PATH ordering on the dev machine (where a libxml2-less build can shadow
+        // brew's) does not silently pick the broken one.
         CvhDownloaderConfig config =
                 CvhDownloaderConfig.builder()
                         .outputBaseDir(baseDir)
+                        .ffmpegBinary(ffmpegBinary.get())
                         // Bump ffmpeg timeout — DASH copy of a 22-min episode can run several
                         // minutes on a slow line.
                         .ffmpegTimeoutSeconds(900)
@@ -111,15 +118,36 @@ class AksorCvhDownloaderE2eLiveTest {
     }
 
     /**
-     * Inspects {@code ffmpeg -demuxers} for a {@code D dash} row. Stock ffmpeg builds without
-     * libxml2 only expose a DASH muxer (output) — no demuxer (input) — so DASH downloads error out
-     * with {@code Invalid data found when processing input}. Skip the test cleanly on those builds
-     * rather than failing.
+     * Picks the first ffmpeg binary that exposes a DASH demuxer (needs libxml2 in the build).
+     * Probes in order: {@code AKSOR_E2E_FFMPEG_BIN} env override, common brew / apt locations, bare
+     * {@code "ffmpeg"} on {@code PATH}. PATH lookup goes last so a {@code .local/bin} libxml2-less
+     * build cannot shadow a properly built brew/apt binary further down the list.
      */
-    private static boolean ffmpegHasDashDemuxer() {
+    private static Optional<String> resolveDashCapableFfmpeg() {
+        List<String> candidates =
+                new java.util.ArrayList<>(
+                        List.of(
+                                "/opt/homebrew/bin/ffmpeg",
+                                "/usr/local/bin/ffmpeg",
+                                "/usr/bin/ffmpeg",
+                                "ffmpeg"));
+        String envOverride = System.getenv("AKSOR_E2E_FFMPEG_BIN");
+        if (envOverride != null && !envOverride.isBlank()) {
+            candidates.add(0, envOverride);
+        }
+        for (String c : candidates) {
+            if (binaryHasDashDemuxer(c)) {
+                return Optional.of(c);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** Inspects {@code <binary> -demuxers} for a {@code D dash} row. */
+    private static boolean binaryHasDashDemuxer(String binary) {
         try {
             Process p =
-                    new ProcessBuilder("ffmpeg", "-hide_banner", "-demuxers")
+                    new ProcessBuilder(binary, "-hide_banner", "-demuxers")
                             .redirectErrorStream(true)
                             .start();
             Pattern dashRow = Pattern.compile("^\\s*D\\s+dash\\s", Pattern.MULTILINE);
