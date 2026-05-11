@@ -74,6 +74,7 @@ export default defineConfig({
           label: 'Architecture',
           items: [
             { slug: 'architecture/overview' },
+            { slug: 'architecture/per-source-split' },
             { slug: 'architecture/kodik-api-flow' },
             { slug: 'architecture/video-decoding' },
             { slug: 'architecture/hls-manifest' },
