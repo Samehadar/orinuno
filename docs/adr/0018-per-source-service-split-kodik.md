@@ -179,7 +179,7 @@ flowchart LR
 | 2.* | `orinuno-source-kodik` standalone deployable; reverse-proxy in `orinuno`; external bridge cutover; demo UI continues working unchanged | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
 | 3 | Validation gate (14 days prod stability of `orinuno-source-kodik`) | ⏳ pending |
 | 4.* | `orinuno-source-jutsu` extraction (mirror of Phase 2) | ⏳ pending |
-| 5.* | `meter` OSS service; catalog write-path moves into `meter`; `orinuno` read-only repository + Caffeine cache; multi-instance `orinuno`; DB user separation; full split docker-compose | 🚧 in progress (5.1, 5.2a, 5.4, 5.7, 5.7a, 5.9, 5.11 ✅; 5.3 + 5.5 + 5.6 + 5.8 + 5.10 + 5.12 + 5.13 ⏳) |
+| 5.* | `meter` OSS service; catalog write-path moves into `meter`; `orinuno` read-only repository + Caffeine cache; multi-instance `orinuno`; DB user separation; full split docker-compose | 🚧 in progress (5.1, 5.2a, 5.3, 5.4, 5.5, 5.6, 5.7, 5.7a, 5.9, 5.11 ✅; 5.8 + 5.10 + 5.12 + 5.13 ⏳) |
 | 6 | Kafka outbox + event sourcing (future ADR, triggered by §"Future evolution") | ⏳ deferred |
 
 ### Phase 2 migration recipe — Kin downstream consumer / external bridge cutover
@@ -208,7 +208,7 @@ Nothing. Phase 0.3 (boundary guards) and Phase 0.4 (L1+L2 split migration) are n
 | Phase 2 `orinuno-source-kodik` standalone | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
 | Phase 3 validation gate | ⏳ pending |
 | Phase 4 `orinuno-source-jutsu` standalone | ⏳ pending |
-| Phase 5 OSS `meter` service + shared catalog DB | 🚧 in progress (read-path landed; write-path migration 5.3+ pending prod gate) |
+| Phase 5 OSS `meter` service + shared catalog DB | 🚧 in progress (write-path moved into `meter`; multi-instance acceptance test + monolith profile reattach pending) |
 | Phase 6 Kafka outbox (future ADR) | ⏳ deferred |
 | `AGENTS.md` "Bounded contexts" → "Per-source service registry" update | ⏳ Phase 5 |
 | `BACKLOG.md` entries for each Phase | ⏳ pending |
