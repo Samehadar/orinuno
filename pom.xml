@@ -204,6 +204,7 @@
             </activation>
             <modules>
                 <module>orinuno-source-kodik</module>
+                <module>meter</module>
             </modules>
         </profile>
 

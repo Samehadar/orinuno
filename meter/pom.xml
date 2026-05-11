@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.14</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.orinuno</groupId>
+    <artifactId>meter</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>meter (OSS catalog collector)</name>
+    <description>
+        OSS-side counterpart of Kin's proprietary downstream-repo/meter. Subscribes to
+        /api/v1/source-events/ready on every per-source service (orinuno-source-kodik,
+        future orinuno-source-jutsu, …), reconciles the events through
+        CatalogIdentityResolver, and persists the canonical catalog (catalog_content,
+        catalog_episode, catalog_episode_source_link, episode_source, episode_video)
+        into a shared MySQL schema.
+
+        Shared-DB contract (ADR 0018 Phase 5):
+          • meter is the single writer of the catalog_* tables. Owns the Liquibase
+            changelog for the shared catalog schema; deploys must bring meter up
+            first so migrations apply before any reader connects.
+          • orinuno is the (multi-instance) reader. Connects to the same MySQL with a
+            read-only DB user and serves /api/v1/catalog/* directly from the tables
+            via MyBatis SELECT-only mappers + Caffeine cache. No HTTP hop between
+            orinuno and meter — failures of meter only freeze catalog updates, the
+            read path keeps serving.
+
+        Future Kafka migration is recorded as Phase 6 in ADR 0018; the current shared-DB
+        pattern is the deliberate first cut because it keeps the OSS docker compose stack
+        minimal (no Kafka broker) while still delivering multi-instance orinuno.
+    </description>
+
+    <properties>
+        <java.version>21</java.version>
+        <mybatis-spring-boot-starter.version>3.0.5</mybatis-spring-boot-starter.version>
+        <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
+    </properties>
+
+    <dependencies>
+        <!-- Sealed SourceCatalogEvent contract — the wire format meter consumes. -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>orinuno-source-contract</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!--
+            WebFlux for the source-event poller (one WebClient per per-source service).
+            meter exposes no public REST surface today — its consumers read the catalog
+            DB directly (orinuno) or via Kin's proprietary catalog API (legacy backend).
+            Health/diagnostics ride on the actuator port only.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <!--
+            JDBC + MySQL driver + Liquibase. Phase 5.2 will move the catalog_* changelogs
+            from orinuno-app into this module — meter becomes the single writer and owns
+            the migration apply step in the deploy order.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>${mybatis-spring-boot-starter.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>meter</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.46.1</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <googleJavaFormat>
+                            <version>1.22.0</version>
+                            <style>AOSP</style>
+                            <reflowLongStrings>true</reflowLongStrings>
+                        </googleJavaFormat>
+                        <removeUnusedImports/>
+                        <trimTrailingWhitespace/>
+                        <endWithNewline/>
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,52 @@
+# meter — default configuration (ADR 0018 Phase 5.1 skeleton).
+#
+# Port allocation in the bundled docker-compose stack:
+#   orinuno-app          host 8085 → container 8080
+#   orinuno-app actuator host 8086 → container 8081
+#   orinuno-source-kodik host 8087 → container 8086
+#   orinuno-source-kodik act host 8088 → container 8087
+#   meter (this service) host 8089 → container 8089
+#   meter actuator       host 8090 → container 8090
+#
+# meter has no public REST surface yet (Phases 5.3+ move the *RemoteEventPoller +
+# CatalogIngestionService over from orinuno-app); for now only actuator is exposed.
+
+server:
+  port: ${APP_PORT:8089}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,prometheus"
+  server:
+    port: ${APP_ACTUATOR:8090}
+
+spring:
+  application:
+    name: meter
+  # Datasource points at the SHARED catalog schema. Phase 5.2 will move the catalog_*
+  # changelogs from orinuno-app into this service so meter becomes the single writer.
+  # DB_NAME default is `orinuno_catalog` — production deploys are expected to set this
+  # to whatever the shared schema is called.
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:orinuno_catalog}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  # Liquibase stays disabled in the skeleton — Phase 5.2 ships the actual changelog
+  # take-over from orinuno-app and turns this on. Until then meter MUST NOT race
+  # orinuno-app's migrations.
+  liquibase:
+    enabled: ${SPRING_LIQUIBASE_ENABLED:false}
+
+# Per-source service URLs. Empty by default; deploys set these to wire up polling
+# once Phase 5.5 lands the *RemoteEventPoller migration.
+orinuno:
+  source-kodik:
+    base-url: ${ORINUNO_SOURCE_KODIK_BASE_URL:}
+  source-jutsu:
+    base-url: ${ORINUNO_SOURCE_JUTSU_BASE_URL:}
