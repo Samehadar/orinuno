@@ -25,6 +25,9 @@ public class JutsuSourceProperties {
     /** Live-fallback guards — cache-miss path to upstream. */
     private FallbackProperties fallback = new FallbackProperties();
 
+    /** Catalog sync worker + notice-walk knobs (Phase 4.5). */
+    private SyncProperties sync = new SyncProperties();
+
     public boolean hasCredentials() {
         return username != null && !username.isBlank() && password != null && !password.isBlank();
     }
@@ -51,6 +54,34 @@ public class JutsuSourceProperties {
         public static class NegativeCacheProperties {
             private long ttlSeconds = 60;
             private long maxSize = 1000;
+        }
+    }
+
+    /** ADR 0016 P1a Step 2 — catalog sync worker + notice-feed walker (Phase 4.5). */
+    @Data
+    public static class SyncProperties {
+        /** Master switch — disables both schedulers when false. */
+        private boolean enabled = false;
+
+        private FullCrawlProperties fullCrawl = new FullCrawlProperties();
+        private NoticeWalkProperties noticeWalk = new NoticeWalkProperties();
+
+        @Data
+        public static class FullCrawlProperties {
+            private boolean enabled = false;
+            private long intervalHours = 24;
+            private long initialDelaySeconds = 300;
+            private int maxPagesPerTick = 30;
+        }
+
+        @Data
+        public static class NoticeWalkProperties {
+            private boolean enabled = false;
+            private long intervalMinutes = 15;
+            private long initialDelaySeconds = 60;
+            private int maxFeedsPerTick = 5;
+            private boolean fetchInfoOnDiscovery = false;
+            private int maxInfoFetchesPerTick = 10;
         }
     }
 }
