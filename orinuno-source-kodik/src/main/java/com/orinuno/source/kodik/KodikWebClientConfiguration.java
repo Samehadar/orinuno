@@ -27,7 +27,7 @@ public class KodikWebClientConfiguration {
     @Bean
     public WebClient kodikApiWebClient(
             WebClient.Builder webClientBuilder,
-            @Value("${kodik.api-url:https://kodikapi.com}") String kodikApiUrl) {
+            @Value("${kodik.api-url:https://kodik-api.com}") String kodikApiUrl) {
         ExchangeStrategies strategies =
                 ExchangeStrategies.builder()
                         .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
