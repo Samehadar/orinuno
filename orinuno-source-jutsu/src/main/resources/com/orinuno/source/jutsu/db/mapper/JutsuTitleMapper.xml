@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.source.jutsu.repository.JutsuTitleRepository">
+
+    <resultMap id="titleResultMap" type="com.orinuno.source.jutsu.model.JutsuTitle">
+        <id property="slug" column="slug"/>
+        <result property="siteId" column="site_id"/>
+        <result property="title" column="title"/>
+        <result property="originalTitle" column="original_title"/>
+        <result property="synopsis" column="synopsis"/>
+        <result property="thumbnailUrl" column="thumbnail_url"/>
+        <result property="yearBucket" column="year_bucket"/>
+        <result property="yearsCsv" column="years_csv"/>
+        <result property="ageRating" column="age_rating"/>
+        <result property="genresCsv" column="genres_csv"/>
+        <result property="typesCsv" column="types_csv"/>
+        <result property="catalogEpisodeCount" column="catalog_episode_count"/>
+        <result property="catalogMovieCount" column="catalog_movie_count"/>
+        <result property="catalogPosition" column="catalog_position"/>
+        <result property="infoTotalSeasons" column="info_total_seasons"/>
+        <result property="infoTotalEpisodes" column="info_total_episodes"/>
+        <result property="infoFetchedAt" column="info_fetched_at"/>
+        <result property="catalogFetchedAt" column="catalog_fetched_at"/>
+        <result property="firstSeenAt" column="first_seen_at"/>
+        <result property="lastSeenAt" column="last_seen_at"/>
+    </resultMap>
+
+    <select id="findBySlug" resultMap="titleResultMap">
+        SELECT * FROM jutsu_title WHERE slug = #{slug}
+    </select>
+
+    <select id="findBySlugs" resultMap="titleResultMap">
+        SELECT * FROM jutsu_title
+        WHERE slug IN
+        <foreach collection="slugs" item="s" open="(" separator="," close=")">
+            #{s}
+        </foreach>
+    </select>
+
+    <select id="findRecentlySeen" resultMap="titleResultMap">
+        SELECT * FROM jutsu_title
+        ORDER BY last_seen_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countInfoFetchedBefore" resultType="long">
+        SELECT COUNT(*) FROM jutsu_title
+        WHERE info_fetched_at IS NULL OR info_fetched_at &lt; #{watermark}
+    </select>
+
+    <select id="pickStaleInfo" resultMap="titleResultMap">
+        SELECT * FROM jutsu_title
+        WHERE info_fetched_at IS NULL OR info_fetched_at &lt; #{watermark}
+        ORDER BY info_fetched_at IS NULL DESC, info_fetched_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM jutsu_title
+    </select>
+
+    <!--
+        Dynamic catalog query for ARCH-0016 P1a Step 3.A (read side).
+        Fragment is shared by findCatalogPage (rows + LIMIT/OFFSET) and countCatalogRows (total).
+        sort is a whitelisted column expression interpolated via ${...} — JutsuCatalogReadService
+        validates against the JutsuSort enum before calling so user input never lands here.
+    -->
+    <sql id="catalogFilters">
+        <where>
+            <if test="genres != null and !genres.isEmpty()">
+                <foreach collection="genres" item="g" separator=" AND ">
+                    FIND_IN_SET(#{g}, jutsu_title.genres_csv) &gt; 0
+                </foreach>
+            </if>
+            <if test="types != null and !types.isEmpty()">
+                AND
+                <foreach collection="types" item="t" separator=" AND ">
+                    FIND_IN_SET(#{t}, jutsu_title.types_csv) &gt; 0
+                </foreach>
+            </if>
+            <if test="years != null and !years.isEmpty()">
+                AND jutsu_title.year_bucket IN
+                <foreach collection="years" item="y" open="(" separator="," close=")">
+                    #{y}
+                </foreach>
+            </if>
+        </where>
+    </sql>
+
+    <select id="findCatalogPage" resultMap="titleResultMap">
+        SELECT * FROM jutsu_title
+        <include refid="catalogFilters"/>
+        ORDER BY ${sort}
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countCatalogRows" resultType="long">
+        SELECT COUNT(*) FROM jutsu_title
+        <include refid="catalogFilters"/>
+    </select>
+
+    <insert id="upsert" parameterType="com.orinuno.source.jutsu.model.JutsuTitle">
+        INSERT INTO jutsu_title (
+            slug, site_id, title, original_title, synopsis, thumbnail_url,
+            year_bucket, years_csv, age_rating, genres_csv, types_csv,
+            catalog_episode_count, catalog_movie_count, catalog_position,
+            info_total_seasons, info_total_episodes,
+            info_fetched_at, catalog_fetched_at,
+            first_seen_at, last_seen_at
+        ) VALUES (
+            #{title.slug}, #{title.siteId}, #{title.title}, #{title.originalTitle},
+            #{title.synopsis}, #{title.thumbnailUrl},
+            #{title.yearBucket}, #{title.yearsCsv}, #{title.ageRating},
+            #{title.genresCsv}, #{title.typesCsv},
+            #{title.catalogEpisodeCount}, #{title.catalogMovieCount}, #{title.catalogPosition},
+            #{title.infoTotalSeasons}, #{title.infoTotalEpisodes},
+            #{title.infoFetchedAt}, #{title.catalogFetchedAt},
+            #{title.firstSeenAt}, #{title.lastSeenAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            site_id              = COALESCE(VALUES(site_id), site_id),
+            title                = VALUES(title),
+            original_title       = COALESCE(VALUES(original_title), original_title),
+            synopsis             = COALESCE(VALUES(synopsis), synopsis),
+            thumbnail_url        = COALESCE(VALUES(thumbnail_url), thumbnail_url),
+            year_bucket          = COALESCE(VALUES(year_bucket), year_bucket),
+            years_csv            = COALESCE(VALUES(years_csv), years_csv),
+            age_rating           = COALESCE(VALUES(age_rating), age_rating),
+            genres_csv           = COALESCE(VALUES(genres_csv), genres_csv),
+            types_csv            = COALESCE(VALUES(types_csv), types_csv),
+            catalog_episode_count = COALESCE(VALUES(catalog_episode_count), catalog_episode_count),
+            catalog_movie_count   = COALESCE(VALUES(catalog_movie_count), catalog_movie_count),
+            catalog_position     = COALESCE(VALUES(catalog_position), catalog_position),
+            info_total_seasons   = COALESCE(VALUES(info_total_seasons), info_total_seasons),
+            info_total_episodes  = COALESCE(VALUES(info_total_episodes), info_total_episodes),
+            info_fetched_at      = COALESCE(VALUES(info_fetched_at), info_fetched_at),
+            catalog_fetched_at   = COALESCE(VALUES(catalog_fetched_at), catalog_fetched_at),
+            first_seen_at        = COALESCE(first_seen_at, VALUES(first_seen_at)),
+            last_seen_at         = VALUES(last_seen_at)
+    </insert>
+
+</mapper>
