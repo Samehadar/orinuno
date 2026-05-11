@@ -2,7 +2,7 @@ package com.orinuno.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.orinuno.client.embed.KodikIdType;
+import com.kodik.client.embed.KodikIdType;
 import com.orinuno.model.dto.EmbedLinkDto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;

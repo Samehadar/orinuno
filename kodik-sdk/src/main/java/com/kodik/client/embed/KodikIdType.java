@@ -1,4 +1,4 @@
-package com.orinuno.client.embed;
+package com.kodik.client.embed;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;

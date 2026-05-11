@@ -1,6 +1,6 @@
 package com.orinuno.model.dto;
 
-import com.orinuno.client.embed.KodikIdType;
+import com.kodik.client.embed.KodikIdType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**

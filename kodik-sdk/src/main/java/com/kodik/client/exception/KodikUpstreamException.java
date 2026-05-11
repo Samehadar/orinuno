@@ -1,4 +1,4 @@
-package com.orinuno.client.exception;
+package com.kodik.client.exception;
 
 /**
  * Generic upstream failure that didn't carry a recognisable Kodik error body. HTTP status is

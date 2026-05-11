@@ -5,9 +5,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.kodik.client.dto.KodikSearchRequest;
-import com.orinuno.client.exception.KodikRateLimitedException;
-import com.orinuno.client.exception.KodikUpstreamException;
-import com.orinuno.client.exception.KodikValidationException;
+import com.kodik.client.exception.KodikRateLimitedException;
+import com.kodik.client.exception.KodikUpstreamException;
+import com.kodik.client.exception.KodikValidationException;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.token.KodikFunction;
 import com.orinuno.token.KodikTokenAutoDiscovery;
@@ -30,7 +30,7 @@ import reactor.core.publisher.Mono;
 
 /**
  * Verifies that {@link KodikApiClient}'s error pipeline maps Kodik responses to the typed {@link
- * com.orinuno.client.exception.KodikApiException} hierarchy added in API-5.
+ * com.kodik.client.exception.KodikApiException} hierarchy added in API-5.
  */
 @DisplayName("KodikApiClient — typed exception mapping (API-5)")
 class KodikApiClientErrorMappingTest {

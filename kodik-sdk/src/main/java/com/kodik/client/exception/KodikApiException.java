@@ -1,4 +1,4 @@
-package com.orinuno.client.exception;
+package com.kodik.client.exception;
 
 /**
  * Base for all errors raised by {@link com.orinuno.client.KodikApiClient} that are NOT specific to
