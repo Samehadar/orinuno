@@ -1,0 +1,34 @@
+{
+  "response": [
+    {
+      "video_id": 679796,
+      "data": {"player": "Плеер Aksor", "dubbing": "Озвучка AniLibria", "player_id": 1},
+      "number": "1",
+      "date": 1723283572,
+      "iframe_url": "https://player.aksor.tv/video/248a4ad8181c6e5741371525d70e446b",
+      "index": 1166,
+      "skips": {"opening": null, "ending": {"time": 1310, "length": 39}},
+      "views": 3159,
+      "duration": 1370
+    },
+    {
+      "video_id": 679797,
+      "data": {"player": "Плеер Aksor", "dubbing": "Озвучка AniLibria", "player_id": 1},
+      "number": "2",
+      "date": 1723283572,
+      "iframe_url": "https://player.aksor.tv/video/715a11475e78f4833dcd38e426ca007b",
+      "index": 1167,
+      "skips": {"opening": {"time": 0, "length": 89}, "ending": {"time": 1260, "length": 99}},
+      "views": 687,
+      "duration": 1370
+    },
+    {
+      "video_id": 679799,
+      "data": {"player": "Другой плеер", "dubbing": "X", "player_id": 99},
+      "number": "1",
+      "iframe_url": "https://other.example/video/abc",
+      "skips": {"opening": null, "ending": null},
+      "duration": 1370
+    }
+  ]
+}

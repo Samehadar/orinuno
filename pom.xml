@@ -30,6 +30,7 @@
         <module>aniboom-sdk</module>
         <module>cvh-sdk</module>
         <module>cvh-downloader-sdk</module>
+        <module>aksor-sdk</module>
         <module>orinuno-app</module>
     </modules>
 
@@ -105,6 +106,11 @@
             <dependency>
                 <groupId>com.orinuno</groupId>
                 <artifactId>cvh-downloader-sdk</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.orinuno</groupId>
+                <artifactId>aksor-sdk</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
