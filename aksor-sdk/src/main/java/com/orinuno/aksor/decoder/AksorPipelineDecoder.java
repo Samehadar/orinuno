@@ -2,13 +2,17 @@ package com.orinuno.aksor.decoder;
 
 import com.orinuno.aksor.AksorConfig;
 import com.orinuno.aksor.AksorDecodeResult;
+import com.orinuno.aksor.AksorEpisodeFilter;
 import com.orinuno.aksor.AksorErrorCodes;
 import com.orinuno.aksor.AksorException;
 import com.orinuno.aksor.api.AksorApiClient;
 import com.orinuno.aksor.host.AksorHostRegistry;
 import com.orinuno.aksor.model.AksorAnime;
+import com.orinuno.aksor.model.AksorEpisode;
 import jakarta.annotation.Nullable;
 import java.net.URI;
+import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -39,9 +43,22 @@ public final class AksorPipelineDecoder {
     }
 
     public Mono<AksorDecodeResult> decode(String pageUrl) {
+        return decode(pageUrl, AksorEpisodeFilter.all());
+    }
+
+    /**
+     * Decode with an episode filter applied <em>before</em> per-episode quality enrichment. Skips
+     * {@code player.aksor.tv/api/video/{hash}} calls for episodes the filter rejects — saves N-1
+     * API hits when the caller only wants one episode out of a long series.
+     */
+    public Mono<AksorDecodeResult> decode(String pageUrl, AksorEpisodeFilter filter) {
+        AksorEpisodeFilter effectiveFilter = filter == null ? AksorEpisodeFilter.all() : filter;
         return hostRegistry
                 .resolve(pageUrl)
-                .map(host -> host.resolve(pageUrl).flatMap(anime -> enrich(anime, pageUrl)))
+                .map(
+                        host ->
+                                host.resolve(pageUrl)
+                                        .flatMap(anime -> enrich(anime, pageUrl, effectiveFilter)))
                 .orElseGet(
                         () ->
                                 Mono.just(
@@ -59,12 +76,22 @@ public final class AksorPipelineDecoder {
                         });
     }
 
-    private Mono<AksorDecodeResult> enrich(AksorAnime anime, String pageUrl) {
+    private Mono<AksorDecodeResult> enrich(
+            AksorAnime anime, String pageUrl, AksorEpisodeFilter filter) {
         if (anime.episodes().isEmpty()) {
             return Mono.just(AksorDecodeResult.failure(AksorErrorCodes.AKSOR_NO_EPISODES));
         }
+        List<AksorEpisode> survivors =
+                filter.isAll()
+                        ? anime.episodes()
+                        : anime.episodes().stream()
+                                .filter(filter::matches)
+                                .collect(Collectors.toList());
+        if (survivors.isEmpty()) {
+            return Mono.just(AksorDecodeResult.failure(AksorErrorCodes.AKSOR_NO_EPISODES_MATCHED));
+        }
         String referer = deriveReferer(pageUrl);
-        return Flux.fromIterable(anime.episodes())
+        return Flux.fromIterable(survivors)
                 .flatMapSequential(
                         ep ->
                                 apiClient

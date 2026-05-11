@@ -126,4 +126,161 @@ class AksorPipelineDecoderTest {
         assertThat(AksorPipelineDecoder.sanitizeForLog("a\r\nb")).isEqualTo("a__b");
         assertThat(AksorPipelineDecoder.sanitizeForLog(null)).isEmpty();
     }
+
+    // -------- episode filter -------------------------------------------------
+
+    private static AksorAnime multiEpisodeAnime() {
+        AksorEpisode ep1 =
+                new AksorEpisode(
+                        1L,
+                        "1",
+                        "Озвучка AniLibria",
+                        "Плеер Aksor",
+                        "11111111111111111111111111111111",
+                        "https://player.aksor.tv/video/11111111111111111111111111111111",
+                        1370,
+                        null,
+                        null,
+                        null);
+        AksorEpisode ep2 =
+                new AksorEpisode(
+                        2L,
+                        "2",
+                        "Озвучка AniStar",
+                        "Плеер Aksor",
+                        "22222222222222222222222222222222",
+                        "https://player.aksor.tv/video/22222222222222222222222222222222",
+                        1370,
+                        null,
+                        null,
+                        null);
+        AksorEpisode ep3 =
+                new AksorEpisode(
+                        3L,
+                        "3",
+                        "Озвучка AniLibria",
+                        "Плеер Aksor",
+                        "33333333333333333333333333333333",
+                        "https://player.aksor.tv/video/33333333333333333333333333333333",
+                        1370,
+                        null,
+                        null,
+                        null);
+        return new AksorAnime(
+                "10531",
+                "x",
+                "https://old.yummyani.me/x",
+                "X",
+                "https://p",
+                List.of(ep1, ep2, ep3));
+    }
+
+    private static AksorPipelineDecoder counterDecoder(
+            AksorHostPageParser host,
+            String qualitiesBody,
+            java.util.concurrent.atomic.AtomicInteger counter) {
+        AksorConfig config = AksorConfig.builder().build();
+        WebClient.Builder webClient =
+                WebClient.builder()
+                        .exchangeFunction(
+                                req -> {
+                                    counter.incrementAndGet();
+                                    return Mono.just(
+                                            ClientResponse.create(HttpStatus.OK)
+                                                    .header(
+                                                            "Content-Type",
+                                                            MediaType.APPLICATION_JSON_VALUE)
+                                                    .body(qualitiesBody)
+                                                    .build());
+                                });
+        AksorApiClient apiClient = new AksorApiClient(config, webClient);
+        AksorHostRegistry registry = new AksorHostRegistry(List.of(host));
+        return new AksorPipelineDecoder(config, registry, apiClient);
+    }
+
+    @Test
+    void filterByNumberSkipsOtherEpisodeApiCalls() {
+        String body =
+                "{\"qualities\":{\"q1080\":\"https://cdn.aksor.tv/x.mpd\",\"q720\":null,"
+                        + "\"q480\":null,\"q360\":null,\"q2k\":null,\"q4k\":null}}";
+        java.util.concurrent.atomic.AtomicInteger calls =
+                new java.util.concurrent.atomic.AtomicInteger();
+        AksorPipelineDecoder decoder =
+                counterDecoder(stubHost(multiEpisodeAnime(), "yummyani.me"), body, calls);
+
+        StepVerifier.create(
+                        decoder.decode(
+                                "https://old.yummyani.me/x",
+                                com.orinuno.aksor.AksorEpisodeFilter.byNumber("2")))
+                .assertNext(
+                        r -> {
+                            assertThat(r.success()).isTrue();
+                            assertThat(r.value().episodes()).hasSize(1);
+                            assertThat(r.value().episodes().get(0).number()).isEqualTo("2");
+                        })
+                .verifyComplete();
+        assertThat(calls.get())
+                .as("only one player.aksor.tv API call for the matched episode")
+                .isEqualTo(1);
+    }
+
+    @Test
+    void filterByDubbingKeepsAllMatching() {
+        String body =
+                "{\"qualities\":{\"q1080\":\"https://cdn.aksor.tv/x.mpd\",\"q720\":null,"
+                        + "\"q480\":null,\"q360\":null,\"q2k\":null,\"q4k\":null}}";
+        java.util.concurrent.atomic.AtomicInteger calls =
+                new java.util.concurrent.atomic.AtomicInteger();
+        AksorPipelineDecoder decoder =
+                counterDecoder(stubHost(multiEpisodeAnime(), "yummyani.me"), body, calls);
+
+        StepVerifier.create(
+                        decoder.decode(
+                                "https://old.yummyani.me/x",
+                                com.orinuno.aksor.AksorEpisodeFilter.byDubbing("AniLibria")))
+                .assertNext(
+                        r -> {
+                            assertThat(r.success()).isTrue();
+                            assertThat(r.value().episodes()).hasSize(2);
+                            assertThat(r.value().episodes())
+                                    .extracting(AksorEpisode::number)
+                                    .containsExactly("1", "3");
+                        })
+                .verifyComplete();
+        assertThat(calls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void filterMatchingNothingYieldsNoEpisodesMatched() {
+        AksorPipelineDecoder decoder =
+                buildDecoder(stubHost(multiEpisodeAnime(), "yummyani.me"), "{}");
+
+        StepVerifier.create(
+                        decoder.decode(
+                                "https://old.yummyani.me/x",
+                                com.orinuno.aksor.AksorEpisodeFilter.byNumber("999")))
+                .assertNext(
+                        r -> {
+                            assertThat(r.success()).isFalse();
+                            assertThat(r.errorCode())
+                                    .isEqualTo(AksorErrorCodes.AKSOR_NO_EPISODES_MATCHED);
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void nullFilterFallsBackToAll() {
+        String body =
+                "{\"qualities\":{\"q1080\":\"https://cdn.aksor.tv/x.mpd\",\"q720\":null,"
+                        + "\"q480\":null,\"q360\":null,\"q2k\":null,\"q4k\":null}}";
+        java.util.concurrent.atomic.AtomicInteger calls =
+                new java.util.concurrent.atomic.AtomicInteger();
+        AksorPipelineDecoder decoder =
+                counterDecoder(stubHost(multiEpisodeAnime(), "yummyani.me"), body, calls);
+
+        StepVerifier.create(decoder.decode("https://old.yummyani.me/x", null))
+                .assertNext(r -> assertThat(r.value().episodes()).hasSize(3))
+                .verifyComplete();
+        assertThat(calls.get()).isEqualTo(3);
+    }
 }

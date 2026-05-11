@@ -52,6 +52,15 @@ public final class AksorClient {
         return decoder.decode(pageUrl);
     }
 
+    /**
+     * Decode with an {@link AksorEpisodeFilter} applied before per-episode quality enrichment. For
+     * long series this saves nearly all per-episode {@code player.aksor.tv/api/video/{hash}} calls
+     * when the caller only wants a subset of episodes / a specific dubbing.
+     */
+    public Mono<AksorDecodeResult> decode(String pageUrl, AksorEpisodeFilter filter) {
+        return decoder.decode(pageUrl, filter);
+    }
+
     public Mono<AksorVideoQualities> getQualitiesByHash(String hash) {
         return apiClient.getQualities(hash);
     }

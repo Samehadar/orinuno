@@ -15,6 +15,9 @@ public final class AksorErrorCodes {
     /** Page parsed but did not embed any Aksor episodes. */
     public static final String AKSOR_NO_EPISODES = "AKSOR_NO_EPISODES";
 
+    /** Episodes are present but {@link AksorEpisodeFilter} excluded every one of them. */
+    public static final String AKSOR_NO_EPISODES_MATCHED = "AKSOR_NO_EPISODES_MATCHED";
+
     /** {@code player.aksor.tv/api/video/{hash}} returned an error or unparseable body. */
     public static final String AKSOR_API_ERROR = "AKSOR_API_ERROR";
 

@@ -83,4 +83,56 @@ class AksorClientLiveTest {
         assertThat(r.success()).isFalse();
         assertThat(r.errorCode()).isEqualTo(AksorErrorCodes.AKSOR_UNSUPPORTED_HOST);
     }
+
+    @Test
+    void filterByNumberKeepsOnlyMatchingEpisodes() {
+        // monolog-farmatsevta has multiple dubbings (AniLibria + StudioBand + Субтитры) for the
+        // same episode number, so number="1" returns one row per dubbing. They all share .number().
+        AksorClient client = AksorClient.builder().build();
+        AksorDecodeResult r =
+                client.decode(requiredEnv("AKSOR_LIVE_TEST_URL"), AksorEpisodeFilter.byNumber("1"))
+                        .block(BLOCKING_TIMEOUT);
+        assertThat(r).isNotNull();
+        assertThat(r.success()).as("decode success, errorCode=%s", r.errorCode()).isTrue();
+        assertThat(r.value().episodes()).isNotEmpty();
+        assertThat(r.value().episodes())
+                .allSatisfy(
+                        ep -> {
+                            assertThat(ep.number()).isEqualTo("1");
+                            assertThat(ep.qualities()).isNotNull();
+                            assertThat(ep.qualities().bestAvailable())
+                                    .startsWith("https://")
+                                    .endsWith(".mpd");
+                        });
+    }
+
+    @Test
+    void filterByNumberAndDubbingNarrowsToSingleEpisode() {
+        AksorClient client = AksorClient.builder().build();
+        AksorDecodeResult r =
+                client.decode(
+                                requiredEnv("AKSOR_LIVE_TEST_URL"),
+                                AksorEpisodeFilter.byNumber("1").andDubbing("AniLibria"))
+                        .block(BLOCKING_TIMEOUT);
+        assertThat(r).isNotNull();
+        assertThat(r.success()).isTrue();
+        assertThat(r.value().episodes()).hasSize(1);
+        AksorEpisode only = r.value().episodes().get(0);
+        assertThat(only.number()).isEqualTo("1");
+        assertThat(only.dubbing()).containsIgnoringCase("anilibria");
+        assertThat(only.qualities().bestAvailable()).startsWith("https://").endsWith(".mpd");
+    }
+
+    @Test
+    void filterMatchingNothingYieldsErrorCode() {
+        AksorClient client = AksorClient.builder().build();
+        AksorDecodeResult r =
+                client.decode(
+                                requiredEnv("AKSOR_LIVE_TEST_URL"),
+                                AksorEpisodeFilter.byNumber("99999"))
+                        .block(BLOCKING_TIMEOUT);
+        assertThat(r).isNotNull();
+        assertThat(r.success()).isFalse();
+        assertThat(r.errorCode()).isEqualTo(AksorErrorCodes.AKSOR_NO_EPISODES_MATCHED);
+    }
 }
