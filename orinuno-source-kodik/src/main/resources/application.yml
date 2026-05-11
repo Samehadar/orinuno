@@ -34,6 +34,12 @@ spring:
     # default true; override via SPRING_LIQUIBASE_ENABLED=false locally.
     enabled: ${SPRING_LIQUIBASE_ENABLED:true}
 
+mybatis:
+  mapper-locations: classpath:com/orinuno/source/kodik/db/mapper/*.xml
+  type-aliases-package: com.orinuno.source.kodik.model
+  configuration:
+    map-underscore-to-camel-case: true
+
 kodik:
   sdk:
     rate-limit-per-minute: ${KODIK_RATE_LIMIT_PER_MINUTE:30}

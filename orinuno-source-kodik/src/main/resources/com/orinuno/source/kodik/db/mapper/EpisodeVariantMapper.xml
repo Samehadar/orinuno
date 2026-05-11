@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.orinuno.source.kodik.repository.EpisodeVariantRepository">
+
+    <!--
+        ADR 0018 Phase 0.4c — variant table is L1-only after the column drop. mp4Link /
+        decodeMethod / mp4LinkDecodedAt fields stay on the KodikEpisodeVariant model and are
+        populated only by JOIN queries that alias episode_video columns (findByIdWithDecodedVideo,
+        findByContentIdWithDecodedVideo). Plain SELECTs return them as null.
+    -->
+    <resultMap id="variantResultMap" type="com.orinuno.source.kodik.model.KodikEpisodeVariant">
+        <id property="id" column="id"/>
+        <result property="contentId" column="content_id"/>
+        <result property="seasonNumber" column="season_number"/>
+        <result property="episodeNumber" column="episode_number"/>
+        <result property="translationId" column="translation_id"/>
+        <result property="translationTitle" column="translation_title"/>
+        <result property="translationType" column="translation_type"/>
+        <result property="quality" column="quality"/>
+        <result property="kodikLink" column="kodik_link"/>
+        <result property="mp4Link" column="mp4_link"/>
+        <result property="decodeMethod" column="decode_method"/>
+        <result property="mp4LinkDecodedAt" column="mp4_link_decoded_at"/>
+        <result property="localFilepath" column="local_filepath"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant WHERE id = #{id}
+    </select>
+
+    <select id="findByContentId" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant WHERE content_id = #{contentId}
+        ORDER BY season_number, episode_number, translation_id
+    </select>
+
+    <!--
+        ADR 0018 Phase 0.4b — pending-decode predicate moved from kodik_episode_variant.mp4_link
+        to episode_video.video_url. The L2 columns on the variant table are scheduled for drop
+        in Phase 0.4c; until then they remain populated as a dual-write fallback, but they no
+        longer drive the read-side decision of "needs decode?". The COLLATE clause on the
+        CAST(translation_id) matches the table-level utf8mb4_unicode_ci to avoid MySQL 8's
+        illegal-mix-of-collations error when joining against episode_source.translator_id.
+    -->
+    <select id="findByContentIdWithoutMp4" resultMap="variantResultMap">
+        SELECT v.* FROM kodik_episode_variant v
+        LEFT JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        LEFT JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.content_id = #{contentId}
+          AND ev.id IS NULL
+        ORDER BY v.season_number, v.episode_number
+    </select>
+
+    <!--
+        ADR 0018 Phase 0.4c — INSERT no longer writes mp4_link. Decoded URLs live in
+        episode_video, written by KodikEpisodeDualWriteService (sole writer post-0.4c).
+    -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
+            translation_id, translation_title, translation_type, quality, kodik_link)
+        VALUES (#{contentId}, #{seasonNumber}, #{episodeNumber},
+            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink})
+    </insert>
+
+    <insert id="upsertWithCoalesce">
+        INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
+            translation_id, translation_title, translation_type, quality, kodik_link)
+        VALUES (#{contentId}, #{seasonNumber}, #{episodeNumber},
+            #{translationId}, #{translationTitle}, #{translationType}, #{quality}, #{kodikLink})
+        ON DUPLICATE KEY UPDATE
+            translation_title = VALUES(translation_title),
+            translation_type = VALUES(translation_type),
+            quality = VALUES(quality),
+            kodik_link = VALUES(kodik_link)
+    </insert>
+
+    <insert id="batchUpsertWithCoalesce">
+        <foreach collection="list" item="v" separator=";">
+            INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
+                translation_id, translation_title, translation_type, quality, kodik_link)
+            VALUES (#{v.contentId}, #{v.seasonNumber}, #{v.episodeNumber},
+                #{v.translationId}, #{v.translationTitle}, #{v.translationType},
+                #{v.quality}, #{v.kodikLink})
+            ON DUPLICATE KEY UPDATE
+                translation_title = VALUES(translation_title),
+                translation_type = VALUES(translation_type),
+                quality = VALUES(quality),
+                kodik_link = VALUES(kodik_link)
+        </foreach>
+    </insert>
+
+    <!--
+        ADR 0018 Phase 0.4c — JOIN-based reads that populate variant.mp4Link / decodeMethod /
+        mp4LinkDecodedAt from episode_video. Used by export, parser skip-check and any other
+        caller that needs the decoded URL alongside the L1 row. INNER JOIN — only returns
+        variants with a populated episode_video row. For "all variants regardless of decode
+        state" callers, use findByContentId (no JOIN, mp4Link will be null).
+    -->
+    <select id="findByIdWithDecodedVideo" resultMap="variantResultMap">
+        SELECT v.*, ev.video_url AS mp4_link,
+               ev.decoded_at AS mp4_link_decoded_at,
+               ev.decode_method AS decode_method
+        FROM kodik_episode_variant v
+        INNER JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        INNER JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="findByContentIdWithDecodedVideo" resultMap="variantResultMap">
+        SELECT v.*, ev.video_url AS mp4_link,
+               ev.decoded_at AS mp4_link_decoded_at,
+               ev.decode_method AS decode_method
+        FROM kodik_episode_variant v
+        INNER JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        INNER JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.content_id = #{contentId}
+        ORDER BY v.season_number, v.episode_number, v.translation_id
+    </select>
+
+    <!--
+        ADR 0018 Phase 0.4b — TTL expiry source-of-truth is episode_video.decoded_at, populated
+        by KodikEpisodeDualWriteService. The legacy mp4_link_decoded_at column stays in place
+        until Phase 0.4c so a rollback to the old query is a single XML revert.
+    -->
+    <select id="findExpiredLinks" resultMap="variantResultMap">
+        SELECT v.* FROM kodik_episode_variant v
+        INNER JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        INNER JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+            AND ev.decoded_at IS NOT NULL
+            AND ev.decoded_at &lt; DATE_SUB(NOW(), INTERVAL #{hoursThreshold} HOUR)
+        ORDER BY ev.decoded_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <!--
+        ADR 0018 Phase 0.4b — failed-decode candidates: a variant has an upstream iframe
+        (kodik_link IS NOT NULL) but no successful decoded video row in episode_video.
+        LEFT JOIN + ev.id IS NULL captures both "no mirror row yet" and "mirror row exists
+        but video_url is NULL after a failed write attempt".
+    -->
+    <select id="findFailedDecode" resultMap="variantResultMap">
+        SELECT v.* FROM kodik_episode_variant v
+        LEFT JOIN episode_source es
+            ON es.content_id = v.content_id
+            AND es.season = v.season_number
+            AND es.episode = v.episode_number
+            AND es.translator_id = CAST(v.translation_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            AND es.provider = 'KODIK'
+        LEFT JOIN episode_video ev
+            ON ev.source_id = es.id
+            AND ev.video_url IS NOT NULL
+        WHERE v.kodik_link IS NOT NULL
+          AND ev.id IS NULL
+        ORDER BY v.updated_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="updateLocalFilepath">
+        UPDATE kodik_episode_variant
+        SET local_filepath = #{localFilepath}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findDownloaded" resultMap="variantResultMap">
+        SELECT * FROM kodik_episode_variant
+        WHERE local_filepath IS NOT NULL
+        ORDER BY updated_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <delete id="deleteByContentId">
+        DELETE FROM kodik_episode_variant WHERE content_id = #{contentId}
+    </delete>
+
+</mapper>
