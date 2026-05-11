@@ -1,6 +1,8 @@
 package com.orinuno.token;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.kodik.token.KodikTokenEntry;
+import com.kodik.token.KodikTokenTier;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;

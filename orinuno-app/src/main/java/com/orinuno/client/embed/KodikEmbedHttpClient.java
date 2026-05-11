@@ -2,9 +2,9 @@ package com.orinuno.client.embed;
 
 import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.embed.KodikIdType;
+import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenException;
 import com.orinuno.configuration.OrinunoProperties;
-import com.orinuno.token.KodikFunction;
-import com.orinuno.token.KodikTokenException;
 import com.orinuno.token.KodikTokenRegistry;
 import com.orinuno.token.KodikTokenValidator;
 import java.nio.charset.StandardCharsets;

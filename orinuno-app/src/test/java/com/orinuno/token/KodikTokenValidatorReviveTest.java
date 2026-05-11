@@ -5,6 +5,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.kodik.client.KodikResponseMapper;
+import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenTier;
 import com.orinuno.configuration.OrinunoProperties;
 import java.io.IOException;
 import java.nio.file.Files;

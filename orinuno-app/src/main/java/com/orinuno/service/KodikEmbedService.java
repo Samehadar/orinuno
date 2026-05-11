@@ -25,7 +25,7 @@ import reactor.core.publisher.Mono;
  *   <li>Kodik {@code "error": ...} (non-token) → {@link KodikEmbedException.UpstreamException}
  *   <li>Missing {@code link} field with {@code found=true} → {@link
  *       KodikEmbedException.MalformedResponseException}
- *   <li>Token errors propagate as {@link com.orinuno.token.KodikTokenException} subtypes from the
+ *   <li>Token errors propagate as {@link com.kodik.token.KodikTokenException} subtypes from the
  *       HTTP client.
  * </ul>
  */

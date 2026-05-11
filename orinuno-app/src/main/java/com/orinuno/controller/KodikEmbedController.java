@@ -1,10 +1,10 @@
 package com.orinuno.controller;
 
 import com.kodik.client.embed.KodikIdType;
+import com.kodik.token.KodikTokenException;
 import com.orinuno.client.embed.KodikEmbedException;
 import com.orinuno.model.dto.EmbedLinkDto;
 import com.orinuno.service.KodikEmbedService;
-import com.orinuno.token.KodikTokenException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;

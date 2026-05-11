@@ -1,4 +1,4 @@
-package com.orinuno.token;
+package com.kodik.token;
 
 /**
  * Base for token-related failures. Mirrors AnimeParsers' {@code errors.TokenError}. Concrete

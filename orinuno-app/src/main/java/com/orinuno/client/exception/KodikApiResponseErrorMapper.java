@@ -15,7 +15,7 @@ import java.util.Map;
  *
  * <p>Token-rejection ({@code "Отсутствует или неверный токен"}) is intentionally NOT mapped to a
  * typed exception here — it stays as the existing {@link
- * com.orinuno.token.KodikTokenException.TokenRejectedException} so the surrounding token-failover
+ * com.kodik.token.KodikTokenException.TokenRejectedException} so the surrounding token-failover
  * loop in {@code KodikApiClient.executeWithTokenFailover} keeps working as before.
  */
 public final class KodikApiResponseErrorMapper {

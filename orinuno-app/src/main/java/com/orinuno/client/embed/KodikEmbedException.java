@@ -2,7 +2,7 @@ package com.orinuno.client.embed;
 
 /**
  * Errors raised by the Kodik embed-link resolver. Mirrors the granularity of {@link
- * com.orinuno.token.KodikTokenException} so controllers can map specific subtypes to HTTP status
+ * com.kodik.token.KodikTokenException} so controllers can map specific subtypes to HTTP status
  * codes.
  */
 public class KodikEmbedException extends RuntimeException {
