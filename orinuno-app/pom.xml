@@ -48,6 +48,19 @@
             <version>${project.version}</version>
         </dependency>
         <!--
+            kodik-sdk-spring-boot-starter — ADR 0018 Phase 1.7. Provides auto-configured beans
+            for the Kodik HTTP client / token registry / decoder metrics / embed shortcut /
+            schema-drift detector and a LifecycleRunner for startup-time token validation. The
+            orinuno.kodik.* env var contract is preserved via application.yml aliasing onto
+            the starter's kodik.sdk.* prefix; @ConditionalOnMissingBean lets orinuno-app
+            override individual beans (e.g. driftDetector via DriftDetectorConfig).
+        -->
+        <dependency>
+            <groupId>com.orinuno</groupId>
+            <artifactId>kodik-sdk-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--
             jutsu-sdk — Step 2 of the API/module split. Carries the rate limiter, session
             manager, decoder and source parser. orinuno-app keeps a thin
             JutsuSdkConfiguration that wires SDK beans from OrinunoProperties so the rest of the
