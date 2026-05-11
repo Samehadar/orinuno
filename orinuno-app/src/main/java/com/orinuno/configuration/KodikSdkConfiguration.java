@@ -1,7 +1,9 @@
 package com.orinuno.configuration;
 
+import com.kodik.client.KodikApiClient;
 import com.kodik.client.KodikApiRateLimiter;
 import com.kodik.client.KodikResponseMapper;
+import com.kodik.client.embed.KodikEmbedHttpClient;
 import com.kodik.client.http.RotatingUserAgentProvider;
 import com.kodik.sdk.drift.DriftDetector;
 import com.kodik.token.KodikTokenAutoDiscovery;
@@ -119,6 +121,31 @@ public class KodikSdkConfiguration {
         KodikTokenMetrics metrics = new KodikTokenMetrics(registry);
         metrics.init(meterRegistry);
         return metrics;
+    }
+
+    /**
+     * ADR 0018 Phase 1.2d — KodikApiClient lifted into kodik-sdk. orinuno-app now hands it the
+     * qualified {@code kodikApiWebClient} bean plus the freshly built {@link KodikTokenConfig}; the
+     * SDK consumes only {@code tokenFailoverMaxAttempts} from that record at runtime.
+     */
+    @Bean
+    public KodikApiClient kodikApiClient(
+            @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
+            KodikTokenConfig tokenConfig,
+            KodikResponseMapper responseMapper,
+            KodikApiRateLimiter rateLimiter,
+            KodikTokenRegistry tokenRegistry) {
+        return new KodikApiClient(
+                kodikApiWebClient, tokenConfig, responseMapper, rateLimiter, tokenRegistry);
+    }
+
+    @Bean
+    public KodikEmbedHttpClient kodikEmbedHttpClient(
+            @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
+            KodikTokenConfig tokenConfig,
+            KodikTokenRegistry tokenRegistry,
+            KodikApiRateLimiter rateLimiter) {
+        return new KodikEmbedHttpClient(kodikApiWebClient, tokenConfig, tokenRegistry, rateLimiter);
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.orinuno.client.embed;
+package com.kodik.client.embed;
 
 /**
  * Errors raised by the Kodik embed-link resolver. Mirrors the granularity of {@link

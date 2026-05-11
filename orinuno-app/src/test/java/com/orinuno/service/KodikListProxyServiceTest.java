@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.kodik.client.KodikApiClient;
 import com.kodik.client.dto.KodikListRequest;
 import com.kodik.sdk.drift.DriftDetector;
 import com.kodik.sdk.drift.DriftSamplingProperties;
-import com.orinuno.client.KodikApiClient;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

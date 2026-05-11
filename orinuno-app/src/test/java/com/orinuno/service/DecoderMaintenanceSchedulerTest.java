@@ -3,7 +3,7 @@ package com.orinuno.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.orinuno.client.KodikApiClient;
+import com.kodik.client.KodikApiClient;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.repository.EpisodeVariantRepository;
 import com.orinuno.service.decoder.KodikDecodeOrchestrator;

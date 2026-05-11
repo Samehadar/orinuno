@@ -1,8 +1,6 @@
-package com.orinuno.client;
+package com.kodik.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.kodik.client.KodikApiRateLimiter;
-import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikListRequest;
 import com.kodik.client.dto.KodikReferenceRequest;
 import com.kodik.client.dto.KodikSearchRequest;
@@ -14,19 +12,17 @@ import com.kodik.client.dto.reference.KodikReferenceResponse;
 import com.kodik.client.dto.reference.KodikTranslationDto;
 import com.kodik.client.dto.reference.KodikYearDto;
 import com.kodik.client.exception.KodikApiException;
+import com.kodik.client.exception.KodikApiResponseErrorMapper;
 import com.kodik.client.exception.KodikRateLimitedException;
 import com.kodik.client.exception.KodikUpstreamException;
 import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenConfig;
 import com.kodik.token.KodikTokenException;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenValidator;
-import com.orinuno.client.exception.KodikApiResponseErrorMapper;
-import com.orinuno.configuration.OrinunoProperties;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -34,23 +30,28 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Slf4j
-@Component
 public class KodikApiClient {
 
     private final WebClient kodikApiWebClient;
-    private final OrinunoProperties properties;
+    private final KodikTokenConfig tokenConfig;
     private final KodikResponseMapper responseMapper;
     private final KodikApiRateLimiter rateLimiter;
     private final KodikTokenRegistry tokenRegistry;
 
+    /**
+     * ADR 0018 Phase 1.2d — Spring-free constructor. orinuno-app's KodikSdkConfiguration supplies
+     * the {@code kodikApiWebClient} bean explicitly. {@link KodikTokenConfig} replaces the prior
+     * OrinunoProperties reference — the only field actually consumed is {@code
+     * tokenFailoverMaxAttempts}.
+     */
     public KodikApiClient(
-            @Qualifier("kodikApiWebClient") WebClient kodikApiWebClient,
-            OrinunoProperties properties,
+            WebClient kodikApiWebClient,
+            KodikTokenConfig tokenConfig,
             KodikResponseMapper responseMapper,
             KodikApiRateLimiter rateLimiter,
             KodikTokenRegistry tokenRegistry) {
         this.kodikApiWebClient = kodikApiWebClient;
-        this.properties = properties;
+        this.tokenConfig = tokenConfig;
         this.responseMapper = responseMapper;
         this.rateLimiter = rateLimiter;
         this.tokenRegistry = tokenRegistry;
@@ -197,7 +198,12 @@ public class KodikApiClient {
     }
 
     /** Package-private for direct unit-testing in {@code KodikApiClientParamWiringTest}. */
-    static MultiValueMap<String, String> buildReferenceParams(
+    /**
+     * Visible-for-testing — kept public (was package-private) so the test class in {@code
+     * com.orinuno.client} can keep exercising its parameter-wiring assertions after the SDK move
+     * (ADR 0018 Phase 1.2d).
+     */
+    public static MultiValueMap<String, String> buildReferenceParams(
             KodikReferenceRequest request, boolean allowGenresType) {
         if (request == null) return emptyParams();
         MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
@@ -349,11 +355,7 @@ public class KodikApiClient {
                                             error.toString())) {
                                 tokenRegistry.markInvalid(token, function);
                                 int maxAttempts =
-                                        Math.max(
-                                                1,
-                                                properties
-                                                        .getKodik()
-                                                        .getTokenFailoverMaxAttempts());
+                                        Math.max(1, tokenConfig.tokenFailoverMaxAttempts());
                                 if (attempt + 1 >= maxAttempts) {
                                     return Mono.error(
                                             new KodikTokenException.TokenRejectedException(
@@ -427,7 +429,7 @@ public class KodikApiClient {
     }
 
     /** Package-private for direct unit-testing in {@code KodikApiClientParamWiringTest}. */
-    static MultiValueMap<String, String> buildSearchParams(KodikSearchRequest r) {
+    public static MultiValueMap<String, String> buildSearchParams(KodikSearchRequest r) {
         MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
         // Defaults — caller can override by setting the corresponding fields on KodikSearchRequest.
         // API-4: the previous implementation called p.add(...) unconditionally and then
@@ -501,7 +503,7 @@ public class KodikApiClient {
     }
 
     /** Package-private for direct unit-testing in {@code KodikApiClientParamWiringTest}. */
-    static MultiValueMap<String, String> buildListParams(KodikListRequest r) {
+    public static MultiValueMap<String, String> buildListParams(KodikListRequest r) {
         MultiValueMap<String, String> p = new LinkedMultiValueMap<>();
         addBooleanWithDefault(p, "with_material_data", r.getWithMaterialData(), true);
 

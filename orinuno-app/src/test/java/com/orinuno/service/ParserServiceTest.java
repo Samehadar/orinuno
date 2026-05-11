@@ -5,8 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
+import com.kodik.client.KodikApiClient;
 import com.kodik.client.dto.KodikSearchResponse;
-import com.orinuno.client.KodikApiClient;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.model.KodikContent;
 import com.orinuno.model.KodikEpisodeVariant;

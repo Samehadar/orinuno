@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.kodik.client.KodikApiRateLimiter;
+import com.kodik.client.embed.KodikEmbedHttpClient;
 import com.kodik.client.embed.KodikIdType;
 import com.kodik.token.KodikFunction;
 import com.kodik.token.KodikTokenException;
@@ -215,7 +216,11 @@ class KodikEmbedHttpClientTest {
     }
 
     private KodikEmbedHttpClient newClient() {
-        return new KodikEmbedHttpClient(kodikApiWebClient, properties, tokenRegistry, rateLimiter);
+        return new KodikEmbedHttpClient(
+                kodikApiWebClient,
+                com.orinuno.token.TokenConfigTestSupport.toConfig(properties),
+                tokenRegistry,
+                rateLimiter);
     }
 
     private static HttpHandler noop() {
