@@ -171,16 +171,25 @@ flowchart LR
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0.1 | Refresh ADR 0016 + 0017 trackers | ✅ done (this branch) |
-| 0.2 | ADR 0018 (this ADR) + index update | ⏳ this PR |
-| 0.3 | ArchUnit + Liquibase boundary guards | ⏳ pending |
-| 0.4 | `kodik_episode_variant` L1+L2 split (ADR 0016 §"Known tech debt" → unblocks Kodik extraction) | ⏳ pending |
-| 1.* | Kodik SDK extraction into `kodik-sdk` (+ `kodik-sdk-spring-boot-starter`); absorb `kodik-sdk-drift` | ⏳ pending |
-| 2.* | `orinuno-source-kodik` standalone deployable; reverse-proxy in `orinuno`; external-bridge cutover; demo UI continues working unchanged | ⏳ pending |
+| 0.1 | Refresh ADR 0016 + 0017 trackers | ✅ done |
+| 0.2 | ADR 0018 (this ADR) + index update | ✅ done |
+| 0.3 | ArchUnit + Liquibase boundary guards | ✅ done |
+| 0.4 | `kodik_episode_variant` L1+L2 split (ADR 0016 §"Known tech debt" → unblocks Kodik extraction) | ✅ done |
+| 1.* | Kodik SDK extraction into `kodik-sdk` (+ `kodik-sdk-spring-boot-starter`); absorb `kodik-sdk-drift` | ✅ done (Phases 1.1–1.4, 1.6, 1.8) |
+| 2.* | `orinuno-source-kodik` standalone deployable; reverse-proxy in `orinuno`; external-bridge cutover; demo UI continues working unchanged | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
 | 3 | Validation gate (14 days prod stability of `orinuno-source-kodik`) | ⏳ pending |
 | 4.* | `orinuno-source-jutsu` extraction (mirror of Phase 2) | ⏳ pending |
 | 5.* | `meter` OSS service; catalog write-path moves into `meter`; `orinuno` read-only repository + Caffeine cache; multi-instance `orinuno`; DB user separation; full split docker-compose | ⏳ pending |
 | 6 | Kafka outbox + event sourcing (future ADR, triggered by §"Future evolution") | ⏳ deferred |
+
+### Phase 2 migration recipe — Kin kodik-parser / external-bridge cutover
+
+External consumers (Kin's `downstream-repo/kodik-parser`, `downstream-repo/external-bridge`) reach the Kodik routes via the `orinuno` reverse-proxy by default — no code change required when Phase 2.8's filter is enabled. To bypass the orinuno hop entirely and call `orinuno-source-kodik` directly:
+
+- `downstream-repo/kodik-parser/src/main/resources/application.yml` — override `SOURCEKODIK_BASE_URL=http://orinuno-source-kodik:8086` (or whatever DNS name the deployer chose). Endpoint paths (`/api/v1/kodik/*`, `/api/v1/embed/*`, `/api/v1/reference/*`, `/api/v1/source-events/*`) are identical, so no client changes.
+- `downstream-repo/external-bridge` — point its source-events poller at `http://orinuno-source-kodik:8086/api/v1/source-events/ready` instead of `http://orinuno:8085/...`. Watermark / payload shape identical.
+
+The reverse-proxy stays as the durable fallback: consumers that keep pointing at `orinuno` continue to work unchanged. Direct routing is a perf/independence optimisation, not a correctness requirement.
 
 ## Blocked on
 
@@ -190,13 +199,13 @@ Nothing. Phase 0.3 (boundary guards) and Phase 0.4 (L1+L2 split migration) are n
 
 | Item | Status |
 |------|--------|
-| ADR 0018 + index update | ⏳ this PR |
+| ADR 0018 + index update | ✅ done |
 | ADR 0016 successor section updated | ✅ Phase 0.1 (commit 47fc690) |
 | ADR 0017 successor context added | ✅ Phase 0.1 (commit 47fc690) |
-| Phase 0.3 ArchUnit + Liquibase guards | ⏳ pending |
-| Phase 0.4 `kodik_episode_variant` L1+L2 split migration | ⏳ pending |
-| Phase 1 `kodik-sdk` + starter | ⏳ pending |
-| Phase 2 `orinuno-source-kodik` standalone | ⏳ pending |
+| Phase 0.3 ArchUnit + Liquibase guards | ✅ done |
+| Phase 0.4 `kodik_episode_variant` L1+L2 split migration | ✅ done |
+| Phase 1 `kodik-sdk` + starter | ✅ done |
+| Phase 2 `orinuno-source-kodik` standalone | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
 | Phase 3 validation gate | ⏳ pending |
 | Phase 4 `orinuno-source-jutsu` standalone | ⏳ pending |
 | Phase 5 OSS `meter` service + shared catalog DB | ⏳ pending |
