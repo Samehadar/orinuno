@@ -51,3 +51,5 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260508040000_alter_jutsu_title_add_years_age_rating.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260508050000_create_jutsu_film.sql
+  - include:
+      file: com/orinuno/db/changelog/scripts/20260511000000_backfill_episode_video_from_kodik_variant.sql
