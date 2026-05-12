@@ -45,9 +45,16 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 
 ### Block B — application-layer dual-write removal
 
-- **B1** — `KodikEpisodeDualWriteService` (orinuno-app) is the visible Phase 5.6 boundary violation: it writes to `episode_source` + `episode_video`, which per ADR 0018 §5.2 belong to meter. Replace the in-process dual-write with: `ParserService` emits a `SourceCatalogEvent.SeriesDiscovered` / `MovieDiscovered` upgrade through `orinuno-source-kodik`'s `/api/v1/source-events/ready` endpoint (the projection already covers Kodik L1 → event), and meter's `KodikRemoteEventPoller` reconciles `episode_source` + `episode_video` rows. After B1, `KodikEpisodeDualWriteService` + its tests + the `EpisodeSourceRepository` / `EpisodeVideoRepository` in orinuno-app are deletable.
-- **B2** — extend meter's `KodikRemoteEventPoller` to populate L2 (`episode_source` + `episode_video`) in addition to L3 (`catalog_*`). Today it only reconciles L3. This is the meter-side prereq for B1.
+- **B2** — extend meter's `KodikRemoteEventPoller` / `CatalogSinkEventEmitter` to populate L2 (`episode_source`) in addition to L3 (`catalog_*`). ✅ landed in commit `d963a1b`. **`episode_video` is intentionally NOT written here** — the event payload only carries `SourceEpisodeVariant.mediaUrl` which is the pre-decode iframe / episode-page URL, never the decoded CDN URL. Decoded URLs reach meter via the separate path below.
+- **B2-decoded** *(new prerequisite for B1, discovered after B2)* — the post-decode URL needs its own channel before `KodikEpisodeDualWriteService` can be safely removed. Two viable shapes:
+  1. **Event extension.** Add a sealed variant (e.g. `SourceCatalogEvent.VariantDecoded`) or an optional `decodedMediaUrl` + `decodedQuality` pair on `SourceEpisodeVariant`. `KodikSourceEventProjection` joins `kodik_episode_variant` ⋈ `episode_video` and emits the decoded URL when present. `CatalogSinkEventEmitter` writes `episode_video.video_url` when the decoded fields are set.
+  2. **Direct meter endpoint.** New `POST /api/v1/catalog/internal/episode-videos` on meter that takes `(sourceType, sourceId, season, episode, translatorId, quality, videoUrl, ttlSeconds)` and upserts `episode_video`. orinuno-app calls this from `ParserService` after a successful decode. Simpler than touching the contract, but adds an explicit orinuno→meter HTTP coupling that ADR 0020 §2 deliberately avoided for the read path.
+
+  Preferred shape: option 1 (event extension) — keeps the contract as the single coordination surface and avoids the orinuno→meter HTTP hop. The contract version bump is paid once; subsequent sources benefit from the same channel.
+
+- **B1** — once B2-decoded lands, `KodikEpisodeDualWriteService` is finally redundant. Delete it from orinuno-app, drop the `dualWriteService` field + call in `ParserService`, remove `EpisodeSourceRepository` / `EpisodeVideoRepository` / `EpisodeSource` / `EpisodeVideo` from orinuno-app's primary write surface. **Blocking observation captured on 2026-05-12:** the original ADR 0021 §B1 text assumed events already carried decoded URLs and that `KodikEpisodeDualWriteService` was a pure "mirror"; it is in fact the sole writer of `episode_video.video_url` after Phase 0.4 split. Removing it without B2-decoded breaks `StreamController` + `VideoDownloadService` for every new decode (each request would re-run the decoder, hitting Kodik rate limits + decode latency). Rolled back from the 2026-05-12 session; resume only after B2-decoded is green.
 - **B3** — move L2 (`episode_source` + `episode_video`) Liquibase from `orinuno-app/src/main/resources/com/orinuno/db/changelog/scripts/` to `meter/src/main/resources/db/catalog-changelog/scripts/`. Update meter's master changelog. After B3, `orinuno` schema no longer hosts L2; the canonical home is `orinuno_catalog`. Same backfill caveat as L1 — pre-prod, no data loss risk.
+  - **B3-a (split-out of B3)** ✅ landed in commits `600815b` (Liquibase) + `d4b3474` (entities + repos). meter's catalog DB now owns the L2 schema in parallel to orinuno-app's legacy copy.
 
 ### Block C — read-side Kodik controllers (orinuno-app → source-kodik or delete)
 
@@ -69,10 +76,19 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 - **E2** — `OrinunoProperties.KodikProperties` subtree → `KodikSourceProperties` in `orinuno-source-kodik` (or `kodik-sdk-spring-boot-starter`). orinuno-app loses Kodik-specific config knobs entirely.
 - **E3** — update AGENTS.md "bounded contexts" diagram + README quick-start to match the final shape (orinuno = gateway only, no Kodik logic).
 
-## What this PR ships
+## Session log — 2026-05-12
 
-- `chore(orinuno-app): drop dead L3 catalog_* + remote_source_watermark Liquibase scripts` — A2-half. Five `.sql` files deleted, `liquibase-changelog.yaml` slimmed. orinuno-app unit suite 596/596 green.
-- This ADR.
+- `7453e68` fix(docker-compose) — IPv6 demo port pin + jutsu env names (unrelated, lands first).
+- `2543816` refactor(orinuno-app) — drop legacy Kodik+Jutsu controllers (Phase 4 cleanup, -2968 LOC).
+- `7964b53` refactor(orinuno-app) — drop parse-slice deps from HealthController + delete dead ShikimoriDiscoveryService.
+- `a768bc7` chore(orinuno-app) — drop dead L3 catalog_* + remote_source_watermark Liquibase scripts (**A2-half**).
+- `add982e` docs(adr) — ADR 0021 + tracker honesty patches on 0018/0019/0020.
+- `e69ff8d` chore(demo) — add pnpm-lock.yaml for reproducible Vite build.
+- `8b4f10` chore(e2e-poster) — commit WireMock fixtures referenced by docker-compose.
+- `600815b` feat(meter) — L2 `episode_source` + `episode_video` Liquibase in meter (**B3-a-1**).
+- `d4b3474` feat(meter) — `EpisodeSource` + `EpisodeVideo` entities + MyBatis repos in meter (**B3-a-2**).
+- `d963a1b` feat(meter) — `CatalogSinkEventEmitter` writes L2 `episode_source` from events (**B2**).
+- `<this PR>` docs(adr) — record B2-decoded prerequisite + tracker refresh.
 
 ## Risks of leaving the gap open
 
@@ -85,14 +101,17 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 
 | Item | Status |
 |------|--------|
-| ADR 0021 + index update | ✅ this PR |
-| A2-half — drop dead L3 + watermark changelogs from orinuno-app | ✅ this PR |
+| ADR 0021 + index update | ✅ commit `add982e` |
+| A2-half — drop dead L3 + watermark changelogs from orinuno-app | ✅ commit `a768bc7` |
 | A3 — decide dumps ownership | ⏳ open |
 | A6 — drop L1 kodik_* changelogs from orinuno-app | ⏳ blocked on Block B + C |
 | A7 — drop L1 jutsu_* changelogs from orinuno-app | ⏳ blocked on jutsu sync scheduler move |
-| B1 — delete `KodikEpisodeDualWriteService`, route through events | ⏳ blocked on B2 |
-| B2 — extend `KodikRemoteEventPoller` to populate L2 | ⏳ open |
-| B3 — move L2 Liquibase from orinuno-app to meter | ⏳ blocked on B1 + B2 |
+| B3-a-1 — L2 Liquibase in meter | ✅ commit `600815b` |
+| B3-a-2 — L2 entities + repos in meter | ✅ commit `d4b3474` |
+| B2 — `CatalogSinkEventEmitter` writes `episode_source` from events | ✅ commit `d963a1b` |
+| B2-decoded — post-decode URL channel (event variant or meter API) | ⏳ open — newly identified prereq for B1 |
+| B1 — delete `KodikEpisodeDualWriteService`, route through events | ⏳ blocked on B2-decoded |
+| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on B1 |
 | C1 — `ContentController` + `ContentService` triage | ⏳ open |
 | C2 — `StreamController` + `HlsManifestService` to source-kodik | ⏳ open |
 | C3 — `DownloadController` + `VideoDownloadService` to source-kodik | ⏳ open |
