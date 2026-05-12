@@ -188,6 +188,24 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
   writer via `ParserService.findOrCreateContent`). The L2 flip (real
   B1-stale-read fix) split out as **C1.4** because every current deploy
   has `orinuno.catalog-read.url` unset.
+- `00053e0` refactor(orinuno-app) — **C1.4**: `MultiSourceController`
+  reads `episode_source` + `episode_video` from `orinuno_catalog` via
+  two new JdbcTemplate-backed `CatalogEpisode{Source,Video}ReadRepository`
+  classes. Controller + new repos all gated on the existing
+  `catalogReadJdbcTemplate` bean (Phase 5.4); monolith deploys without
+  the readonly DS configured boot with the controller bean absent →
+  `/api/v1/anime/*` returns 404, which the monolith profile flags
+  explicitly. `docker-compose.yml` gains
+  `ORINUNO_CATALOG_READ_URL=jdbc:mysql://db/orinuno_catalog`; the
+  monolith overlay sets it to empty.
+- `fa7f050` refactor(orinuno-app) — **B3-partial**: the now-orphan
+  primary-DS MyBatis path for L2
+  (`com.orinuno.repository.EpisodeSourceRepository` +
+  `EpisodeVideoRepository` + their XML mappers) deleted. -202 LOC. The
+  Liquibase changesets stay until `EpisodeVariantMapper.xml`'s JOINs
+  (used by ParserService's decoded-skip + TTL-expiry queries) migrate
+  off the primary DS — recorded as B3-full in the tracker, blocked on
+  Block D's parse-slice move.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -219,12 +237,13 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
 | B2 end-to-end IT — Spring context + Testcontainers MySQL, poll → emit → row | ✅ commit `3a3ea31` |
 | B2-decoded — post-decode URL channel (event variant + meter push endpoint) | ✅ commits `fb04e92` (contract+meter), `297e931` (orinuno-app emit), `4d13912` (IT) |
 | B1 — delete `KodikEpisodeDualWriteService`, route through events | ✅ commit `e7e7e0a` (models + repos stay read-only for `MultiSourceController` / `MultiSourceRanker`; orinuno-schema L2 tables stop receiving fresh writes — known stale-read trade-off until Block B3/C) |
-| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on **C1.4** (flip MultiSourceController L2 reads to meter-readonly DS once `orinuno.catalog-read.url` is configured in dev/monolith profiles) |
+| B3-partial — drop orphan MyBatis L2 surface (repos + mappers) from orinuno-app | ✅ commit `fa7f050` |
+| B3-full — drop L2 Liquibase from orinuno-app (incl. backfill) | ⏳ blocked on migrating `EpisodeVariantMapper.xml`'s JOINs (`findByIdWithDecodedVideo` / `findExpiredLinks` / similar) off the orinuno-schema L2 tables — either via the meter-readonly JdbcTemplate or by moving the decoded-skip logic into the source-kodik ParserService in Block D |
 | C0.1 — delete dead orinuno-app `SourceEventController` (dup of source-kodik) | ✅ commit `1cded62` |
 | C1.1 — port `ContentController` + read half of `ContentService` → source-kodik | ✅ commit `97606eb` |
 | C1.2 — proxy `/api/v1/content/` via `KodikUpstreamProxyFilter`; drop orinuno-app originals | ✅ commit `83daac3` |
 | C1.3 — `MultiSourceController` drops `ContentService` dep, calls `ContentRepository` directly | ✅ commit `cbc6b98` |
-| C1.4 — flip `MultiSourceController` L2 reads (`EpisodeSourceRepository`, `EpisodeVideoRepository`) to meter-readonly `orinuno_catalog`; unblocks B3 | ⏳ open — needs `orinuno.catalog-read.url` plumbing in dev/monolith docker-compose first |
+| C1.4 — flip `MultiSourceController` L2 reads to meter-readonly `orinuno_catalog` | ✅ commit `00053e0` (also wired `ORINUNO_CATALOG_READ_URL` into docker-compose.yml + monolith overlay) |
 | C2.1 — port `StreamController` + `HlsController` + `HlsManifestService` → source-kodik | ⏳ open |
 | C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ⏳ blocked on C2.1 |
 | C3.1 — port `DownloadController` + `VideoDownloadService` → source-kodik | ⏳ blocked on E2 (relocate Kodik storage knobs first) |
