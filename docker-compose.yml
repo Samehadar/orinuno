@@ -122,12 +122,12 @@ services:
       DB_NAME: orinuno_source_jutsu
       DB_USERNAME: root
       DB_PASSWORD: root
-      # Credentials for jut.su premium decode. Inherits the existing
-      # PROVIDERS_JUTSU_* env names from orinuno-app's contract so deploys
-      # don't need a second secret set.
-      JUTSU_USERNAME: ${PROVIDERS_JUTSU_USERNAME:-}
-      JUTSU_PASSWORD: ${PROVIDERS_JUTSU_PASSWORD:-}
-      JUTSU_BASE_URL: ${PROVIDERS_JUTSU_BASE_URL:-https://jut.su}
+      # Credentials for jut.su premium decode. Reuses the same JUTSU_*
+      # env names as orinuno-app's application.yml so a single .env covers
+      # both legacy in-process + standalone paths.
+      JUTSU_USERNAME: ${JUTSU_USERNAME:-}
+      JUTSU_PASSWORD: ${JUTSU_PASSWORD:-}
+      JUTSU_BASE_URL: ${PROVIDERS_JUTSU_BASE_URL:-${JUTSU_BASE_URL:-https://jut.su}}
     restart: unless-stopped
 
   demo:
@@ -135,7 +135,12 @@ services:
     depends_on:
       - app
     ports:
-      - "3000:80"
+      # Pin IPv4-only. Docker Desktop on macOS binds `[::]:PORT` too by default,
+      # but the IPv6 NAT path mis-routes cascading proxy hops (demo nginx → app
+      # container DNS), so browsers that resolve `localhost` to `::1` first hit
+      # a 502. Forcing `127.0.0.1:` makes the IPv6 listener absent → browser
+      # falls through to IPv4 → request succeeds.
+      - "127.0.0.1:3000:80"
     environment:
       VITE_API_URL: ""
       VITE_API_KEY: ""
