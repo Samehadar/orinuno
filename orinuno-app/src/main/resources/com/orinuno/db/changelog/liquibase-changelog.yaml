@@ -30,8 +30,6 @@ databaseChangeLog:
   - include:
       file: com/orinuno/db/changelog/scripts/20260502050100_create_episode_video.sql
   - include:
-      file: com/orinuno/db/changelog/scripts/20260502060000_create_kodik_content_enrichment.sql
-  - include:
       file: com/orinuno/db/changelog/scripts/20260511000000_backfill_episode_video_from_kodik_variant.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260511010000_drop_kodik_variant_l2_columns.sql
