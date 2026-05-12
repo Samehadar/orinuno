@@ -107,6 +107,10 @@ public final class JutsuDecoder {
         // Content-Type charset already, but spelling it out here means tests that don't go
         // through a real HTTP layer also decode bodies the same way the runtime does — and
         // keeps the {@code <source>} regex (which uses ASCII delimiters) charset-stable.
+        String baseUrl =
+                config.baseUrl() != null && config.baseUrl().endsWith("/")
+                        ? config.baseUrl().substring(0, config.baseUrl().length() - 1)
+                        : config.baseUrl();
         this.client =
                 webClientBuilder
                         .defaultHeader(HttpHeaders.USER_AGENT, config.userAgent())
@@ -115,7 +119,7 @@ public final class JutsuDecoder {
                                 "text/html,application/xhtml+xml,application/xml;q=0.9,"
                                         + "image/avif,image/webp,*/*;q=0.8")
                         .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU,ru;q=0.9,en;q=0.8")
-                        .defaultHeader(HttpHeaders.REFERER, "https://jut.su/")
+                        .defaultHeader(HttpHeaders.REFERER, baseUrl + "/")
                         .build();
         this.rateLimiter = rateLimiter;
         this.sessionManager = sessionManager;

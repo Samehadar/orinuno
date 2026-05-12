@@ -47,15 +47,25 @@ import java.util.Optional;
 public final class JutsuSourceEventMapper {
 
     private static final String SOURCE_TYPE = "jutsu";
-    private static final String BASE_URL = "https://jut.su";
 
     private JutsuSourceEventMapper() {}
 
+    /** Convenience overload — uses the canonical jut.su base for default deployments. */
     public static SourceCatalogEvent toEvent(
             JutsuTitle title, List<JutsuEpisode> episodes, List<JutsuFilm> films, Clock clock) {
+        return toEvent(title, episodes, films, clock, "https://jut.su");
+    }
+
+    public static SourceCatalogEvent toEvent(
+            JutsuTitle title,
+            List<JutsuEpisode> episodes,
+            List<JutsuFilm> films,
+            Clock clock,
+            String baseUrl) {
+        String normalisedBase = stripTrailingSlash(baseUrl);
         SourceIdentifier identifier = SourceIdentifier.of(SOURCE_TYPE, title.getSlug());
         SourceContentInfo info = buildInfo(title);
-        Provenance provenance = buildProvenance(title, clock);
+        Provenance provenance = buildProvenance(title, clock, normalisedBase);
 
         boolean hasEpisodes = episodes != null && !episodes.isEmpty();
         boolean hasFilms = films != null && !films.isEmpty();
@@ -66,15 +76,20 @@ public final class JutsuSourceEventMapper {
 
         if (!hasEpisodes && hasFilms) {
             JutsuFilm first = films.get(0);
-            SourceEpisodeVariant variant = filmToVariant(first);
+            SourceEpisodeVariant variant = filmToVariant(first, normalisedBase);
             return new SourceCatalogEvent.MovieDiscovered(identifier, info, variant, provenance);
         }
 
-        List<SourceSeason> seasons = groupEpisodesIntoSeasons(episodes);
+        List<SourceSeason> seasons = groupEpisodesIntoSeasons(episodes, normalisedBase);
         if (seasons.isEmpty()) {
             return new SourceCatalogEvent.TitleObserved(identifier, info, provenance);
         }
         return new SourceCatalogEvent.SeriesDiscovered(identifier, info, seasons, provenance);
+    }
+
+    private static String stripTrailingSlash(String url) {
+        if (url == null) return "https://jut.su";
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     private static SourceContentInfo buildInfo(JutsuTitle title) {
@@ -105,7 +120,8 @@ public final class JutsuSourceEventMapper {
         return null;
     }
 
-    private static List<SourceSeason> groupEpisodesIntoSeasons(List<JutsuEpisode> episodes) {
+    private static List<SourceSeason> groupEpisodesIntoSeasons(
+            List<JutsuEpisode> episodes, String baseUrl) {
         Map<Integer, List<JutsuEpisode>> bySeason = new LinkedHashMap<>();
         episodes.stream()
                 .sorted(
@@ -121,7 +137,7 @@ public final class JutsuSourceEventMapper {
                         entry -> {
                             List<SourceEpisode> sourceEpisodes =
                                     entry.getValue().stream()
-                                            .map(JutsuSourceEventMapper::episodeRow)
+                                            .map(ep -> episodeRow(ep, baseUrl))
                                             .toList();
                             return new SourceSeason(
                                     null, null, null, entry.getKey(), sourceEpisodes);
@@ -129,26 +145,26 @@ public final class JutsuSourceEventMapper {
                 .toList();
     }
 
-    private static SourceEpisode episodeRow(JutsuEpisode ep) {
-        SourceEpisodeVariant variant = episodeToVariant(ep);
+    private static SourceEpisode episodeRow(JutsuEpisode ep, String baseUrl) {
+        SourceEpisodeVariant variant = episodeToVariant(ep, baseUrl);
         return new SourceEpisode(
                 null, null, null, null, null, null, ep.getEpisode(), List.of(variant));
     }
 
-    private static SourceEpisodeVariant episodeToVariant(JutsuEpisode ep) {
+    private static SourceEpisodeVariant episodeToVariant(JutsuEpisode ep, String baseUrl) {
         return new SourceEpisodeVariant(
                 SourceIdentifier.of(SOURCE_TYPE, episodeIdentifier(ep)),
-                absoluteUrl(ep.getRelativeUrl()),
+                absoluteUrl(ep.getRelativeUrl(), baseUrl),
                 ep.getLabel(),
                 null,
                 null,
                 null);
     }
 
-    private static SourceEpisodeVariant filmToVariant(JutsuFilm film) {
+    private static SourceEpisodeVariant filmToVariant(JutsuFilm film, String baseUrl) {
         return new SourceEpisodeVariant(
                 SourceIdentifier.of(SOURCE_TYPE, filmIdentifier(film)),
-                absoluteUrl(film.getRelativeUrl()),
+                absoluteUrl(film.getRelativeUrl(), baseUrl),
                 film.getLabel(),
                 null,
                 null,
@@ -163,17 +179,17 @@ public final class JutsuSourceEventMapper {
         return film.getSlug() + "/film/" + film.getFilmIndex();
     }
 
-    private static String absoluteUrl(String relativeUrl) {
+    private static String absoluteUrl(String relativeUrl, String baseUrl) {
         if (relativeUrl == null || relativeUrl.isBlank()) {
             return null;
         }
         if (relativeUrl.startsWith("http://") || relativeUrl.startsWith("https://")) {
             return relativeUrl;
         }
-        return BASE_URL + (relativeUrl.startsWith("/") ? relativeUrl : "/" + relativeUrl);
+        return baseUrl + (relativeUrl.startsWith("/") ? relativeUrl : "/" + relativeUrl);
     }
 
-    private static Provenance buildProvenance(JutsuTitle title, Clock clock) {
+    private static Provenance buildProvenance(JutsuTitle title, Clock clock, String baseUrl) {
         Instant fetchedAt =
                 Optional.ofNullable(
                                 firstNonNull(
@@ -182,7 +198,7 @@ public final class JutsuSourceEventMapper {
                                         title.getLastSeenAt()))
                         .map(ldt -> ldt.toInstant(ZoneOffset.UTC))
                         .orElse(Instant.now(clock));
-        String sourceUrl = BASE_URL + "/anime/" + title.getSlug() + "/";
+        String sourceUrl = baseUrl + "/anime/" + title.getSlug() + "/";
         return Provenance.of(sourceUrl, fetchedAt);
     }
 

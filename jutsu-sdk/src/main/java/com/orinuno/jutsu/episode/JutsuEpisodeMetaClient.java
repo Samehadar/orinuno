@@ -31,6 +31,7 @@ public final class JutsuEpisodeMetaClient {
     private final JutsuRateLimiter rateLimiter;
     private final JutsuSessionManager sessionManager;
     private final JutsuDriftDetector driftDetector;
+    private final String baseUrl;
 
     public JutsuEpisodeMetaClient(
             JutsuConfig config,
@@ -49,6 +50,10 @@ public final class JutsuEpisodeMetaClient {
         if (webClientBuilder == null) {
             throw new IllegalArgumentException("webClientBuilder must not be null");
         }
+        this.baseUrl =
+                config.baseUrl() != null && config.baseUrl().endsWith("/")
+                        ? config.baseUrl().substring(0, config.baseUrl().length() - 1)
+                        : config.baseUrl();
         this.client =
                 webClientBuilder
                         .defaultHeader(HttpHeaders.USER_AGENT, config.userAgent())
@@ -56,7 +61,7 @@ public final class JutsuEpisodeMetaClient {
                                 HttpHeaders.ACCEPT,
                                 "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                         .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU,ru;q=0.9,en;q=0.8")
-                        .defaultHeader(HttpHeaders.REFERER, "https://jut.su/")
+                        .defaultHeader(HttpHeaders.REFERER, baseUrl + "/")
                         .build();
         this.rateLimiter = rateLimiter;
         this.sessionManager = sessionManager;
@@ -76,7 +81,7 @@ public final class JutsuEpisodeMetaClient {
         if (relativeOrAbsoluteUrl == null || relativeOrAbsoluteUrl.isBlank()) {
             return Mono.error(new IllegalArgumentException("url must not be blank"));
         }
-        String absoluteUrl = toAbsolute(relativeOrAbsoluteUrl);
+        String absoluteUrl = toAbsoluteFromConfig(relativeOrAbsoluteUrl);
         String relative = toRelative(absoluteUrl);
         return rateLimiter
                 .acquire()
@@ -138,11 +143,23 @@ public final class JutsuEpisodeMetaClient {
         return meta;
     }
 
+    String toAbsoluteFromConfig(String urlOrPath) {
+        return toAbsolute(urlOrPath, baseUrl);
+    }
+
+    /**
+     * Back-compat static used by tests written against the pre-Phase-4.X signature; defaults to the
+     * canonical {@code https://jut.su} base.
+     */
     static String toAbsolute(String urlOrPath) {
+        return toAbsolute(urlOrPath, "https://jut.su");
+    }
+
+    static String toAbsolute(String urlOrPath, String baseUrl) {
         String trimmed = urlOrPath.trim();
         if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
-        if (trimmed.startsWith("/")) return "https://jut.su" + trimmed;
-        return "https://jut.su/" + trimmed;
+        if (trimmed.startsWith("/")) return baseUrl + trimmed;
+        return baseUrl + "/" + trimmed;
     }
 
     static String toRelative(String absoluteUrl) {
