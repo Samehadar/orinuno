@@ -1,13 +1,12 @@
 package com.orinuno.controller;
 
+import com.orinuno.catalog.readonly.CatalogContentReadRepository;
 import com.orinuno.catalog.readonly.CatalogEpisodeSourceReadRepository;
 import com.orinuno.catalog.readonly.CatalogEpisodeVideoReadRepository;
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.drift.JutsuDriftHealth;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
-import com.orinuno.model.KodikContent;
-import com.orinuno.repository.ContentRepository;
 import com.orinuno.service.orchestration.MultiSourceRanker;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankedCandidate;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankingPreferences;
@@ -63,12 +62,11 @@ public class MultiSourceController {
     private final CatalogEpisodeSourceReadRepository sourceRepository;
     private final CatalogEpisodeVideoReadRepository videoRepository;
     private final MultiSourceRanker ranker;
-    // ADR 0021 §C1.3 — dropped the legacy ContentService dependency; the ranker only ever
-    // needed content_id from kinopoiskId, which is a one-column lookup on ContentRepository.
-    // The read against kodik_content stays orinuno-schema for now (kodik_content has a live
-    // writer via ContentService.findOrCreateContent in ParserService +
-    // KodikDumpBootstrapService); it moves to source-kodik with Block D.
-    private final ContentRepository contentRepository;
+    // ADR 0021 §E2 — kinopoiskId lookup now hits catalog_content (meter-readonly DS) via the
+    // denormalised kinopoisk_id column. The legacy ContentRepository.findByKinopoiskId path
+    // against orinuno-app's kodik_content table retired in the same commit as ContentRepository
+    // itself.
+    private final CatalogContentReadRepository catalogContentReadRepository;
     private final JutsuClient jutsuClient;
 
     @GetMapping("/api/v1/anime/{contentId}/episodes/{season}/{episode}/sources")
@@ -104,17 +102,18 @@ public class MultiSourceController {
             @PathVariable Integer season,
             @PathVariable Integer episode,
             @RequestParam(required = false) String prefer) {
-        return Mono.fromCallable(() -> contentRepository.findByKinopoiskId(kinopoiskId))
+        return Mono.fromCallable(
+                        () -> catalogContentReadRepository.findIdByKinopoiskId(kinopoiskId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(
-                        (Optional<KodikContent> row) -> {
-                            if (row.isEmpty()) {
+                        (Optional<Long> contentId) -> {
+                            if (contentId.isEmpty()) {
                                 Map<String, Object> body = new LinkedHashMap<>();
                                 body.put("error", "kinopoiskId not found");
                                 body.put("kinopoiskId", kinopoiskId);
                                 return Mono.just(ResponseEntity.status(404).body(body));
                             }
-                            return rankedFor(row.get().getId(), season, episode, prefer);
+                            return rankedFor(contentId.get(), season, episode, prefer);
                         });
     }
 
