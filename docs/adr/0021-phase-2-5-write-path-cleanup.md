@@ -58,11 +58,62 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 
 ### Block C — read-side Kodik controllers (orinuno-app → source-kodik or delete)
 
-- **C1** — `ContentController` + `ContentService` (orinuno-app). Consumers: external `/api/v1/content/*`, `MultiSourceController`, `ExportDataService`, `SourceEventController`, `ParserService`. Three options per route: (a) move to source-kodik with reverse-proxy filter, (b) re-implement on top of meter's L3 catalog read-path, (c) delete if no external consumer. Inventory required first.
-- **C2** — `StreamController` + `HlsManifestService`. Kodik CDN-specific. Move to source-kodik with reverse-proxy filter mirroring the `KodikUpstreamProxyFilter` pattern.
-- **C3** — `DownloadController` + `VideoDownloadService`. Same shape — move to source-kodik. CDN proxy + local-file storage stays a source-kodik concern.
-- **C4** — `ExportDataService` + `SourceEventMapper`. The `SourceEventMapper` is a Kodik L1 → `SourceCatalogEvent` translator; orinuno-source-kodik already has its own `KodikSourceEventProjection` + `KodikSourceEventMapper`. Probably deletable from orinuno-app after C1.
-- **C5** — drop `EnrichmentService` / `KodikContentEnrichmentRepository` from orinuno-app, since enrichment is a Kodik L1-shape concern. Move to source-kodik or delete.
+Block C is the application-layer counterpart of Block A. Each sub-block is one PR; chained so the docker-compose stack stays green between them. Decomposition derived from a code audit on 2026-05-12 (see "Block C audit notes" further down).
+
+#### C0 — kill the dead duplicate first (zero-risk warm-up)
+
+- **C0.1** — delete `orinuno-app/.../controller/SourceEventController.java` and the corresponding test. The route `GET /api/v1/source-events/ready` is already exposed by `orinuno-source-kodik`'s own `SourceEventController` (and that's where meter's `KodikRemoteEventPoller` actually points). The orinuno-app copy is a transitional leftover from before the Phase 5.5 split — no remaining consumer; `KodikUpstreamProxyFilter` already proxies `/api/v1/source-events/` to source-kodik. Confirms by greps + `meter/application.yml` (`orinuno.source-kodik.base-url`) + `KodikRemoteEventPoller.fetch(...)`. Dead code, one commit.
+
+#### C1 — move ContentController/ContentService READ surface to source-kodik
+
+Demo UI is the load-bearing consumer (`demo/src/api/client.ts` lines 66 / 71 / 75 / 79 hit all four `/api/v1/content/*` routes). Routes are pure Kodik L1 (`ContentDto` denormalises `KodikContent` + `kodik_episode_variant`), so they belong with source-kodik. Reverse-proxy mirrors `KodikUpstreamProxyFilter`'s `/api/v1/kodik/` route — same pattern, one more prefix.
+
+- **C1.1** — port `ContentController` + the *read* half of `ContentService` (`findById`, `findByKinopoiskId`, `findAll`, `findVariantsByContentId`) + `ContentMapper.toDto(KodikContent | KodikEpisodeVariant)` + `ContentDto`/`EpisodeVariantDto` into `orinuno-source-kodik`. The class names + JSON shape stay identical so demo UI doesn't need a touch. source-kodik already has `ContentRepository` + `EpisodeVariantRepository` reads against its own `orinuno_source_kodik` schema (confirmed by `KodikSourceEventProjection`); no new schema work.
+
+  In-process call from `MultiSourceController:94` (`contentService.findByKinopoiskId`) — drop it. `MultiSourceController` should look up the canonical `(sourceType, sourceId) → content_id` mapping via `catalog_content_external_id` (meter's L3) instead of bouncing through Kodik L1. Spelled out separately in **C1.3** below.
+
+- **C1.2** — add `/api/v1/content/` to `KodikUpstreamProxyFilter.PROXY_PREFIXES`, gated on `orinuno.source-kodik.base-url`. Drop the orinuno-app `ContentController` + the read half of `ContentService` + `findAll` repo methods + the four `/api/v1/content/*` `MockMvc` tests. The two `ContentService.findOrCreate*` writers stay (still called by `ParserService` + `KodikDumpBootstrapService`; they go in Block D when the parse slice + dumps slice move).
+
+- **C1.3** — refactor `MultiSourceController:82-106` to drop its `ContentService` dependency. Two viable shapes:
+  1. New `catalog_content_external_id` query: `findContentIdBySourceTypeAndExternalId("kodik", "kinopoisk", kinopoiskId)` against the meter read-only DS. Pure read, no migration risk.
+  2. WebClient call to `/api/v1/content/by-kinopoisk/{kinopoiskId}` (now in source-kodik). Adds an in-process hop; only acceptable because the route is already in the proxy filter so the latency story is cache-able by an upstream.
+
+  Prefer (1) — keeps `MultiSourceController` source-agnostic (the whole reason it lives in orinuno-app). Add the read query to the existing meter-readonly `CatalogContentReadRepository`. Block A2-half already laid the read-only DS plumbing; only the SELECT is new.
+
+#### C2 — move StreamController + HlsController + HlsManifestService to source-kodik
+
+`/api/v1/stream/{variantId}` and `/api/v1/hls/{variantId}/{url,manifest}` are 100% Kodik-CDN-specific (they consume `kodik_episode_variant.mp4_link` + the kodik proxy bucket). No external surface other than the demo UI's player. Direct port.
+
+- **C2.1** — port `StreamController` + `HlsController` + `HlsManifestService` + `KodikCdnHostMetrics` (it's already 100% Kodik) + the relevant `VideoDownloadService` helpers needed by streaming (lookups against `KodikEpisodeVariant`). Repos already exist on source-kodik for `KodikEpisodeVariant`.
+- **C2.2** — add `/api/v1/stream/`, `/api/v1/hls/` to `KodikUpstreamProxyFilter.PROXY_PREFIXES`. Drop the originals in orinuno-app.
+
+#### C3 — move DownloadController + VideoDownloadService
+
+Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
+
+- **C3.1** — port `DownloadController` + `VideoDownloadService` + supporting `HlsProperties` config consumer + storage path config. The base path config moves into `KodikSourceProperties` (Block **E2**, do it first or co-commit).
+- **C3.2** — add `/api/v1/download/` to `KodikUpstreamProxyFilter`. Drop orinuno-app originals.
+
+#### C4 — kill ExportDataService duplication, port ExportController to source-kodik
+
+`ExportController` + `ExportDataService` produce `ContentExportDto` (denormalised `KodikContent` + decoded variants). The whole pipeline is L1 Kodik; source-kodik already has `KodikSourceEventProjection` doing the same join differently. Two flavours:
+
+- **C4.1** — port `ExportController` + the L1-Kodik bits of `ExportDataService` (`getExportData`, `getReadyForExport`) + `ContentMapper.toExportDto` + `ContentExportDto`. Add `/api/v1/export/` to `KodikUpstreamProxyFilter`. Drop orinuno-app originals.
+- **C4.2** — delete the source-event-projection sibling `findReadyForExportAsEvents` from the orinuno-app `ExportDataService` (the half **C0.1**'s controller was using); source-kodik's `KodikSourceEventProjection` is the canonical version. Delete `com.orinuno.mapper.SourceEventMapper` as part of the same commit — orinuno-source-kodik has its own `KodikSourceEventMapper`.
+
+#### C5 — drop the enrichment slice from orinuno-app
+
+`EnrichmentService` + `KodikContentEnrichmentRepository` + the `kodik_content_enrichment` reads on `KodikContent`. Pure Kodik L1 concern, source-kodik already has the table. Confirm callers; if exactly mirror of source-kodik, delete in orinuno-app rather than relocate.
+
+- **C5.1** — `find orinuno-app/src/main/java -name 'EnrichmentService*'` + `grep -r EnrichmentService orinuno-app/src` to scope. If non-self callers exist (e.g. ContentMapper hydrating `ContentDto.enrichment`), they migrate with the affected route to source-kodik. Otherwise: delete.
+
+#### Block C audit notes (2026-05-12)
+
+- `ContentController` routes are all read-only and demo-UI-load-bearing; (b) "reimplement on meter L3" rejected because the chrome it returns (translator titles, kodik-specific episode quality, kodik_link iframe URL) doesn't fit the L3 schema. (a) reverse-proxy keeps the wire shape identical.
+- `ContentService.findOrCreateContent` + `saveVariants` writers stay until Block D — they're hot-path for `ParserService` + `KodikDumpBootstrapService` which are themselves blocked-on-Block-D.
+- `MultiSourceController` is a cross-source orchestrator (`/api/v1/anime/*` returns `kodik`/`jutsu`/`sibnet`/`aniboom` candidates). It stays in orinuno-app permanently. Its repos (`EpisodeSourceRepository` + `EpisodeVideoRepository`) currently point at the orinuno-schema L2 tables, which lost their writer after B1 (commit `e7e7e0a`). **C1.3** flips them to the meter-readonly `orinuno_catalog` schema as a side-effect of dropping the `ContentService` dependency — that's the read-path fix the B3 row was waiting for.
+- `SourceEventController` is dead duplicate after the Phase 5.5 cutover; **C0.1** retires it as a zero-risk warm-up commit.
+- Demo UI's API client lives in `demo/src/api/client.ts`. After Block C lands, only `/api/v1/anime/*` (MultiSourceController) and `/api/v1/sources/*` (sources controllers) remain orinuno-app-served. Everything else proxies to source-kodik. AGENTS.md update in **E3** can quote these two lists verbatim.
 
 ### Block D — parse-request slice (the original Phase 2.5)
 
@@ -147,12 +198,18 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 | B2 end-to-end IT — Spring context + Testcontainers MySQL, poll → emit → row | ✅ commit `3a3ea31` |
 | B2-decoded — post-decode URL channel (event variant + meter push endpoint) | ✅ commits `fb04e92` (contract+meter), `297e931` (orinuno-app emit), `4d13912` (IT) |
 | B1 — delete `KodikEpisodeDualWriteService`, route through events | ✅ commit `e7e7e0a` (models + repos stay read-only for `MultiSourceController` / `MultiSourceRanker`; orinuno-schema L2 tables stop receiving fresh writes — known stale-read trade-off until Block B3/C) |
-| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on migrating `MultiSourceController` + `MultiSourceRanker` off the orinuno-schema L2 reads (Block C overlap) |
-| C1 — `ContentController` + `ContentService` triage | ⏳ open |
-| C2 — `StreamController` + `HlsManifestService` to source-kodik | ⏳ open |
-| C3 — `DownloadController` + `VideoDownloadService` to source-kodik | ⏳ open |
-| C4 — `ExportDataService` + `SourceEventMapper` removal | ⏳ open |
-| C5 — enrichment slice removal | ⏳ open |
+| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on **C1.3** (`MultiSourceController` switch to meter-readonly L2 reads) |
+| C0.1 — delete dead orinuno-app `SourceEventController` (dup of source-kodik) | ⏳ open (zero-risk, ships first) |
+| C1.1 — port `ContentController` + read half of `ContentService` → source-kodik | ⏳ open |
+| C1.2 — proxy `/api/v1/content/` via `KodikUpstreamProxyFilter`; drop orinuno-app originals | ⏳ blocked on C1.1 |
+| C1.3 — `MultiSourceController` reads from meter-readonly `catalog_content_external_id` (drops `ContentService` dep + fixes B1 stale-read) | ⏳ blocked on C1.2 |
+| C2.1 — port `StreamController` + `HlsController` + `HlsManifestService` → source-kodik | ⏳ open |
+| C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ⏳ blocked on C2.1 |
+| C3.1 — port `DownloadController` + `VideoDownloadService` → source-kodik | ⏳ blocked on E2 (relocate Kodik storage knobs first) |
+| C3.2 — proxy `/api/v1/download/`; drop orinuno-app originals | ⏳ blocked on C3.1 |
+| C4.1 — port `ExportController` + L1-Kodik half of `ExportDataService` → source-kodik | ⏳ open |
+| C4.2 — delete `SourceEventMapper` + the projection half of `ExportDataService` in orinuno-app | ⏳ blocked on C0.1 + C4.1 |
+| C5.1 — drop enrichment slice from orinuno-app (after caller scope confirmed) | ⏳ open |
 | D1 — parse slice to source-kodik (ADR 0018 Phase 2.5) | ⏳ blocked on Block A + B + C |
 | D2 — `ParseUpstreamProxyFilter` | ⏳ blocked on D1 |
 | D3 — delete orinuno-app parse originals + orinuno-schema table | ⏳ blocked on D1 |
