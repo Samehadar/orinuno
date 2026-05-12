@@ -1,35 +1,14 @@
-databaseChangeLog:
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260410120000_create_kodik_content.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260410120100_create_kodik_episode_variant.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260410120200_create_kodik_proxy.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260410120300_add_mp4_link_decoded_at.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260411120000_add_local_filepath.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260416120000_add_material_data.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260425010000_cleanup_invalid_mp4_link.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260426010000_create_orinuno_parse_request.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260502010000_create_orinuno_dump_state.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260502020000_create_kodik_decoder_path_cache.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260502030000_create_kodik_calendar_state.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260502030100_create_kodik_calendar_outbox.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260502040000_add_decode_method_to_episode_variant.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260502050000_create_episode_source.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260502050100_create_episode_video.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260511000000_backfill_episode_video_from_kodik_variant.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260511010000_drop_kodik_variant_l2_columns.sql
+# orinuno-app primary-DS changelog.
+#
+# Empty post-ADR-0021-§E2. After Block D3 retired the parse + decoder +
+# Playwright + download surface and §E2 retired the calendar + reference +
+# discovery slices, orinuno-app no longer owns ANY tables in its primary
+# DS — the orinuno schema is empty. The per-source services
+# (orinuno-source-kodik, orinuno-source-jutsu) own their L1 schemas; meter
+# owns the L2 + L3 catalog schema; orinuno-app reads catalog via the
+# meter-readonly DS (orinuno.catalog-read.url).
+#
+# The master is kept (rather than deleting outright) because Spring Boot's
+# Liquibase auto-config still expects a change-log when
+# spring.liquibase.enabled=true (default). Future migrations land here.
+databaseChangeLog: []

@@ -1,4 +1,4 @@
-package com.orinuno.token;
+package com.kodik.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -6,13 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.kodik.token.KodikFunction;
-import com.kodik.token.KodikTokenAutoDiscovery;
-import com.kodik.token.KodikTokenEntry;
-import com.kodik.token.KodikTokenException;
-import com.kodik.token.KodikTokenRegistry;
-import com.kodik.token.KodikTokenTier;
-import com.orinuno.configuration.OrinunoProperties;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,23 +20,25 @@ class KodikTokenRegistryTest {
 
     @TempDir Path tempDir;
 
-    private OrinunoProperties properties;
+    private KodikTokenConfig.Builder configBuilder;
+    private Path tokenFile;
     private java.util.function.Supplier<KodikTokenAutoDiscovery> noDiscovery;
 
     @BeforeEach
     void setUp() {
-        properties = new OrinunoProperties();
-        properties.getKodik().setTokenFile(tempDir.resolve("kodik_tokens.json").toString());
-        properties.getKodik().setAutoDiscoveryEnabled(false);
-        properties.getKodik().setBootstrapFromEnv(false);
+        tokenFile = tempDir.resolve("kodik_tokens.json");
+        configBuilder =
+                KodikTokenConfig.builder()
+                        .tokenFile(tokenFile.toString())
+                        .autoDiscoveryEnabled(false)
+                        .bootstrapFromEnv(false);
         noDiscovery = () -> null;
     }
 
     @Test
     @DisplayName("empty registry throws NoWorkingTokenException")
     void emptyRegistryThrows() {
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         assertThatThrownBy(() -> registry.currentToken(KodikFunction.BASE_SEARCH))
@@ -53,15 +48,13 @@ class KodikTokenRegistryTest {
     @Test
     @DisplayName("bootstraps from KODIK_TOKEN env when file is missing")
     void bootstrapsFromEnvProperty() {
-        properties.getKodik().setBootstrapFromEnv(true);
-        properties.getKodik().setToken("env-seeded-token");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        configBuilder.bootstrapFromEnv(true).bootstrapToken("env-seeded-token");
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         assertThat(registry.currentToken(KodikFunction.BASE_SEARCH)).isEqualTo("env-seeded-token");
         assertThat(registry.countFor(KodikTokenTier.STABLE)).isEqualTo(1);
-        assertThat(Files.exists(Path.of(properties.getKodik().getTokenFile()))).isTrue();
+        assertThat(Files.exists(tokenFile)).isTrue();
     }
 
     @Test
@@ -75,8 +68,7 @@ class KodikTokenRegistryTest {
                         + "\"legacy\":[{\"value\":\"t-legacy\","
                         + "\"functions_availability\":{\"get_link\":true}}],"
                         + "\"dead\":[]}");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         assertThat(registry.currentToken(KodikFunction.BASE_SEARCH)).isEqualTo("t-stable");
@@ -89,8 +81,7 @@ class KodikTokenRegistryTest {
         writeFile(
                 "{\"stable\":[{\"value\":\"fresh\",\"functions_availability\":{}}],"
                         + "\"unstable\":[],\"legacy\":[],\"dead\":[]}");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         for (KodikFunction fn : KodikFunction.values()) {
@@ -109,8 +100,7 @@ class KodikTokenRegistryTest {
                         + "\"get_info\":true,\"get_link\":true,"
                         + "\"get_m3u8_playlist_link\":true}}],"
                         + "\"unstable\":[],\"legacy\":[],\"dead\":[]}");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         for (KodikFunction fn : KodikFunction.values()) {
@@ -132,8 +122,7 @@ class KodikTokenRegistryTest {
                         + "{\"value\":\"t-2\","
                         + "\"functions_availability\":{\"base_search\":true,\"get_list\":true}}],"
                         + "\"unstable\":[],\"legacy\":[],\"dead\":[]}");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         assertThat(registry.currentToken(KodikFunction.BASE_SEARCH)).isEqualTo("t-1");
@@ -150,8 +139,7 @@ class KodikTokenRegistryTest {
                         + "\"legacy\":[{\"value\":\"t-legacy\","
                         + "\"functions_availability\":{}}],"
                         + "\"dead\":[]}");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         assertThat(registry.currentToken(KodikFunction.GET_LINK)).isEqualTo("t-legacy");
@@ -163,8 +151,7 @@ class KodikTokenRegistryTest {
     @Test
     @DisplayName("writes are atomic and round-trip through Jackson")
     void atomicWrite() throws IOException {
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         registry.register(
@@ -175,10 +162,9 @@ class KodikTokenRegistryTest {
                         .build(),
                 KodikTokenTier.STABLE);
 
-        Path file = Path.of(properties.getKodik().getTokenFile());
-        assertThat(Files.exists(file)).isTrue();
+        assertThat(Files.exists(tokenFile)).isTrue();
         ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        ObjectNode tree = (ObjectNode) mapper.readTree(file.toFile());
+        ObjectNode tree = (ObjectNode) mapper.readTree(tokenFile.toFile());
         assertThat(tree.get("stable").get(0).get("value").asText()).isEqualTo("v-1");
         assertThat(tree.get("stable").get(0).get("note").asText()).isEqualTo("unit test");
         assertThat(tree.get("stable").get(0).get("last_checked").asText())
@@ -204,8 +190,7 @@ class KodikTokenRegistryTest {
                         + "\"get_list\":false,\"search\":false,\"search_by_id\":false,"
                         + "\"get_info\":false,\"get_link\":false,"
                         + "\"get_m3u8_playlist_link\":false}}]}");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
         assertThat(registry.tierOf("phoenix")).contains(KodikTokenTier.DEAD);
 
@@ -224,8 +209,7 @@ class KodikTokenRegistryTest {
                 "{\"stable\":[{\"value\":\"happy\","
                         + "\"functions_availability\":{\"base_search\":true}}],"
                         + "\"unstable\":[],\"legacy\":[],\"dead\":[]}");
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         registry.markValid("happy", KodikFunction.GET_LIST);
@@ -237,8 +221,7 @@ class KodikTokenRegistryTest {
     @Test
     @DisplayName("tierOf returns empty for unknown tokens")
     void tierOfUnknown() {
-        KodikTokenRegistry registry =
-                new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), noDiscovery);
+        KodikTokenRegistry registry = new KodikTokenRegistry(configBuilder.build(), noDiscovery);
         registry.init();
 
         assertThat(registry.tierOf("nope")).isEmpty();
@@ -246,6 +229,6 @@ class KodikTokenRegistryTest {
     }
 
     private void writeFile(String contents) throws IOException {
-        Files.writeString(Path.of(properties.getKodik().getTokenFile()), contents);
+        Files.writeString(tokenFile, contents);
     }
 }

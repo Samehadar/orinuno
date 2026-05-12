@@ -6,9 +6,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.kodik.client.dto.KodikSearchResponse;
-import com.kodik.client.dto.calendar.KodikCalendarAnimeDto;
-import com.kodik.client.dto.calendar.KodikCalendarEntryDto;
-import com.kodik.client.dto.calendar.KodikCalendarImageDto;
 import com.kodik.client.dto.reference.KodikCountryDto;
 import com.kodik.client.dto.reference.KodikGenreDto;
 import com.kodik.client.dto.reference.KodikQualityDto;
@@ -172,42 +169,9 @@ class KodikApiFixtureSchemaTest {
         assertThat(detector.getDetectedDrifts()).isEmpty();
     }
 
-    @Test
-    @DisplayName(
-            "fixtures/dumps/calendar-sample.json deserialises into KodikCalendarEntryDto list +"
-                    + " no drift on entry / anime / image shapes")
-    void calendarSampleDeserialisesAndDriftClean() throws IOException {
-        List<KodikCalendarEntryDto> entries =
-                readFixtureList("dumps/calendar-sample.json", KodikCalendarEntryDto.class);
-
-        assertThat(entries).isNotEmpty();
-        KodikCalendarEntryDto first = entries.get(0);
-        assertThat(first.nextEpisode()).isNotNull();
-        assertThat(first.anime()).isNotNull();
-
-        DriftDetector detector = new DriftDetector(driftSampling(20));
-        List<Map<String, Object>> raw = readFixtureRawList("dumps/calendar-sample.json");
-        for (Map<String, Object> entryMap : raw) {
-            detector.detect(entryMap, KodikCalendarEntryDto.class, "KodikCalendarEntryDto");
-            Object animeRaw = entryMap.get("anime");
-            if (animeRaw instanceof Map<?, ?> animeMap) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> coerced = (Map<String, Object>) animeMap;
-                detector.detect(coerced, KodikCalendarAnimeDto.class, "KodikCalendarAnimeDto");
-                Object imageRaw = coerced.get("image");
-                if (imageRaw instanceof Map<?, ?> imageMap) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> coercedImage = (Map<String, Object>) imageMap;
-                    detector.detect(
-                            coercedImage, KodikCalendarImageDto.class, "KodikCalendarImageDto");
-                }
-            }
-        }
-
-        assertThat(detector.getDetectedDrifts())
-                .as("Calendar dump shape regression trip-wire")
-                .isEmpty();
-    }
+    // ADR 0021 §E2 — calendar fixture trip-wire moved with the calendar slice to
+    // orinuno-source-kodik. The dumps/calendar-sample.json fixture lives there alongside
+    // KodikCalendarHttpClient; the orinuno-app monolith no longer owns the calendar code path.
 
     // -- helpers --------------------------------------------------------------
 

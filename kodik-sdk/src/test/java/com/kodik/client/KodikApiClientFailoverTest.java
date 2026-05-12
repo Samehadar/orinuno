@@ -1,19 +1,16 @@
-package com.orinuno.client;
+package com.kodik.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kodik.client.KodikApiClient;
-import com.kodik.client.KodikApiRateLimiter;
-import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikSearchRequest;
 import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenConfig;
 import com.kodik.token.KodikTokenEntry;
 import com.kodik.token.KodikTokenException;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
-import com.orinuno.configuration.OrinunoProperties;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -37,29 +34,28 @@ class KodikApiClientFailoverTest {
     private static final String INVALID_TOKEN_BODY =
             "{\"time\":\"0ms\",\"error\":\"Отсутствует или неверный токен\"}";
     private static final String OK_BODY = "{\"time\":\"0ms\",\"total\":0,\"results\":[]}";
+    private static final int RATE_LIMIT_PER_MINUTE = 100_000;
 
     @TempDir Path tempDir;
 
-    private OrinunoProperties properties;
+    private KodikTokenConfig.Builder configBuilder;
     private KodikTokenRegistry registry;
     private KodikApiRateLimiter passthroughLimiter;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
-        properties = new OrinunoProperties();
-        properties.getParse().setRateLimitPerMinute(100_000);
-        properties.getKodik().setTokenFile(tempDir.resolve("kodik_tokens.json").toString());
-        properties.getKodik().setBootstrapFromEnv(false);
-        properties.getKodik().setAutoDiscoveryEnabled(false);
-        properties.getKodik().setTokenFailoverMaxAttempts(3);
+        Path tokenFile = tempDir.resolve("kodik_tokens.json");
+        configBuilder =
+                KodikTokenConfig.builder()
+                        .tokenFile(tokenFile.toString())
+                        .bootstrapFromEnv(false)
+                        .autoDiscoveryEnabled(false)
+                        .tokenFailoverMaxAttempts(3);
 
-        registry =
-                new KodikTokenRegistry(
-                        com.orinuno.token.TokenConfigTestSupport.toConfig(properties), () -> null);
+        registry = new KodikTokenRegistry(configBuilder.build(), () -> null);
         registry.init();
 
-        passthroughLimiter = new KodikApiRateLimiter(properties.getParse().getRateLimitPerMinute());
+        passthroughLimiter = new KodikApiRateLimiter(RATE_LIMIT_PER_MINUTE);
     }
 
     @Test
@@ -102,7 +98,7 @@ class KodikApiClientFailoverTest {
     void failsAfterExhaustion() {
         registry.register(fullScope("a"), KodikTokenTier.STABLE);
         registry.register(fullScope("b"), KodikTokenTier.STABLE);
-        properties.getKodik().setTokenFailoverMaxAttempts(2);
+        configBuilder.tokenFailoverMaxAttempts(2);
 
         WebClient webClient =
                 stubWebClient((method, uri) -> respond(HttpStatus.OK, INVALID_TOKEN_BODY));
@@ -131,7 +127,7 @@ class KodikApiClientFailoverTest {
     private KodikApiClient buildClient(WebClient webClient) {
         return new KodikApiClient(
                 webClient,
-                com.orinuno.token.TokenConfigTestSupport.toConfig(properties),
+                configBuilder.build(),
                 new KodikResponseMapper(),
                 passthroughLimiter,
                 registry);
