@@ -3,6 +3,7 @@ package com.orinuno.contract.source;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import java.util.List;
 import java.util.Objects;
 
@@ -28,6 +29,12 @@ import java.util.Objects;
  *   <li>{@link SourceRemoved} — the source no longer carries this title (Kodik /list dropped it,
  *       jut.su 404'd the slug). No meter equivalent today; OSS consumers may persist as a soft
  *       removal flag.
+ *   <li>{@link VariantDecoded} — a previously-discovered variant has had its playable CDN URL
+ *       resolved (Kodik decoder ran, Aniboom token minted, …). Emitted by the bounded context that
+ *       owns the decoder (today: {@code orinuno-app}'s {@code ParserService} for Kodik) so the
+ *       canonical L2 layer can record the decoded URL without polling the source's L1 schema.
+ *       Recorded as part of ADR 0021 §B2-decoded — the channel that lets {@code
+ *       KodikEpisodeDualWriteService} retire (ADR 0021 B1).
  * </ul>
  *
  * <p>Jackson polymorphism uses {@code @JsonTypeInfo(NAME)} with the discriminator property {@code
@@ -45,7 +52,8 @@ import java.util.Objects;
             name = "series-discovered",
             value = SourceCatalogEvent.SeriesDiscovered.class),
     @JsonSubTypes.Type(name = "episodes-updated", value = SourceCatalogEvent.EpisodesUpdated.class),
-    @JsonSubTypes.Type(name = "source-removed", value = SourceCatalogEvent.SourceRemoved.class)
+    @JsonSubTypes.Type(name = "source-removed", value = SourceCatalogEvent.SourceRemoved.class),
+    @JsonSubTypes.Type(name = "variant-decoded", value = SourceCatalogEvent.VariantDecoded.class)
 })
 public sealed interface SourceCatalogEvent {
 
@@ -141,6 +149,55 @@ public sealed interface SourceCatalogEvent {
         public SourceRemoved {
             Objects.requireNonNull(identifier, "identifier");
             Objects.requireNonNull(provenance, "provenance");
+        }
+    }
+
+    /**
+     * Post-decode hand-off. The variant identified by {@code variantIdentifier} (matching what a
+     * prior {@link MovieDiscovered} / {@link SeriesDiscovered} / {@link EpisodesUpdated} event
+     * already carried) has been resolved to a playable CDN URL.
+     *
+     * <p>Carries the canonical {@code (season, episode)} tuple alongside the title-level {@link
+     * #identifier()} so the consumer can locate the matching {@code episode_source} row by its
+     * unique key {@code (content_id, season, episode, translator_id, provider)} — see {@code
+     * CatalogSinkEventEmitter}. Films ride as {@code season=0, episode=1} per the {@code
+     * SourceSeason} javadoc convention.
+     *
+     * <p>{@code decodeMethod} mirrors the DECODE-8 discriminator on {@code episode_video} ({@code
+     * REGEX} / {@code SNIFF} / {@code PROVIDER_API} / …); {@code ttlSeconds} is provider-specific
+     * (Aniboom CDN tokens expire after ~6h, Sibnet direct URLs are stable so the field stays
+     * {@code null}). Both are optional and forwarded verbatim to {@code episode_video}.
+     */
+    record VariantDecoded(
+            @Nonnull SourceIdentifier identifier,
+            int season,
+            int episode,
+            @Nonnull SourceIdentifier variantIdentifier,
+            @Nonnull String decodedMediaUrl,
+            @Nonnull String decodedQuality,
+            @Nullable String decodeMethod,
+            @Nullable Integer ttlSeconds,
+            @Nonnull Provenance provenance)
+            implements SourceCatalogEvent {
+
+        public VariantDecoded {
+            Objects.requireNonNull(identifier, "identifier");
+            Objects.requireNonNull(variantIdentifier, "variantIdentifier");
+            Objects.requireNonNull(decodedMediaUrl, "decodedMediaUrl");
+            Objects.requireNonNull(decodedQuality, "decodedQuality");
+            Objects.requireNonNull(provenance, "provenance");
+            if (decodedMediaUrl.isBlank()) {
+                throw new IllegalArgumentException("decodedMediaUrl must not be blank");
+            }
+            if (decodedQuality.isBlank()) {
+                throw new IllegalArgumentException("decodedQuality must not be blank");
+            }
+            if (season < 0) {
+                throw new IllegalArgumentException("season must be >= 0 (films use season=0)");
+            }
+            if (episode < 1) {
+                throw new IllegalArgumentException("episode must be >= 1");
+            }
         }
     }
 }
