@@ -197,6 +197,8 @@ Nothing. Phase 0.3 (boundary guards) and Phase 0.4 (L1+L2 split migration) are n
 
 ## Tracker
 
+> **2026-05-12 honesty patch:** the application-layer rows below are accurate; the *storage-layer* split is partial — `orinuno-app` still owns the L1 `kodik_*` Liquibase changelogs and writes to L2 `episode_source` + `episode_video`. See [ADR 0021](0021-phase-2-5-write-path-cleanup.md) for the gap audit and close-out roadmap.
+
 | Item | Status |
 |------|--------|
 | ADR 0018 + index update | ✅ done |

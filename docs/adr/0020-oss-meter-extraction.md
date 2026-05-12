@@ -13,7 +13,7 @@ ADR 0018 introduced "OSS `meter` as a separate service" and "`orinuno` as multi-
 
 - Phase 5 is the *non-trivial* part of the per-source split — the meter / orinuno boundary, the shared-DB pattern, the read-only datasource + Caffeine cache, and the Kafka deferral are durable decisions that other features will keep bumping into.
 - ADR 0019 (jut.su split) and any future per-source service ADR will refer to "meter's contract" as if it were a stable surface; that surface needs a primary citation.
-- Future Phase 6 (Kafka event sourcing) lives or dies on the assumptions encoded here; a future ADR 0021 will supersede *this* ADR's "no HTTP between orinuno and meter" clause, not 0018's high-level topology.
+- Future Phase 6 (Kafka event sourcing) lives or dies on the assumptions encoded here; a future ADR (ADR 0022 or later — 0021 is taken by the Phase 2/5 write-path close-out) will supersede *this* ADR's "no HTTP between orinuno and meter" clause, not 0018's high-level topology.
 
 ## Decision
 
@@ -139,6 +139,8 @@ ADR 0021 (not yet written) will codify Phase 6 when a trigger fires.
 Nothing. Phase 5.12 (publish artefacts) and Phase 5.13 (docs-site) are post-decision polish, not architectural gates.
 
 ## Tracker
+
+> **2026-05-12 honesty patch:** rows below cover the L3 (`catalog_*`) move. L2 (`episode_source`, `episode_video`) is still owned by `orinuno-app` despite §1 of this ADR naming meter as the catalog single writer. `KodikEpisodeDualWriteService` (orinuno-app) actively writes L2. See [ADR 0021](0021-phase-2-5-write-path-cleanup.md) blocks B1/B2/B3 for the L2 close-out.
 
 | Item | Status |
 |------|--------|

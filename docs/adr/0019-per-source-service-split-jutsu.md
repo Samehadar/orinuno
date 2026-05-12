@@ -166,6 +166,8 @@ Secondary: the reverse-proxy filter generalisation (§"Reverse-proxy prefixes" r
 
 ## Tracker
 
+> **2026-05-12 honesty patch:** rows below cover the application-layer move; `orinuno-app` still owns the L1 `jutsu_*` Liquibase changelogs and runs `JutsuCatalogSyncScheduler` + sync services against its primary DB. See [ADR 0021](0021-phase-2-5-write-path-cleanup.md) block A7 for the storage-side close-out.
+
 | Item | Status |
 |------|--------|
 | ADR 0019 + index update | ✅ this PR |
