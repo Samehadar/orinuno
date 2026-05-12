@@ -170,16 +170,16 @@ Secondary: the reverse-proxy filter generalisation (§"Reverse-proxy prefixes" r
 |------|--------|
 | ADR 0019 + index update | ✅ this PR |
 | Phase 3 prod gate cleared | 🗑️ dropped (pre-prod refactor mode) |
-| Phase 4.1 module skeleton | ⏳ pending |
-| Phase 4.2 schema migration | ⏳ pending |
-| Phase 4.3 repos + mappers | ⏳ pending |
-| Phase 4.4 controllers | ⏳ pending |
-| Phase 4.4d HealthController slice | ⏳ pending |
-| Phase 4.5 sync schedulers | ⏳ pending |
-| Phase 4.6 SourceEventController projection | ⏳ pending |
-| Phase 4.7 live-fallback migration | ⏳ pending |
-| Phase 4.8 reverse-proxy filter | ⏳ pending |
-| Phase 4.9 docker-compose + Dockerfile | ⏳ pending |
-| Phase 4.10 monolith overlay update | ⏳ pending |
-| Phase 4.11 meter `JutsuRemoteEventPoller` | ⏳ pending |
-| Phase 4.12 fallback metrics regression test | ⏳ pending |
+| Phase 4.1 module skeleton | ✅ done |
+| Phase 4.2 schema migration | ✅ done |
+| Phase 4.3 repos + mappers | ✅ done |
+| Phase 4.4 controllers | ✅ done |
+| Phase 4.4d HealthController slice | ✅ done |
+| Phase 4.5 sync schedulers | ✅ done |
+| Phase 4.6 SourceEventController projection | ✅ done |
+| Phase 4.7 live-fallback migration | ✅ done |
+| Phase 4.8 reverse-proxy filter | ✅ done |
+| Phase 4.9 docker-compose + Dockerfile | ✅ done |
+| Phase 4.10 monolith overlay update | ✅ done |
+| Phase 4.11 meter `JutsuRemoteEventPoller` | ✅ done |
+| Phase 4.12 fallback metrics regression test | ✅ done |
