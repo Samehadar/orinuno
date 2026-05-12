@@ -304,6 +304,16 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
   Liquibase changeset), source-kodik now hosts ~half the Block D files
   needed before D1a / D1b / D1c can land. Refined Block D decomposition
   in this PR.
+- `206195c` feat(source-kodik) — **D1a**: parse-request queue services
+  (ParseRequestService + ParseRequestQueueService + ProgressReporter +
+  ThrottledProgressReporter) ported into source-kodik. +436 LOC.
+  ParseRequestService drops its OrinunoProperties.RequestsProperties dep
+  in favour of two @Value-injected knobs scoped to
+  `orinuno.source-kodik.requests.*` (defaults 50 / 200 preserve legacy
+  values). `Application.java` gains a `@Bean Clock` /
+  `@ConditionalOnMissingBean` so the new queue services wire up. No
+  orinuno-app changes — dual copies coexist until D3 retires the
+  originals.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -350,7 +360,7 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | C4.2 — proxy `/api/v1/export/`; delete `ExportController`/`ExportDataService`/`SourceEventMapper`/`ContentExportDto`/poster live-IT in orinuno-app | ✅ commit `044deda` |
 | C5 — drop enrichment slice from orinuno-app | ✅ commit `5335517` (orphan; nothing in orinuno-app calls EnrichmentService outside its own package + tests; source-kodik holds its own copy of the table for future META-1 reactivation) |
 | D-prep — leaf data classes (DTOs + RequestHashService + ParseRequestMetrics) in source-kodik | ✅ commit `e8f6a26` |
-| D1a — port queue services (ParseRequestService + ParseRequestQueueService + ProgressReporter + ThrottledProgressReporter) | ⏳ open |
+| D1a — port queue services (ParseRequestService + ParseRequestQueueService + ProgressReporter + ThrottledProgressReporter) | ✅ commit `206195c` (also lands `@Bean Clock` in source-kodik's Application + rebases page-limit knobs to `orinuno.source-kodik.requests.*` — partial E2 ride-along) |
 | D1b — port decoder stack (KodikVideoDecoderService + PlaywrightVideoFetcher + KodikDecodeOrchestrator + PlaywrightSniffDecoder + DecoderPathCache + KodikCdnHostMetrics) | ⏳ blocked on D1a (shared `OrinunoProperties` subtree relocate) |
 | D1c — port ParserService + RequestWorker + EntityFactory + ParseController + ParseRequestController + MeterDecodedEventPublisher | ⏳ blocked on D1b |
 | D1d — port matching tests | ⏳ blocked on D1c |
