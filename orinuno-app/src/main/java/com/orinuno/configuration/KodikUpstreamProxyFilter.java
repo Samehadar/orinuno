@@ -55,7 +55,14 @@ public class KodikUpstreamProxyFilter implements WebFilter {
                     // ADR 0021 §C4.2 — denormalised export endpoints moved to source-kodik
                     // (C4.1, commit c4127a7). Same demo UI compatibility story as
                     // /api/v1/content/.
-                    "/api/v1/export/");
+                    "/api/v1/export/",
+                    // ADR 0021 §D2 — parse-request pipeline (POST /api/v1/parse/search,
+                    // /decode/*, /requests/*) moved to source-kodik in D1c. orinuno-app's
+                    // ParseController + ParseRequestController are still wired locally so
+                    // the monolith profile (filter dormant) keeps serving; D3 retires
+                    // them once Block C2/C3 frees the decoder + Playwright + download
+                    // shared dependencies.
+                    "/api/v1/parse/");
 
     /**
      * Hop-by-hop headers we strip on both legs of the proxy per RFC 7230 §6.1 plus a couple of
