@@ -1,7 +1,7 @@
-package com.orinuno.controller;
+package com.orinuno.source.kodik.controller;
 
-import com.orinuno.service.VideoDownloadService;
-import com.orinuno.service.VideoDownloadService.DownloadState;
+import com.orinuno.source.kodik.service.VideoDownloadService;
+import com.orinuno.source.kodik.service.VideoDownloadService.DownloadState;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;

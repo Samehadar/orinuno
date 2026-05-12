@@ -64,10 +64,13 @@ public class KodikUpstreamProxyFilter implements WebFilter {
                     // shared dependencies.
                     "/api/v1/parse/",
                     // ADR 0021 §C2.2 — video stream proxy + HLS manifest rewrite moved
-                    // to source-kodik (C2.1, commit 06370b3). VideoDownloadService stays
-                    // in orinuno-app until C3 retires DownloadController.
+                    // to source-kodik (C2.1, commit 06370b3).
                     "/api/v1/stream/",
-                    "/api/v1/hls/");
+                    "/api/v1/hls/",
+                    // ADR 0021 §C3.2 — local-file download route moved to source-kodik
+                    // (C3.1). VideoDownloadService landed alongside C2.1 (commit
+                    // 06370b3); this commit retires orinuno-app's DownloadController.
+                    "/api/v1/download/");
 
     /**
      * Hop-by-hop headers we strip on both legs of the proxy per RFC 7230 §6.1 plus a couple of
