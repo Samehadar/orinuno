@@ -51,7 +51,7 @@ class CatalogChangelogApplyIT {
                     .withPassword("test");
 
     @Test
-    @DisplayName("Liquibase update creates catalog_content + 3 sibling tables")
+    @DisplayName("Liquibase update creates catalog_* + L2 episode_source/video + watermark tables")
     void changelogApplies() throws Exception {
         // Liquibase closes its JDBC connection on update() / close(), so the
         // SHOW TABLES + DATABASECHANGELOG queries below need a fresh connection
@@ -71,19 +71,24 @@ class CatalogChangelogApplyIT {
         try (Connection conn = openConnection()) {
             List<String> tables = listTables(conn);
             assertThat(tables)
-                    .as("meter changelog must create the four catalog_* tables")
+                    .as(
+                            "meter changelog must create catalog_* (L3) + episode_source/video (L2)"
+                                    + " + remote_source_watermark")
                     .contains(
                             "catalog_content",
                             "catalog_content_external_id",
                             "catalog_episode",
-                            "catalog_episode_source_link");
+                            "catalog_episode_source_link",
+                            "orinuno_remote_source_watermark",
+                            "episode_source",
+                            "episode_video");
 
             // DATABASECHANGELOG must hold one row per <include> entry, no more
             // (locks the "no rogue inline changeset" invariant).
             int applied = countAppliedChangesets(conn);
             assertThat(applied)
                     .as("DATABASECHANGELOG row count == number of <include> entries")
-                    .isEqualTo(4);
+                    .isEqualTo(7);
         }
     }
 
