@@ -62,7 +62,12 @@ public class KodikUpstreamProxyFilter implements WebFilter {
                     // the monolith profile (filter dormant) keeps serving; D3 retires
                     // them once Block C2/C3 frees the decoder + Playwright + download
                     // shared dependencies.
-                    "/api/v1/parse/");
+                    "/api/v1/parse/",
+                    // ADR 0021 §C2.2 — video stream proxy + HLS manifest rewrite moved
+                    // to source-kodik (C2.1, commit 06370b3). VideoDownloadService stays
+                    // in orinuno-app until C3 retires DownloadController.
+                    "/api/v1/stream/",
+                    "/api/v1/hls/");
 
     /**
      * Hop-by-hop headers we strip on both legs of the proxy per RFC 7230 §6.1 plus a couple of
