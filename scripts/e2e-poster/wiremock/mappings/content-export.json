@@ -1,0 +1,21 @@
+{
+  "mappings": [
+    {
+      "name": "meter-content-export-success",
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/v1/content-export/?"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "success": true,
+          "errorDetails": null
+        }
+      }
+    }
+  ]
+}
