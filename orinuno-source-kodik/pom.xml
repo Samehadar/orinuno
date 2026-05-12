@@ -105,6 +105,17 @@
             <version>${playwright.version}</version>
         </dependency>
 
+        <!-- ADR 0021 §E2 — Caffeine + Spring cache for the Kodik reference +
+             calendar dump TTL caches (ReferenceCacheConfig). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
