@@ -51,7 +51,11 @@ public class KodikUpstreamProxyFilter implements WebFilter {
                     // Proxy intercepts before the (now-deleted) orinuno-app ContentController
                     // would have matched; demo UI (demo/src/api/client.ts) sees identical
                     // wire shape because ContentDto is field-for-field unchanged.
-                    "/api/v1/content/");
+                    "/api/v1/content/",
+                    // ADR 0021 §C4.2 — denormalised export endpoints moved to source-kodik
+                    // (C4.1, commit c4127a7). Same demo UI compatibility story as
+                    // /api/v1/content/.
+                    "/api/v1/export/");
 
     /**
      * Hop-by-hop headers we strip on both legs of the proxy per RFC 7230 §6.1 plus a couple of
