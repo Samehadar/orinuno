@@ -79,7 +79,6 @@ class DecoderMaintenanceSchedulerTest {
                         props,
                         new KodikCdnHostMetrics(sharedRegistry),
                         new com.kodik.decoder.KodikDecoderMetrics(sharedRegistry),
-                        null,
                         null);
 
         scheduler = new ThreadPoolTaskScheduler();

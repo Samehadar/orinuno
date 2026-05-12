@@ -2,10 +2,10 @@
  * MeterDecodedEventPublisher — ADR 0021 §B2-decoded.
  *
  * After a successful Kodik decode, push a SourceCatalogEvent.VariantDecoded
- * to meter's /api/v1/source-events/decoded endpoint so the canonical
- * episode_video row is written by meter — not by orinuno-app's
- * KodikEpisodeDualWriteService. Step in retiring KEDW (ADR 0021 §B1):
- * once this push is reliable end-to-end, KEDW is dead weight.
+ * to meter's /api/v1/source-events/decoded endpoint so meter is the sole
+ * writer of episode_video. ADR 0021 §B1 retired the legacy in-process
+ * KodikEpisodeDualWriteService; this publisher is now the only path from
+ * an orinuno-app decode into the canonical L2 row.
  *
  * Transport: WebClient POST, fire-and-forget. Failures log WARN and are
  * swallowed — the decode itself already succeeded, the user-visible
@@ -14,11 +14,10 @@
  * introduce a durable outbox + watermark on the orinuno-app side; the
  * wire contract stays unchanged.
  *
- * Gated by orinuno.meter.base-url — unset = bean missing = no publish
- * (monolith / dev profiles where meter isn't reachable).
- *
- * Note: KodikEpisodeDualWriteService remains the load-bearing writer until
- * ADR 0021 B1 retires it. This publisher runs in parallel.
+ * Gated by orinuno.meter.base-url — unset = bean missing = no publish.
+ * In a monolith/dev profile without a reachable meter, episode_video stays
+ * empty in orinuno_catalog; the user-visible stream URL still lands in
+ * kodik_episode_variant.mp4_link from ParserService.
  */
 package com.orinuno.service;
 
@@ -102,9 +101,10 @@ public class MeterDecodedEventPublisher {
                 .doOnError(
                         e ->
                                 log.warn(
-                                        "meter publish failed for variant id={} ({}): KEDW dual-write"
-                                                + " still covers the canonical row, retry on next"
-                                                + " decode tick",
+                                        "meter publish failed for variant id={} ({}): the next"
+                                                + " decode tick will re-emit; until then the L2"
+                                                + " row for this variant stays whatever meter saw"
+                                                + " last",
                                         variant.getId(),
                                         e.toString()))
                 .subscribe();

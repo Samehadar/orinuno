@@ -61,7 +61,9 @@
 
     <!--
         ADR 0018 Phase 0.4c — INSERT no longer writes mp4_link. Decoded URLs live in
-        episode_video, written by KodikEpisodeDualWriteService (sole writer post-0.4c).
+        episode_video in the orinuno_catalog schema (meter-owned), written by meter's
+        CatalogSinkEventEmitter from SourceCatalogEvent.VariantDecoded events that
+        orinuno-app emits via MeterDecodedEventPublisher (ADR 0021 §B2-decoded + B1).
     -->
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kodik_episode_variant (content_id, season_number, episode_number,
@@ -141,9 +143,11 @@
     </select>
 
     <!--
-        ADR 0018 Phase 0.4b — TTL expiry source-of-truth is episode_video.decoded_at, populated
-        by KodikEpisodeDualWriteService. The legacy mp4_link_decoded_at column stays in place
-        until Phase 0.4c so a rollback to the old query is a single XML revert.
+        ADR 0018 Phase 0.4b — TTL expiry source-of-truth is episode_video.decoded_at. After
+        ADR 0021 §B1 the populating writer is meter (CatalogSinkEventEmitter from
+        SourceCatalogEvent.VariantDecoded), not orinuno-app's deleted KEDW. The legacy
+        mp4_link_decoded_at column stays in place until B3 retires the orinuno-schema L2
+        tables entirely.
     -->
     <select id="findExpiredLinks" resultMap="variantResultMap">
         SELECT v.* FROM kodik_episode_variant v
