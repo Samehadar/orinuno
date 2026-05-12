@@ -8,8 +8,11 @@
  */
 package com.orinuno.source.kodik;
 
+import java.time.Clock;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -26,5 +29,15 @@ public class Application {
 
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
+    }
+
+    /**
+     * UTC system clock for parse-request queue services + future decoder helpers (ADR 0021 §D1a).
+     * Conditional so tests can override with a fixed Clock.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public Clock systemClock() {
+        return Clock.systemUTC();
     }
 }
