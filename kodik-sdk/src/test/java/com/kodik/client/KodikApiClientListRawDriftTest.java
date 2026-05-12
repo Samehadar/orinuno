@@ -1,18 +1,15 @@
-package com.orinuno.client;
+package com.kodik.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.kodik.client.KodikApiClient;
-import com.kodik.client.KodikApiRateLimiter;
-import com.kodik.client.KodikResponseMapper;
 import com.kodik.client.dto.KodikListRequest;
 import com.kodik.drift.DriftDetector;
 import com.kodik.drift.DriftSamplingProperties;
 import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenConfig;
 import com.kodik.token.KodikTokenEntry;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
-import com.orinuno.configuration.OrinunoProperties;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
@@ -30,28 +27,29 @@ import reactor.core.publisher.Mono;
 @DisplayName("KodikApiClient.listRaw — drift detection on every page")
 class KodikApiClientListRawDriftTest {
 
+    private static final int RATE_LIMIT_PER_MINUTE = 100_000;
+
     @TempDir Path tempDir;
 
-    private OrinunoProperties properties;
+    private KodikTokenConfig config;
     private KodikTokenRegistry registry;
     private KodikApiRateLimiter rateLimiter;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
-        properties = new OrinunoProperties();
-        properties.getParse().setRateLimitPerMinute(100_000);
-        properties.getKodik().setTokenFile(tempDir.resolve("kodik_tokens.json").toString());
-        properties.getKodik().setBootstrapFromEnv(false);
-        properties.getKodik().setAutoDiscoveryEnabled(false);
+        Path tokenFile = tempDir.resolve("kodik_tokens.json");
+        config =
+                KodikTokenConfig.builder()
+                        .tokenFile(tokenFile.toString())
+                        .bootstrapFromEnv(false)
+                        .autoDiscoveryEnabled(false)
+                        .build();
 
-        registry =
-                new KodikTokenRegistry(
-                        com.orinuno.token.TokenConfigTestSupport.toConfig(properties), () -> null);
+        registry = new KodikTokenRegistry(config, () -> null);
         registry.init();
         registry.register(fullScope("tok"), KodikTokenTier.STABLE);
 
-        rateLimiter = new KodikApiRateLimiter(properties.getParse().getRateLimitPerMinute());
+        rateLimiter = new KodikApiRateLimiter(RATE_LIMIT_PER_MINUTE);
     }
 
     @Test
@@ -156,12 +154,7 @@ class KodikApiClientListRawDriftTest {
     }
 
     private KodikApiClient buildClient(WebClient webClient, KodikResponseMapper mapper) {
-        return new KodikApiClient(
-                webClient,
-                com.orinuno.token.TokenConfigTestSupport.toConfig(properties),
-                mapper,
-                rateLimiter,
-                registry);
+        return new KodikApiClient(webClient, config, mapper, rateLimiter, registry);
     }
 
     private static KodikTokenEntry fullScope(String value) {

@@ -1,13 +1,8 @@
-package com.orinuno.token;
+package com.kodik.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.kodik.client.KodikResponseMapper;
-import com.kodik.token.KodikFunction;
-import com.kodik.token.KodikTokenRegistry;
-import com.kodik.token.KodikTokenTier;
-import com.kodik.token.KodikTokenValidator;
-import com.orinuno.configuration.OrinunoProperties;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,18 +26,20 @@ class KodikTokenValidatorReviveTest {
 
     @TempDir Path tempDir;
 
-    private OrinunoProperties properties;
+    private KodikTokenConfig.Builder configBuilder;
+    private Path tokenFile;
     private KodikTokenRegistry registry;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
-        properties = new OrinunoProperties();
-        properties.getKodik().setTokenFile(tempDir.resolve("kodik_tokens.json").toString());
-        properties.getKodik().setBootstrapFromEnv(false);
-        properties.getKodik().setAutoDiscoveryEnabled(false);
+        tokenFile = tempDir.resolve("kodik_tokens.json");
+        configBuilder =
+                KodikTokenConfig.builder()
+                        .tokenFile(tokenFile.toString())
+                        .bootstrapFromEnv(false)
+                        .autoDiscoveryEnabled(false);
 
-        registry = new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), () -> null);
+        registry = new KodikTokenRegistry(configBuilder.build(), () -> null);
     }
 
     @Nested
@@ -66,7 +63,7 @@ class KodikTokenValidatorReviveTest {
             KodikTokenValidator validator =
                     new KodikTokenValidator(
                             okWebClient(),
-                            TokenConfigTestSupport.toConfig(properties),
+                            configBuilder.build(),
                             registry,
                             new KodikResponseMapper());
 
@@ -80,7 +77,7 @@ class KodikTokenValidatorReviveTest {
         @Test
         @DisplayName("DEAD token last checked beyond cooldown is included")
         void staleDeadIsIncluded() throws IOException {
-            properties.getKodik().setDeadRevalidationIntervalMinutes(60);
+            configBuilder.deadRevalidationIntervalMinutes(60);
             writeFile(
                     "{\"stable\":[],\"unstable\":[],\"legacy\":[],"
                             + "\"dead\":[{\"value\":\"stale\","
@@ -97,7 +94,7 @@ class KodikTokenValidatorReviveTest {
             KodikTokenValidator validator =
                     new KodikTokenValidator(
                             okWebClient(),
-                            TokenConfigTestSupport.toConfig(properties),
+                            configBuilder.build(),
                             registry,
                             new KodikResponseMapper());
 
@@ -114,7 +111,7 @@ class KodikTokenValidatorReviveTest {
         @Test
         @DisplayName("DEAD token recently checked is skipped (no probe attempts)")
         void freshDeadIsSkipped() throws IOException {
-            properties.getKodik().setDeadRevalidationIntervalMinutes(60);
+            configBuilder.deadRevalidationIntervalMinutes(60);
             writeFile(
                     "{\"stable\":[],\"unstable\":[],\"legacy\":[],"
                             + "\"dead\":[{\"value\":\"fresh-dead\","
@@ -136,10 +133,7 @@ class KodikTokenValidatorReviveTest {
                             });
             KodikTokenValidator validator =
                     new KodikTokenValidator(
-                            counting,
-                            TokenConfigTestSupport.toConfig(properties),
-                            registry,
-                            new KodikResponseMapper());
+                            counting, configBuilder.build(), registry, new KodikResponseMapper());
 
             validator.validateAll();
 
@@ -180,10 +174,7 @@ class KodikTokenValidatorReviveTest {
                                                     .build()));
             KodikTokenValidator validator =
                     new KodikTokenValidator(
-                            rejecting,
-                            TokenConfigTestSupport.toConfig(properties),
-                            registry,
-                            new KodikResponseMapper());
+                            rejecting, configBuilder.build(), registry, new KodikResponseMapper());
 
             validator.validateAll();
 
@@ -193,7 +184,7 @@ class KodikTokenValidatorReviveTest {
     }
 
     private void writeFile(String contents) throws IOException {
-        Files.writeString(Path.of(properties.getKodik().getTokenFile()), contents);
+        Files.writeString(tokenFile, contents);
     }
 
     private static WebClient okWebClient() {

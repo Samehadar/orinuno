@@ -1,4 +1,4 @@
-package com.orinuno.client.embed;
+package com.kodik.client.embed;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -7,12 +7,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.kodik.client.KodikApiRateLimiter;
-import com.kodik.client.embed.KodikEmbedHttpClient;
-import com.kodik.client.embed.KodikIdType;
 import com.kodik.token.KodikFunction;
+import com.kodik.token.KodikTokenConfig;
 import com.kodik.token.KodikTokenException;
 import com.kodik.token.KodikTokenRegistry;
-import com.orinuno.configuration.OrinunoProperties;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -35,7 +33,7 @@ class KodikEmbedHttpClientTest {
 
     private HttpServer server;
     private WebClient kodikApiWebClient;
-    private OrinunoProperties properties;
+    private KodikTokenConfig.Builder configBuilder;
     private KodikTokenRegistry tokenRegistry;
     private KodikApiRateLimiter rateLimiter;
     private AtomicReference<HttpHandler> currentHandler;
@@ -52,8 +50,7 @@ class KodikEmbedHttpClientTest {
                         .baseUrl("http://127.0.0.1:" + server.getAddress().getPort())
                         .build();
 
-        properties = new OrinunoProperties();
-        properties.getKodik().setTokenFailoverMaxAttempts(3);
+        configBuilder = KodikTokenConfig.builder().tokenFailoverMaxAttempts(3);
 
         tokenRegistry = org.mockito.Mockito.mock(KodikTokenRegistry.class);
         rateLimiter = org.mockito.Mockito.mock(KodikApiRateLimiter.class);
@@ -163,7 +160,7 @@ class KodikEmbedHttpClientTest {
     @Test
     @DisplayName("Token failover stops after tokenFailoverMaxAttempts and surfaces TokenRejected")
     void tokenFailoverExhausted() {
-        properties.getKodik().setTokenFailoverMaxAttempts(2);
+        configBuilder.tokenFailoverMaxAttempts(2);
         when(tokenRegistry.currentToken(KodikFunction.GET_INFO)).thenReturn("token-A", "token-B");
 
         currentHandler.set(
@@ -217,10 +214,7 @@ class KodikEmbedHttpClientTest {
 
     private KodikEmbedHttpClient newClient() {
         return new KodikEmbedHttpClient(
-                kodikApiWebClient,
-                com.orinuno.token.TokenConfigTestSupport.toConfig(properties),
-                tokenRegistry,
-                rateLimiter);
+                kodikApiWebClient, configBuilder.build(), tokenRegistry, rateLimiter);
     }
 
     private static HttpHandler noop() {

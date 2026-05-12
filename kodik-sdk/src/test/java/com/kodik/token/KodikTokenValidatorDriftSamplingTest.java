@@ -1,13 +1,10 @@
-package com.orinuno.token;
+package com.kodik.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.kodik.client.KodikResponseMapper;
 import com.kodik.drift.DriftDetector;
 import com.kodik.drift.DriftSamplingProperties;
-import com.kodik.token.KodikTokenRegistry;
-import com.kodik.token.KodikTokenValidator;
-import com.orinuno.configuration.OrinunoProperties;
 import java.nio.file.Path;
 import java.util.function.BiFunction;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,18 +25,20 @@ class KodikTokenValidatorDriftSamplingTest {
 
     @TempDir Path tempDir;
 
-    private OrinunoProperties properties;
+    private KodikTokenConfig config;
     private KodikTokenRegistry registry;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
-        properties = new OrinunoProperties();
-        properties.getKodik().setTokenFile(tempDir.resolve("kodik_tokens.json").toString());
-        properties.getKodik().setBootstrapFromEnv(false);
-        properties.getKodik().setAutoDiscoveryEnabled(false);
+        Path tokenFile = tempDir.resolve("kodik_tokens.json");
+        config =
+                KodikTokenConfig.builder()
+                        .tokenFile(tokenFile.toString())
+                        .bootstrapFromEnv(false)
+                        .autoDiscoveryEnabled(false)
+                        .build();
 
-        registry = new KodikTokenRegistry(TokenConfigTestSupport.toConfig(properties), () -> null);
+        registry = new KodikTokenRegistry(config, () -> null);
         registry.init();
     }
 
@@ -56,9 +55,7 @@ class KodikTokenValidatorDriftSamplingTest {
                                           {"id":"x","title":"t"}
                                         ],"probe_only_field":"yes"}"""));
         KodikResponseMapper mapper = new KodikResponseMapper();
-        KodikTokenValidator validator =
-                new KodikTokenValidator(
-                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
+        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
@@ -80,9 +77,7 @@ class KodikTokenValidatorDriftSamplingTest {
                                                 + KodikTokenValidator.INVALID_TOKEN_ERROR
                                                 + "\",\"unexpected\":\"drift-ish\"}"));
         KodikResponseMapper mapper = new KodikResponseMapper();
-        KodikTokenValidator validator =
-                new KodikTokenValidator(
-                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
+        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("bad", "title", "x"), "bad", "probe");
 
@@ -97,9 +92,7 @@ class KodikTokenValidatorDriftSamplingTest {
         WebClient webClient =
                 stubWebClient((m, u) -> respond(HttpStatus.INTERNAL_SERVER_ERROR, "{\"oops\":1}"));
         KodikResponseMapper mapper = new KodikResponseMapper();
-        KodikTokenValidator validator =
-                new KodikTokenValidator(
-                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
+        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
@@ -121,9 +114,7 @@ class KodikTokenValidatorDriftSamplingTest {
         DriftSamplingProperties cfg = new DriftSamplingProperties();
         cfg.setEnabled(false);
         KodikResponseMapper mapper = new KodikResponseMapper(new DriftDetector(cfg));
-        KodikTokenValidator validator =
-                new KodikTokenValidator(
-                        webClient, TokenConfigTestSupport.toConfig(properties), registry, mapper);
+        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
