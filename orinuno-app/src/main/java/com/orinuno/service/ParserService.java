@@ -40,6 +40,8 @@ public class ParserService {
     private final KodikCdnHostMetrics kodikCdnHostMetrics;
     private final KodikDecoderMetrics decoderMetrics;
     private final KodikEpisodeDualWriteService episodeDualWriter;
+    private final org.springframework.beans.factory.ObjectProvider<MeterDecodedEventPublisher>
+            meterDecodedPublisher;
 
     public Mono<List<KodikContent>> search(ParseRequestDto request) {
         return searchInternal(request, ProgressReporter.NOOP);
@@ -348,6 +350,11 @@ public class ParserService {
         // this commit — renamed to KodikDecodedVideoWriter in a follow-up).
         if (episodeDualWriter != null) {
             episodeDualWriter.mirrorDecode(variant, result, pickedQuality, bestLink);
+        }
+        MeterDecodedEventPublisher publisher =
+                meterDecodedPublisher == null ? null : meterDecodedPublisher.getIfAvailable();
+        if (publisher != null) {
+            publisher.publishDecoded(variant, result, pickedQuality, bestLink);
         }
         kodikCdnHostMetrics.recordDecodedUrl(bestLink);
         if (decoderMetrics != null) {
