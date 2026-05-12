@@ -26,6 +26,9 @@ package com.orinuno.meter.catalog.ingestion;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.orinuno.contract.source.Provenance;
+import com.orinuno.contract.source.SourceCatalogEvent;
+import com.orinuno.contract.source.SourceIdentifier;
 import com.orinuno.meter.Application;
 import com.orinuno.meter.poller.KodikRemoteEventPoller;
 import com.sun.net.httpserver.HttpExchange;
@@ -35,6 +38,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -89,6 +93,7 @@ class B2EpisodeSourcePipelineIT {
 
     @Autowired private KodikRemoteEventPoller poller;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private SourceEventDecodedController decodedController;
 
     @DynamicPropertySource
     static void overrides(DynamicPropertyRegistry registry) {
@@ -109,7 +114,9 @@ class B2EpisodeSourcePipelineIT {
 
     @BeforeEach
     void resetSchema() {
-        // FK order matters: episode_source → catalog_content, external_id → catalog_content.
+        // FK order matters: episode_video → episode_source → catalog_content,
+        // external_id → catalog_content.
+        jdbc.execute("DELETE FROM episode_video");
         jdbc.execute("DELETE FROM episode_source");
         jdbc.execute("DELETE FROM catalog_content_external_id");
         jdbc.execute("DELETE FROM catalog_episode_source_link");
@@ -223,6 +230,85 @@ class B2EpisodeSourcePipelineIT {
         assertThat(watermark.get(0).get("last_error")).isNull();
         assertThat((LocalDateTime) watermark.get(0).get("last_fetched_at"))
                 .isEqualTo(LocalDateTime.of(2026, 5, 12, 8, 0));
+    }
+
+    @Test
+    @DisplayName(
+            "VariantDecoded (kodik) routed through SourceEventDecodedController writes one"
+                    + " episode_video row keyed by the resolved episode_source.id (ADR 0021"
+                    + " B2-decoded)")
+    void variantDecodedPipelineWritesEpisodeVideo() {
+        // Seed the canonical row + episode_source row via the poller path (same shape as the
+        // first test). Without this seed, the decoded handler logs WARN + drops — verified
+        // separately in CatalogSinkEventEmitterTest.variantDecodedDropsWhenSourceRowMissing.
+        String seedBody =
+                "["
+                    + "{"
+                    + "\"kind\":\"series-discovered\","
+                    + "\"identifier\":{\"sourceType\":\"kodik\",\"sourceId\":\"naruto-2002\"},"
+                    + "\"info\":{\"titleRu\":\"Наруто\",\"kindHint\":\"ANIME\","
+                    + "\"externalIds\":{}},"
+                    + "\"seasons\":[{\"order\":1,\"episodes\":[{"
+                    + "\"order\":1,\"variants\":[{"
+                    + "\"identifier\":{\"sourceType\":\"kodik\",\"sourceId\":\"naruto-2002:s1e1:rus\"},"
+                    + "\"mediaUrl\":\"https://kodik.example/s1e1.iframe\","
+                    + "\"streamQuality\":\"720p\""
+                    + "}]"
+                    + "}]}],"
+                    + "\"provenance\":{\"sourceUrl\":\"https://kodik-api.com/list\","
+                    + "\"fetchedAt\":\"2026-05-12T08:00:00Z\"}"
+                    + "}"
+                    + "]";
+        HANDLER.set(exchange -> sendJson(exchange, 200, seedBody));
+        poller.pollOnce();
+
+        // Sanity: the seed produced one episode_source row.
+        Long contentId =
+                jdbc.queryForObject(
+                        "SELECT id FROM catalog_content WHERE title_ru='Наруто'", Long.class);
+        Long sourceId =
+                jdbc.queryForObject(
+                        "SELECT id FROM episode_source WHERE content_id=? AND season=1 AND"
+                                + " episode=1 AND translator_id='naruto-2002:s1e1:rus' AND"
+                                + " provider='KODIK'",
+                        Long.class,
+                        contentId);
+        assertThat(sourceId).as("seed must produce an episode_source row").isNotNull();
+
+        // Now drive the decoded-event path directly through the controller bean (no need to
+        // start a Spring web server — we want SQL-side coverage, not transport coverage; the
+        // wire-format pinning lives in MeterDecodedEventPublisherTest on the producer side).
+        SourceCatalogEvent.VariantDecoded decoded =
+                new SourceCatalogEvent.VariantDecoded(
+                        SourceIdentifier.of("kodik", "naruto-2002"),
+                        1,
+                        1,
+                        SourceIdentifier.of("kodik", "naruto-2002:s1e1:rus"),
+                        "https://cdn.kodik.example/naruto/s1e1-720.m3u8",
+                        "720",
+                        "REGEX",
+                        3600,
+                        Provenance.of(
+                                "https://kodik.example/s1e1.iframe",
+                                Instant.parse("2026-05-12T08:10:00Z")));
+        decodedController.ingest(List.of(decoded));
+
+        List<Map<String, Object>> videos =
+                jdbc.queryForList(
+                        "SELECT source_id, quality, video_url, video_format, decode_method,"
+                                + " ttl_seconds, decode_failed_count FROM episode_video WHERE"
+                                + " source_id=?",
+                        sourceId);
+        assertThat(videos).hasSize(1);
+        Map<String, Object> video = videos.get(0);
+        assertThat(((Number) video.get("source_id")).longValue()).isEqualTo(sourceId);
+        assertThat(video.get("quality")).isEqualTo("720");
+        assertThat(video.get("video_url"))
+                .isEqualTo("https://cdn.kodik.example/naruto/s1e1-720.m3u8");
+        assertThat(video.get("video_format")).isEqualTo("application/x-mpegURL");
+        assertThat(video.get("decode_method")).isEqualTo("REGEX");
+        assertThat(((Number) video.get("ttl_seconds")).intValue()).isEqualTo(3600);
+        assertThat(((Number) video.get("decode_failed_count")).intValue()).isEqualTo(0);
     }
 
     private static HttpServer startBackend() {
