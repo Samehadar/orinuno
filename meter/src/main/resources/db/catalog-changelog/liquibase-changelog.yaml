@@ -24,3 +24,12 @@ databaseChangeLog:
       file: db/catalog-changelog/scripts/20260508030300_create_catalog_episode_source_link.sql
   - include:
       file: db/catalog-changelog/scripts/20260511020000_create_remote_source_watermark.sql
+  # ADR 0021 Block B3-a — L2 episode_source + episode_video in meter (parallel
+  # to the legacy orinuno.episode_source / orinuno.episode_video tables until
+  # Block B1 cuts orinuno-app's dual-write off). FK on episode_source.content_id
+  # retargets to catalog_content (same schema) since the legacy L2→L1 link via
+  # kodik_content would be a cross-context FK.
+  - include:
+      file: db/catalog-changelog/scripts/20260512100000_create_episode_source.sql
+  - include:
+      file: db/catalog-changelog/scripts/20260512100100_create_episode_video.sql
