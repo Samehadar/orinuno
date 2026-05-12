@@ -439,8 +439,8 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | D1c — port ParserService + RequestWorker + EntityFactory + ParseController + ParseRequestController + MeterDecodedEventPublisher + ContentWriteService + KodikRequestsProperties | ✅ commit `77d93dc` |
 | D1d — port matching tests | ✅ commit `1179fda` (14 test classes, 116 tests pass on source-kodik) |
 | D2 — `/api/v1/parse/` → `KodikUpstreamProxyFilter` | ✅ commit `c3543c5` |
-| D3 — delete orinuno-app parse originals + orinuno-schema `orinuno_parse_request` changeset; closes B3-full at the same time | ⏳ blocked on Block C2 + C3 (StreamController + DownloadController still consume KodikVideoDecoderService / PlaywrightVideoFetcher / VideoDownloadService in orinuno-app) |
-| D5 — relocate `KodikDumpBootstrapService` + `orinuno_dump_state` changeset (A3 decision) | ⏳ blocked on D3 (needs `ContentService.findOrCreateContent` callers gone first) |
+| D3 — delete orinuno-app parse + decoder + Playwright + download originals | ✅ commit `eb4ed41` (-12,078 LOC across 93 files; ContentService + ContentMapper + EntityFactory + ParserService + decoder/ + requestlog/ + download/ + dumps/ + metrics/KodikCdnHostMetrics gone; Liquibase changesets kept until B3-full + a later orphan-schema cleanup) |
+| D5 — relocate `KodikDumpBootstrapService` + `orinuno_dump_state` changeset (A3 decision) | ⏳ open — orinuno-app side already deleted in D3; source-kodik needs the slice ported if META-1 dumps reactivates |
 | E1 — ArchUnit guard against Kodik imports in orinuno-app | ⏳ blocked on Block C |
 | E2 — `OrinunoProperties.KodikProperties` → `KodikSourceProperties` | ⏳ blocked on Block C |
 | E3 — README + AGENTS.md sync to final shape | ⏳ blocked on Block C |
