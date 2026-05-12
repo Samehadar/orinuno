@@ -117,6 +117,14 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- ADR 0021 §D1d — StepVerifier + TestPublisher for the reactor-based
+             ParserService / KodikDecodeOrchestrator / PlaywrightSniffDecoder
+             ports. -->
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
