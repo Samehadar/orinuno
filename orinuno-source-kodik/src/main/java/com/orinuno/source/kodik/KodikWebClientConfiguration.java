@@ -7,11 +7,14 @@
  */
 package com.orinuno.source.kodik;
 
+import com.kodik.client.http.RotatingUserAgentProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
 
 /**
  * Provides the qualified {@code kodikApiWebClient} bean consumed by KodikApiClient /
@@ -33,5 +36,33 @@ public class KodikWebClientConfiguration {
                         .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                         .build();
         return webClientBuilder.baseUrl(kodikApiUrl).exchangeStrategies(strategies).build();
+    }
+
+    /**
+     * ADR 0021 §D1b — kodik player JS fetcher. Lifted from orinuno-app's WebClientConfiguration
+     * unchanged. Required by KodikVideoDecoderService when it lands in D1b-2.
+     */
+    @Bean
+    public WebClient kodikPlayerWebClient(WebClient.Builder webClientBuilder) {
+        ExchangeStrategies strategies =
+                ExchangeStrategies.builder()
+                        .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
+                        .build();
+        return webClientBuilder.exchangeStrategies(strategies).build();
+    }
+
+    /**
+     * ADR 0021 §D1b — CDN HEAD/GET proxy client (no auto-redirect so the upstream Location header
+     * surfaces to StreamController. Used by both the decoder + StreamController/HlsController
+     * stack once they land in D1b-2 + C2.
+     */
+    @Bean
+    public WebClient kodikCdnWebClient(RotatingUserAgentProvider userAgentProvider) {
+        HttpClient httpClient = HttpClient.create().followRedirect(false);
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .defaultHeader("Referer", "https://kodikplayer.com/")
+                .defaultHeader("User-Agent", userAgentProvider.stableDesktop())
+                .build();
     }
 }
