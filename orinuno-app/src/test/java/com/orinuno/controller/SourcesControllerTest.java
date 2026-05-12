@@ -13,7 +13,6 @@ import com.orinuno.aniboom.AniboomErrorCodes;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.JutsuDecodeResult;
-import com.orinuno.service.KodikVideoDecoderService;
 import com.orinuno.sibnet.SibnetClient;
 import com.orinuno.sibnet.SibnetDecodeResult;
 import java.util.List;
@@ -30,7 +29,6 @@ import reactor.core.publisher.Mono;
 @ExtendWith(MockitoExtension.class)
 class SourcesControllerTest {
 
-    @Mock private KodikVideoDecoderService kodikDecoder;
     @Mock private SibnetClient sibnetClient;
     @Mock private AniboomClient aniboomClient;
     @Mock private JutsuClient jutsuClient;
@@ -47,8 +45,7 @@ class SourcesControllerTest {
                 .when(jutsuClient.getDriftSnapshot())
                 .thenReturn(new com.orinuno.jutsu.drift.JutsuDriftDetector().snapshot());
         SourcesController controller =
-                new SourcesController(
-                        kodikDecoder, sibnetClient, aniboomClient, jutsuClient, properties);
+                new SourcesController(sibnetClient, aniboomClient, jutsuClient, properties);
         client = WebTestClient.bindToController(controller).build();
     }
 
@@ -128,7 +125,7 @@ class SourcesControllerTest {
                 .jsonPath("$.qualities.720")
                 .isEqualTo("https://cdn/m.mp4");
 
-        verifyNoInteractions(kodikDecoder, aniboomClient, jutsuClient);
+        verifyNoInteractions(aniboomClient, jutsuClient);
     }
 
     @Test
@@ -175,18 +172,9 @@ class SourcesControllerTest {
 
     @Test
     @DisplayName(
-            "POST /api/v1/sources/kodik/decode dispatches to KodikVideoDecoderService and labels"
-                    + " format as application/x-mpegURL")
-    void perSourceKodikDispatch() {
-        when(kodikDecoder.decode(eq("https://kodik.info/serial/123/abc/720p")))
-                .thenReturn(
-                        Mono.just(
-                                Map.of(
-                                        "720",
-                                        "https://hls.kodik/720/master.m3u8",
-                                        "480",
-                                        "https://hls.kodik/480/master.m3u8")));
-
+            "POST /api/v1/sources/kodik/decode returns KODIK_NOT_AVAILABLE_HERE after the decoder"
+                    + " moved to source-kodik (ADR 0021 §D3)")
+    void perSourceKodikReturnsUnavailable() {
         client.post()
                 .uri("/api/v1/sources/kodik/decode")
                 .bodyValue(Map.of("url", "https://kodik.info/serial/123/abc/720p"))
@@ -195,36 +183,9 @@ class SourcesControllerTest {
                 .isOk()
                 .expectBody()
                 .jsonPath("$.success")
-                .isEqualTo(true)
-                .jsonPath("$.format")
-                .isEqualTo("application/x-mpegURL")
-                .jsonPath("$.qualities.720")
-                .isEqualTo("https://hls.kodik/720/master.m3u8")
-                .jsonPath("$.qualities.480")
-                .isEqualTo("https://hls.kodik/480/master.m3u8");
-
-        verify(sibnetClient, never()).decode(org.mockito.ArgumentMatchers.anyString());
-    }
-
-    @Test
-    @DisplayName(
-            "POST /api/v1/sources/kodik/decode wraps decoder failures as KODIK_DECODE_ERROR"
-                    + " instead of leaking the exception")
-    void perSourceKodikWrapsErrors() {
-        when(kodikDecoder.decode(org.mockito.ArgumentMatchers.anyString()))
-                .thenReturn(Mono.error(new RuntimeException("upstream timeout")));
-
-        client.post()
-                .uri("/api/v1/sources/kodik/decode")
-                .bodyValue(Map.of("url", "https://kodik.info/x/y/z"))
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody()
-                .jsonPath("$.success")
                 .isEqualTo(false)
                 .jsonPath("$.errorCode")
-                .isEqualTo("KODIK_DECODE_ERROR");
+                .isEqualTo("KODIK_NOT_AVAILABLE_HERE");
     }
 
     @Test
@@ -244,7 +205,7 @@ class SourcesControllerTest {
                 .jsonPath("$.errorCode")
                 .isEqualTo("UNSUPPORTED_PROVIDER:VIMEO");
 
-        verifyNoInteractions(kodikDecoder, sibnetClient, aniboomClient, jutsuClient);
+        verifyNoInteractions(sibnetClient, aniboomClient, jutsuClient);
     }
 
     @Test

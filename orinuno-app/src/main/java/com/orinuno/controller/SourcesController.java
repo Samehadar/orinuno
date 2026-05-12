@@ -3,7 +3,6 @@ package com.orinuno.controller;
 import com.orinuno.aniboom.AniboomClient;
 import com.orinuno.configuration.OrinunoProperties;
 import com.orinuno.jutsu.JutsuClient;
-import com.orinuno.service.KodikVideoDecoderService;
 import com.orinuno.service.provider.ProviderDecodeResult;
 import com.orinuno.service.provider.ProviderDecodeResults;
 import com.orinuno.sibnet.SibnetClient;
@@ -59,19 +58,16 @@ import reactor.core.publisher.Mono;
 @Tag(name = "Sources", description = "Per-source capabilities and ad-hoc decoder sandbox")
 public class SourcesController {
 
-    private final KodikVideoDecoderService kodikDecoder;
     private final SibnetClient sibnetClient;
     private final AniboomClient aniboomClient;
     private final JutsuClient jutsuClient;
     private final OrinunoProperties properties;
 
     public SourcesController(
-            KodikVideoDecoderService kodikDecoder,
             SibnetClient sibnetClient,
             AniboomClient aniboomClient,
             JutsuClient jutsuClient,
             OrinunoProperties properties) {
-        this.kodikDecoder = kodikDecoder;
         this.sibnetClient = sibnetClient;
         this.aniboomClient = aniboomClient;
         this.jutsuClient = jutsuClient;
@@ -135,25 +131,20 @@ public class SourcesController {
         String url = request.url().trim();
         log.info("Per-source decode dispatch: provider={} url={}", key, url);
         return switch (key) {
-            case "KODIK" ->
-                    kodikDecoder
-                            .decode(url)
-                            .map(
-                                    qualities ->
-                                            ResponseEntity.ok(
-                                                    ProviderDecodeResult.success(
-                                                            qualities, "application/x-mpegURL")))
-                            .onErrorResume(
-                                    ex -> {
-                                        log.warn(
-                                                "Kodik sandbox decode failed for {}: {}",
-                                                url,
-                                                ex.toString());
-                                        return Mono.just(
-                                                ResponseEntity.ok(
-                                                        ProviderDecodeResult.failure(
-                                                                "KODIK_DECODE_ERROR")));
-                                    });
+            case "KODIK" -> {
+                // ADR 0021 §D3 — the in-process KodikVideoDecoderService moved to
+                // source-kodik. Callers that need an ad-hoc Kodik URL decode should
+                // call source-kodik's /api/v1/parse/decode/* directly (or wire a
+                // WebClient hop here once a stable contract exists).
+                log.info(
+                        "KODIK ad-hoc decode requested but the decoder lives in source-kodik now"
+                                + " — returning UNSUPPORTED. Use /api/v1/parse/decode/{variantId}"
+                                + " through the reverse-proxy (commit c3543c5) for the variant-id"
+                                + " path.");
+                yield Mono.just(
+                        ResponseEntity.ok(
+                                ProviderDecodeResult.failure("KODIK_NOT_AVAILABLE_HERE")));
+            }
             case "SIBNET" ->
                     sibnetClient
                             .decode(url)
