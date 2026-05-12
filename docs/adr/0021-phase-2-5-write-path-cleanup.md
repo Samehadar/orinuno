@@ -373,6 +373,11 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
   (-441 LOC). VideoDownloadService + KodikVideoDecoderService +
   PlaywrightVideoFetcher + the rest of the decoder stack stay in
   orinuno-app until C3 + D3 retire DownloadController + ParserService.
+- `8bb91e6` refactor — **C3**: DownloadController ported into
+  source-kodik (40 LOC controller + 3 routes: POST /{variantId}, GET
+  /{variantId}/status, POST /content/{contentId}); proxy filter gains
+  `/api/v1/download/`; orinuno-app original deleted. Block C closes
+  at 11/11 sub-blocks ✅.
 - `1179fda` test(source-kodik) — **D1d**: 14 test classes ported
   covering the parse pipeline + decoder stack + queue services +
   supporting beans (ParseController/RequestController, ParserService,
@@ -424,8 +429,7 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | C1.4 — flip `MultiSourceController` L2 reads to meter-readonly `orinuno_catalog` | ✅ commit `00053e0` (also wired `ORINUNO_CATALOG_READ_URL` into docker-compose.yml + monolith overlay) |
 | C2.1 — port `StreamController` + `HlsController` + `HlsManifestService` + `VideoDownloadService` + `KodikStorageProperties` → source-kodik | ✅ commit `06370b3` (also pulled VideoDownloadService in since StreamController consumes it; C3.1 narrows to DownloadController only) |
 | C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ✅ commit `9e371a3` |
-| C3.1 — port `DownloadController` → source-kodik | ⏳ open — VideoDownloadService + storage props already moved in C2.1; only DownloadController itself remains |
-| C3.2 — proxy `/api/v1/download/`; drop orinuno-app originals | ⏳ blocked on C3.1 |
+| C3 — port `DownloadController` + proxy `/api/v1/download/` + drop original | ✅ commit `8bb91e6` (C3.1 + C3.2 collapsed; controller is ~40 LOC and VideoDownloadService already moved in C2.1) |
 | C4.1 — port `ExportController` + L1-Kodik half of `ExportDataService` → source-kodik | ✅ commit `c4127a7` |
 | C4.2 — proxy `/api/v1/export/`; delete `ExportController`/`ExportDataService`/`SourceEventMapper`/`ContentExportDto`/poster live-IT in orinuno-app | ✅ commit `044deda` |
 | C5 — drop enrichment slice from orinuno-app | ✅ commit `5335517` (orphan; nothing in orinuno-app calls EnrichmentService outside its own package + tests; source-kodik holds its own copy of the table for future META-1 reactivation) |
