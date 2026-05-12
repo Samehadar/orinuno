@@ -94,6 +94,14 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
   catalog_content + episode_source contract against real MyBatis + Testcontainers
   MySQL; also fixes meter/pom.xml so `-DexcludedGroups=none` actually overrides
   the `e2e` filter from the CLI.
+- `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
+  drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
+  read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
+  Liquibase changesets, and the matching test tree. `OrinunoProperties.JutsuProperties`
+  keeps the SDK-related subtree (credentials, drift-probe) consumed by
+  `JutsuSdkConfiguration` + `JutsuDriftScheduledProbe` + the multi-source controllers;
+  `sync.*` and `fallback.*` are gone. ArchUnit `BoundedContextArchitectureTest` still
+  green because its rules pin the jutsu-sdk surface, not the deleted L1 package.
 
 ## Risks of leaving the gap open
 
@@ -110,7 +118,7 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 | A2-half — drop dead L3 + watermark changelogs from orinuno-app | ✅ commit `a768bc7` |
 | A3 — decide dumps ownership | ✅ decided 2026-05-12 (Kodik-specific, blocked on C1 to relocate) |
 | A6 — drop L1 kodik_* changelogs from orinuno-app | ⏳ blocked on Block B + C |
-| A7 — drop L1 jutsu_* changelogs from orinuno-app | ⏳ blocked on jutsu sync scheduler move |
+| A7 — drop L1 jutsu_* changelogs from orinuno-app | ✅ commit `aca0475` (also dropped the jutsu sync schedulers + live-fallback + read services + DTOs — none had non-self callers after `2543816`) |
 | B3-a-1 — L2 Liquibase in meter | ✅ commit `600815b` |
 | B3-a-2 — L2 entities + repos in meter | ✅ commit `d4b3474` |
 | B2 — `CatalogSinkEventEmitter` writes `episode_source` from events | ✅ commit `d963a1b` |
