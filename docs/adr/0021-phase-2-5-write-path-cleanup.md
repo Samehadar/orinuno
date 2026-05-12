@@ -314,6 +314,33 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
   `@ConditionalOnMissingBean` so the new queue services wire up. No
   orinuno-app changes — dual copies coexist until D3 retires the
   originals.
+- `648177a` feat(source-kodik) — **D1b-prep**: DecoderPathCache (DECODE-2
+  per-netloc memo) + KodikCdnHostMetrics (rebased to
+  `orinuno.source.kodik.cdn.host` namespace) ported into source-kodik.
+  +214 LOC.
+- `8ce7ae9` feat(source-kodik) — **D1b-1**: scaffolding for the heavy
+  decoder ports. KodikDecoderProperties (@ConfigurationProperties under
+  `orinuno.source-kodik.decoder.*`) + KodikWebClientConfiguration
+  extended with kodikPlayerWebClient + kodikCdnWebClient beans +
+  DecoderHealthTracker + GeoBlockDetector + Application
+  @ConfigurationPropertiesScan. +191 LOC.
+- `d3744ba` feat(source-kodik) — **D1b-2**: KodikVideoDecoderService
+  (the 555-LOC regex/JS decoder) + KodikUpstreamErrorClassifier +
+  ProxyRepository / ProxyMapper.xml / ProxyProviderService /
+  ProxyWebClientService ported. ProxyProviderService rebases its single
+  config knob to `orinuno.source-kodik.proxy.enabled` (default false).
+  +862 LOC.
+- `ae52972` feat(source-kodik) — **D1b-2.5**: KodikDecodeOrchestrator
+  ported in sniff-less form (sniff branch deferred to D1b-3, since
+  PlaywrightVideoFetcher + HLS helpers still pending). +79 LOC.
+- `b170a11` feat(source-kodik) — **D1b-3**: Playwright stack ported.
+  PlaywrightVideoFetcher (872 LOC, including HLS-via-Playwright fetch
+  logic) + PlaywrightSniffDecoder + HLS helpers (HlsRetryPolicy +
+  HlsMediaPlaylist + HlsManifestParser + HlsMasterPlaylistResolver) +
+  KodikPlaywrightProperties + DownloadProgress (promoted to top-level
+  class from the nested VideoDownloadService.DownloadProgress). pom
+  gains com.microsoft.playwright:playwright:1.59.0. Orchestrator's
+  sniff-fallback branch restored. +1458 LOC. Block D1b fully closed.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -361,7 +388,7 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | C5 — drop enrichment slice from orinuno-app | ✅ commit `5335517` (orphan; nothing in orinuno-app calls EnrichmentService outside its own package + tests; source-kodik holds its own copy of the table for future META-1 reactivation) |
 | D-prep — leaf data classes (DTOs + RequestHashService + ParseRequestMetrics) in source-kodik | ✅ commit `e8f6a26` |
 | D1a — port queue services (ParseRequestService + ParseRequestQueueService + ProgressReporter + ThrottledProgressReporter) | ✅ commit `206195c` (also lands `@Bean Clock` in source-kodik's Application + rebases page-limit knobs to `orinuno.source-kodik.requests.*` — partial E2 ride-along) |
-| D1b — port decoder stack (KodikVideoDecoderService + PlaywrightVideoFetcher + KodikDecodeOrchestrator + PlaywrightSniffDecoder + DecoderPathCache + KodikCdnHostMetrics) | ⏳ blocked on D1a (shared `OrinunoProperties` subtree relocate) |
+| D1b — port decoder stack | ✅ commits `648177a` (DecoderPathCache + KodikCdnHostMetrics), `8ce7ae9` (KodikDecoderProperties + WebClients + DecoderHealthTracker + GeoBlockDetector), `d3744ba` (KodikVideoDecoderService + KodikUpstreamErrorClassifier + ProxyRepository/Service/WebClient stack), `ae52972` (KodikDecodeOrchestrator sniff-less), `b170a11` (PlaywrightVideoFetcher + PlaywrightSniffDecoder + HLS helpers + DownloadProgress + KodikPlaywrightProperties + orchestrator sniff branch restored) |
 | D1c — port ParserService + RequestWorker + EntityFactory + ParseController + ParseRequestController + MeterDecodedEventPublisher | ⏳ blocked on D1b |
 | D1d — port matching tests | ⏳ blocked on D1c |
 | D2 — `/api/v1/parse/` → `KodikUpstreamProxyFilter` | ⏳ blocked on D1c |
