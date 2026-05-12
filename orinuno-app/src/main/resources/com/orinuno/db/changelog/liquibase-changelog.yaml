@@ -40,14 +40,6 @@ databaseChangeLog:
   - include:
       file: com/orinuno/db/changelog/scripts/20260508020000_alter_jutsu_title_add_catalog_position.sql
   - include:
-      file: com/orinuno/db/changelog/scripts/20260508030000_create_catalog_content.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260508030100_create_catalog_content_external_id.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260508030200_create_catalog_episode.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260508030300_create_catalog_episode_source_link.sql
-  - include:
       file: com/orinuno/db/changelog/scripts/20260508040000_alter_jutsu_title_add_years_age_rating.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260508050000_create_jutsu_film.sql
@@ -55,5 +47,3 @@ databaseChangeLog:
       file: com/orinuno/db/changelog/scripts/20260511000000_backfill_episode_video_from_kodik_variant.sql
   - include:
       file: com/orinuno/db/changelog/scripts/20260511010000_drop_kodik_variant_l2_columns.sql
-  - include:
-      file: com/orinuno/db/changelog/scripts/20260511020000_create_remote_source_watermark.sql
