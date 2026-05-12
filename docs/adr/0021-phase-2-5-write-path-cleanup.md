@@ -367,6 +367,12 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
   (`orinuno.source-kodik.storage.*`). +973 LOC. Pulls
   VideoDownloadService along because StreamController consumes it;
   C3.1 narrows to just DownloadController.
+- `9e371a3` refactor(orinuno-app) — **C2.2**: KodikUpstreamProxyFilter
+  gains `/api/v1/stream/` + `/api/v1/hls/`; orinuno-app's
+  StreamController + HlsController + HlsManifestService deleted
+  (-441 LOC). VideoDownloadService + KodikVideoDecoderService +
+  PlaywrightVideoFetcher + the rest of the decoder stack stay in
+  orinuno-app until C3 + D3 retire DownloadController + ParserService.
 - `1179fda` test(source-kodik) — **D1d**: 14 test classes ported
   covering the parse pipeline + decoder stack + queue services +
   supporting beans (ParseController/RequestController, ParserService,
@@ -417,7 +423,7 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | C1.3 — `MultiSourceController` drops `ContentService` dep, calls `ContentRepository` directly | ✅ commit `cbc6b98` |
 | C1.4 — flip `MultiSourceController` L2 reads to meter-readonly `orinuno_catalog` | ✅ commit `00053e0` (also wired `ORINUNO_CATALOG_READ_URL` into docker-compose.yml + monolith overlay) |
 | C2.1 — port `StreamController` + `HlsController` + `HlsManifestService` + `VideoDownloadService` + `KodikStorageProperties` → source-kodik | ✅ commit `06370b3` (also pulled VideoDownloadService in since StreamController consumes it; C3.1 narrows to DownloadController only) |
-| C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ⏳ open (just needs proxy filter prefix flip + delete) |
+| C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ✅ commit `9e371a3` |
 | C3.1 — port `DownloadController` → source-kodik | ⏳ open — VideoDownloadService + storage props already moved in C2.1; only DownloadController itself remains |
 | C3.2 — proxy `/api/v1/download/`; drop orinuno-app originals | ⏳ blocked on C3.1 |
 | C4.1 — port `ExportController` + L1-Kodik half of `ExportDataService` → source-kodik | ✅ commit `c4127a7` |
