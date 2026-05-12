@@ -5,58 +5,35 @@ import java.util.List;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * orinuno-app gateway properties.
+ *
+ * <p>ADR 0021 §E2 stage 3b — every L1 / decoder / proxy / storage / playwright / calendar / dumps
+ * subtree retired with the slice that consumed it. orinuno-app is now a thin gateway +
+ * cross-source orchestrator; the few configuration knobs that remain here cover the cross-cutting
+ * concerns the gateway still owns:
+ *
+ * <ul>
+ *   <li>{@link ParseProperties} — inbound rate limit for {@code POST /api/v1/parse/requests}.
+ *   <li>{@link SecurityProperties} — gateway API key.
+ *   <li>{@link CorsProperties} — allowed origins for the demo UI / browser clients.
+ *   <li>{@link ProvidersProperties} — JutSu provider auth + drift probe.
+ *   <li>{@link DriftSamplingProperties} — global drift detector knob shared across SDKs.
+ * </ul>
+ *
+ * <p>Per-source SDK configs live under {@code kodik.sdk.*} (kodik-sdk-spring-boot-starter) and
+ * {@code orinuno.source-kodik.*} (orinuno-source-kodik). The orinuno.catalog-read.* keys are
+ * consumed by {@link com.orinuno.catalog.readonly.CatalogReadDataSourceConfiguration}.
+ */
 @Data
 @ConfigurationProperties(prefix = "orinuno")
 public class OrinunoProperties {
 
-    private KodikProperties kodik = new KodikProperties();
     private ParseProperties parse = new ParseProperties();
-    private DecoderProperties decoder = new DecoderProperties();
-    private ProxyProperties proxy = new ProxyProperties();
-    private StorageProperties storage = new StorageProperties();
-    private RequestsProperties requests = new RequestsProperties();
-
-    @Data
-    public static class KodikProperties {
-        private String apiUrl = "https://kodik-api.com";
-        private String token = "";
-        private long requestDelayMs = 500;
-        private String tokenFile = "./data/kodik_tokens.json";
-        private long validationIntervalMinutes = 360;
-        private boolean autoDiscoveryEnabled = true;
-        private boolean bootstrapFromEnv = true;
-        private int tokenFailoverMaxAttempts = 3;
-        private boolean validateOnStartup = true;
-
-        /**
-         * Cooldown before {@link com.kodik.token.KodikTokenValidator#validateAll()} re-probes
-         * tokens that currently sit in the {@code dead} tier. Without this, a single transient
-         * network failure during the first {@code validate-on-startup} run would permanently exile
-         * a token: {@code validateAll()} historically skipped DEAD entirely. Default 24h gives
-         * Kodik plenty of time to recover from outages while still letting valid tokens heal
-         * automatically.
-         */
-        private long deadRevalidationIntervalMinutes = 1440;
-
-        private CatalogIngestionProperties catalogIngestion = new CatalogIngestionProperties();
-
-        /**
-         * Bridge between Kodik {@code kodik_content} writes and the L3 universal canonical catalog
-         * (ARCH-0016 P1b Step 1.C.B). When enabled, every successful {@code
-         * ContentService.findOrCreateContent(KodikContent)} call triggers a synchronous {@code
-         * CatalogPublicApi.findOrCreateContent} carrying the row's external ids ({@code
-         * kinopoiskId} / {@code imdbId} / {@code shikimoriId}). This is what produces the
-         * cross-source merges — once enabled together with the jut.su bridge, a jut.su slug and a
-         * Kodik raw id that share a Shikimori id collapse into a single canonical row.
-         *
-         * <p>Off by default while L3 is being shaken out. Failures inside the resolver are caught
-         * and logged WARN; the Kodik upsert that triggered the call is never affected.
-         */
-        @Data
-        public static class CatalogIngestionProperties {
-            private boolean enabled = false;
-        }
-    }
+    private SecurityProperties security = new SecurityProperties();
+    private CorsProperties cors = new CorsProperties();
+    private DriftSamplingProperties drift = new DriftSamplingProperties();
+    private ProvidersProperties providers = new ProvidersProperties();
 
     @Data
     public static class ParseProperties {
@@ -77,43 +54,14 @@ public class OrinunoProperties {
     }
 
     @Data
-    public static class DecoderProperties {
-        private int timeoutSeconds = 30;
-        private int maxRetries = 3;
-        private int linkTtlHours = 20;
-        private long refreshIntervalMs = 3600000;
-        private int refreshBatchSize = 50;
-        private MaintenanceProperties maintenance = new MaintenanceProperties();
-
-        /**
-         * DECODE-8 — when {@code true} AND Playwright is wired up, the orchestrator falls back to a
-         * Playwright network-sniff decoder when the regex/JS path returns empty. Disabled by
-         * default because Playwright is heavyweight (full Chromium); enable when you've observed
-         * regex breakage in production and need a stop-gap.
-         */
-        private boolean sniffFallbackEnabled = false;
+    public static class SecurityProperties {
+        private String apiKey = "";
     }
 
-    /**
-     * Bounds for the long-running decoder maintenance jobs ({@code refreshExpiredLinks}, {@code
-     * retryFailedDecodes}). Without these caps a single bad batch — for example, all 50 variants
-     * timing out under VPN-induced geo-block — could pin a worker thread for tens of minutes and
-     * starve unrelated scheduled jobs. See TECH_DEBT TD-PR-5.
-     */
     @Data
-    public static class MaintenanceProperties {
-        private int maxBatchPerTick = 10;
-        private long tickTimeoutSeconds = 600;
+    public static class CorsProperties {
+        private List<String> allowedOrigins = List.of("*");
     }
-
-    private PlaywrightProperties playwright = new PlaywrightProperties();
-    private SecurityProperties security = new SecurityProperties();
-    private CorsProperties cors = new CorsProperties();
-    private CacheProperties cache = new CacheProperties();
-    private DriftSamplingProperties drift = new DriftSamplingProperties();
-    private CalendarProperties calendar = new CalendarProperties();
-    private DumpsProperties dumps = new DumpsProperties();
-    private ProvidersProperties providers = new ProvidersProperties();
 
     /**
      * Settings for the alternative video providers we decode (Sibnet, Aniboom, JutSu). Most are
@@ -192,170 +140,6 @@ public class OrinunoProperties {
              * captured fixture for it.
              */
             private String canonicalSlug = "onepuunchman";
-        }
-    }
-
-    @Data
-    public static class SecurityProperties {
-        private String apiKey = "";
-    }
-
-    @Data
-    public static class CorsProperties {
-        private List<String> allowedOrigins = List.of("*");
-    }
-
-    @Data
-    public static class ProxyProperties {
-        private boolean enabled = false;
-        private String rotationStrategy = "round-robin";
-    }
-
-    @Data
-    public static class StorageProperties {
-        private String basePath = "./data/videos";
-        private long maxDiskUsageMb = 10240;
-    }
-
-    @Data
-    public static class PlaywrightProperties {
-        private boolean enabled = true;
-        private boolean headless = true;
-        private int pageTimeoutSeconds = 30;
-        private int navigationTimeoutMs = 15000;
-        private int videoWaitMs = 30000;
-        private int hlsConcurrency = 16;
-        private HlsProperties hls = new HlsProperties();
-    }
-
-    /**
-     * DOWNLOAD-PARALLEL — knobs for the HLS segment fetch + ffmpeg remux pipeline. Defaults
-     * preserve legacy behaviour: master-playlist resolution stays on (cheap, fixes silently broken
-     * downloads); 5xx/429 retries are conservative (4 attempts); ffmpeg stays in single-input mode
-     * (concat-demuxer is opt-in for very large playlists where the giant intermediate {@code .ts}
-     * is a problem).
-     */
-    @Data
-    public static class HlsProperties {
-        /**
-         * Max recursion depth when resolving an HLS master playlist down to a media playlist. Kodik
-         * typically only nests once but a malicious / misconfigured CDN could loop us forever; cap
-         * defensively.
-         */
-        private int masterResolutionMaxDepth = 3;
-
-        /** Max attempts per segment when the upstream returns a retriable HTTP status or IO. */
-        private int segmentRetryMaxAttempts = 4;
-
-        /** Base sleep (ms) between retries; scales linearly with attempt index. */
-        private long segmentRetryBaseDelayMs = 250;
-
-        /**
-         * When {@code true}, abort the download if any segment ends up empty (HTTP non-2xx that
-         * exhausted retries, IO that exhausted retries, etc.). Default {@code false} preserves
-         * legacy behaviour where holes are silently skipped — historically this was deliberate
-         * because Kodik's CDN flaps occasionally and a 99.x % file is usually playable. Flip to
-         * {@code true} when you want hard failures (e.g. for archival downloads).
-         */
-        private boolean failOnMissingSegment = false;
-
-        /**
-         * ffmpeg remux mode. {@code single-input} concatenates segments to one big {@code .ts} and
-         * runs {@code ffmpeg -i big.ts -c copy out.mp4} (legacy / default — usually optimal because
-         * Kodik playlists are small). {@code concat-demuxer} keeps segments separate, writes a
-         * {@code concat.txt} manifest, and runs {@code ffmpeg -f concat -safe 0 -i concat.txt -c
-         * copy out.mp4} — useful for very large playlists where the giant intermediate {@code .ts}
-         * exhausts disk.
-         */
-        private FfmpegMode ffmpegMode = FfmpegMode.SINGLE_INPUT;
-
-        public enum FfmpegMode {
-            SINGLE_INPUT,
-            CONCAT_DEMUXER
-        }
-    }
-
-    @Data
-    public static class CacheProperties {
-        private ReferenceCacheProperties reference = new ReferenceCacheProperties();
-    }
-
-    @Data
-    public static class ReferenceCacheProperties {
-        private boolean enabled = true;
-        private long ttlSeconds = 21_600;
-    }
-
-    @Data
-    public static class RequestsProperties {
-        private long workerPollMs = 2_000;
-        private long staleRecoveryMs = 60_000;
-        private long staleAfterMs = 300_000;
-        private long progressFlushMs = 1_000;
-        private int maxRetries = 3;
-        private int defaultPageLimit = 50;
-        private int maxPageLimit = 200;
-    }
-
-    /**
-     * On-demand fetcher for the public Kodik calendar dump (IDEA-AP-5). Endpoint is unauthenticated
-     * but heavy (~few MB), so we cap response size, cache aggressively (5 min TTL), and use
-     * conditional GET (ETag / Last-Modified). Disable {@code enabled} to fail fast on the
-     * controller without making upstream calls — useful when the dump is reported broken.
-     */
-    @Data
-    public static class CalendarProperties {
-        private boolean enabled = true;
-        private String url = "https://dumps.kodikres.com/calendar.json";
-        private long cacheTtlSeconds = 300;
-        private long requestTimeoutSeconds = 10;
-        private long maxResponseBytes = 4L * 1024 * 1024;
-        private DeltaWatcherProperties deltaWatcher = new DeltaWatcherProperties();
-
-        /**
-         * CAL-6 — diff every Kodik calendar fetch against the previously persisted state and emit
-         * one outbox event per detected delta. Disabled by default so existing deployments without
-         * the new tables stay green; flip {@code enabled} after applying the Liquibase migration.
-         */
-        @Data
-        public static class DeltaWatcherProperties {
-            private boolean enabled = false;
-            private long pollIntervalMinutes = 5;
-            private long initialDelaySeconds = 60;
-        }
-    }
-
-    /**
-     * Public Kodik dump endpoints (DUMP-1). The dumps live at {@code
-     * https://dumps.kodikres.com/{calendar,serials,films}.json}. We track them with HEAD-only
-     * requests by default — the bodies are large (~80 KB / ~175 MB / ~82 MB) and we only need to
-     * know "did the dump change" + the rolling timestamp ("when did we last see Kodik publish a
-     * fresh dump?"). DUMP-2 will add opt-in body downloads for bootstrap; until then, {@code
-     * downloadBody} stays {@code false}.
-     *
-     * <p>Set {@code enabled=false} to disable the watcher entirely (e.g. in CI, where we don't want
-     * to hit Kodik on every test run). The default polling cadence (1 hour) is intentionally
-     * conservative: dumps are refreshed by Kodik less often than that, and HEAD-only adds zero
-     * meaningful load to their CDN.
-     */
-    @Data
-    public static class DumpsProperties {
-        private boolean enabled = false;
-        private String baseUrl = "https://dumps.kodikres.com";
-        private long pollIntervalMinutes = 60;
-        private long initialDelaySeconds = 30;
-        private long requestTimeoutSeconds = 30;
-        private boolean downloadBody = false;
-        private DumpEntry calendar = new DumpEntry(true, "calendar.json");
-        private DumpEntry serials = new DumpEntry(true, "serials.json");
-        private DumpEntry films = new DumpEntry(true, "films.json");
-
-        @Data
-        @lombok.NoArgsConstructor
-        @lombok.AllArgsConstructor
-        public static class DumpEntry {
-            private boolean enabled;
-            private String path;
         }
     }
 }

@@ -442,7 +442,7 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | D3 — delete orinuno-app parse + decoder + Playwright + download originals | ✅ commit `eb4ed41` (-12,078 LOC across 93 files; ContentService + ContentMapper + EntityFactory + ParserService + decoder/ + requestlog/ + download/ + dumps/ + metrics/KodikCdnHostMetrics gone; Liquibase changesets kept until B3-full + a later orphan-schema cleanup) |
 | D5 — relocate `KodikDumpBootstrapService` + `orinuno_dump_state` changeset (A3 decision) | ⏳ open — orinuno-app side already deleted in D3; source-kodik needs the slice ported if META-1 dumps reactivates |
 | E1 — ArchUnit guard against Kodik imports in orinuno-app | ⏳ blocked on Block C |
-| E2 — `OrinunoProperties.KodikProperties` → `KodikSourceProperties` | ⏳ blocked on Block C |
+| E2 — `OrinunoProperties.KodikProperties` → `KodikSourceProperties` | ✅ commits `2904921` (stage 1 — port calendar + Shikimori discovery + reference cache slices into source-kodik), `f998776` (stage 2 — delete orphan slices from orinuno-app), `b5c722d` (stage 3a — move 21 orphan tests to kodik-sdk + drop Liquibase remnants), this commit (stage 3b — trim `OrinunoProperties` to gateway-only subtree, delete orphan `WebClientConfiguration` + `@MapperScan`, prune `application.yml`) |
 | E3 — README + AGENTS.md sync to final shape | ⏳ blocked on Block C |
 
 ## Cross-references
