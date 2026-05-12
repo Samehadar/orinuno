@@ -4,12 +4,21 @@ import com.orinuno.contract.source.ContentKindHint;
 import com.orinuno.contract.source.ExternalIds;
 import com.orinuno.contract.source.SourceCatalogEvent;
 import com.orinuno.contract.source.SourceContentInfo;
+import com.orinuno.contract.source.SourceEpisode;
+import com.orinuno.contract.source.SourceEpisodeVariant;
 import com.orinuno.contract.source.SourceEventEmitter;
 import com.orinuno.contract.source.SourceIdentifier;
+import com.orinuno.contract.source.SourceSeason;
 import com.orinuno.meter.catalog.api.CatalogIdentityRequest;
 import com.orinuno.meter.catalog.api.CatalogPublicApi;
+import com.orinuno.meter.catalog.model.CatalogContent;
 import com.orinuno.meter.catalog.model.CatalogContentKind;
 import com.orinuno.meter.catalog.model.CatalogSourceType;
+import com.orinuno.meter.catalog.model.EpisodeSource;
+import com.orinuno.meter.catalog.repository.EpisodeSourceRepository;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,19 +28,24 @@ import org.springframework.stereotype.Component;
  * Default in-process {@link SourceEventEmitter} (ADR 0017). Translates a {@link SourceCatalogEvent}
  * into the catalog context's internal {@link CatalogIdentityRequest} and calls {@link
  * CatalogPublicApi#findOrCreateContent(CatalogIdentityRequest)} synchronously inside the caller's
- * transaction.
+ * transaction; once the canonical {@link CatalogContent} is resolved, every embedded {@link
+ * SourceEpisodeVariant} is upserted into {@link EpisodeSourceRepository} (ADR 0021 Block B2).
  *
- * <p>Failure isolation: any {@link RuntimeException} from the resolver is caught and logged at
- * WARN. Source-context L1 writes ({@code ContentService.findOrCreateContent}, {@code
- * JutsuCatalogSyncService.runFullCrawl}) are the system of record for "we observed this row" — they
- * must never break because L3 produced a transient deadlock or the resolver hit a not-yet-fixed
- * bug. A subsequent emit on the same identifier re-attempts the binding (idempotent by design — see
- * {@link CatalogPublicApi}).
+ * <p>Failure isolation: any {@link RuntimeException} from the resolver or the L2 upserts is caught
+ * and logged at WARN. Source-context L1 writes are the system of record — they must never break
+ * because L3 produced a transient deadlock or the L2 upsert hit a not-yet-fixed bug. A subsequent
+ * emit on the same identifier re-attempts the binding (idempotent by design — see {@link
+ * CatalogPublicApi} + {@link EpisodeSourceRepository#upsert}).
  *
- * <p>Today only {@link SourceCatalogEvent.TitleObserved} carries enough information for the L1 → L3
- * hand-off; the four "richer" variants (movie / series / episodes / removed) are accepted but pass
- * only their chrome through to {@code findOrCreateContent}, leaving episode-level work for a later
- * phase. Logged at DEBUG so tests can observe the handling without polluting INFO.
+ * <p>{@code episode_video} is intentionally NOT written by this emitter — events today carry the
+ * pre-decode URL (Kodik iframe / jut.su episode page) as {@code SourceEpisodeVariant.mediaUrl}, not
+ * a decoded CDN URL. The post-decode video URL flows into L2 via a separate path (today
+ * orinuno-app's {@code KodikEpisodeDualWriteService}; future: a post-decode event variant).
+ *
+ * <p>{@link SourceCatalogEvent.SourceRemoved} stays a no-op — soft-removal of L3/L2 rows is
+ * deferred. {@link SourceCatalogEvent.EpisodesUpdated} bypasses the chrome-update path (no {@code
+ * info} on that variant) and resolves the canonical row by the {@code (sourceType, sourceId)}
+ * anchor.
  */
 @Slf4j
 @Component
@@ -39,23 +53,33 @@ import org.springframework.stereotype.Component;
 public class CatalogSinkEventEmitter implements SourceEventEmitter {
 
     private final CatalogPublicApi catalog;
+    private final EpisodeSourceRepository episodeSources;
+    private final Clock clock;
 
     @Override
     public void emit(SourceCatalogEvent event) {
         if (event == null) return;
         try {
             switch (event) {
-                case SourceCatalogEvent.TitleObserved e ->
-                        handleTitleEvent(e.identifier(), e.info());
-                case SourceCatalogEvent.MovieDiscovered e ->
-                        handleTitleEvent(e.identifier(), e.info());
-                case SourceCatalogEvent.SeriesDiscovered e ->
-                        handleTitleEvent(e.identifier(), e.info());
-                case SourceCatalogEvent.EpisodesUpdated e ->
-                        log.debug(
-                                "catalog-sink: ignoring EpisodesUpdated for {} — episode-level"
-                                        + " ingestion not implemented in P1b (deferred to P2)",
-                                e.identifier());
+                case SourceCatalogEvent.TitleObserved e -> resolveContent(e.identifier(), e.info());
+                case SourceCatalogEvent.MovieDiscovered e -> {
+                    CatalogContent content = resolveContent(e.identifier(), e.info());
+                    if (content != null) {
+                        ingestMovie(content.getId(), e.variant());
+                    }
+                }
+                case SourceCatalogEvent.SeriesDiscovered e -> {
+                    CatalogContent content = resolveContent(e.identifier(), e.info());
+                    if (content != null) {
+                        ingestSeasons(content.getId(), e.seasons());
+                    }
+                }
+                case SourceCatalogEvent.EpisodesUpdated e -> {
+                    CatalogContent content = resolveByAnchor(e.identifier());
+                    if (content != null) {
+                        ingestSeasons(content.getId(), e.seasons());
+                    }
+                }
                 case SourceCatalogEvent.SourceRemoved e ->
                         log.debug(
                                 "catalog-sink: ignoring SourceRemoved for {} — soft-removal not"
@@ -73,17 +97,93 @@ public class CatalogSinkEventEmitter implements SourceEventEmitter {
         }
     }
 
-    private void handleTitleEvent(SourceIdentifier identifier, SourceContentInfo info) {
+    private CatalogContent resolveContent(SourceIdentifier identifier, SourceContentInfo info) {
         CatalogSourceType sourceType = mapSourceType(identifier.sourceType());
         if (sourceType == null) {
             log.debug(
                     "catalog-sink: skipping event for unrecognised sourceType='{}' (sourceId={})",
                     identifier.sourceType(),
                     identifier.sourceId());
-            return;
+            return null;
         }
         CatalogIdentityRequest request = toRequest(sourceType, identifier.sourceId(), info);
-        catalog.findOrCreateContent(request);
+        return catalog.findOrCreateContent(request);
+    }
+
+    /**
+     * Resolve the canonical row from the {@code (sourceType, sourceId)} anchor without overwriting
+     * any chrome — used by {@link SourceCatalogEvent.EpisodesUpdated} which only carries episode
+     * deltas. If no row exists yet, findOrCreateContent inserts a chromeless one; subsequent
+     * episode upserts then have a valid {@code content_id} target.
+     */
+    private CatalogContent resolveByAnchor(SourceIdentifier identifier) {
+        CatalogSourceType sourceType = mapSourceType(identifier.sourceType());
+        if (sourceType == null) {
+            log.debug(
+                    "catalog-sink: skipping episodes-updated for unrecognised sourceType='{}'"
+                            + " (sourceId={})",
+                    identifier.sourceType(),
+                    identifier.sourceId());
+            return null;
+        }
+        CatalogIdentityRequest request =
+                CatalogIdentityRequest.builder(sourceType, identifier.sourceId()).build();
+        return catalog.findOrCreateContent(request);
+    }
+
+    /**
+     * Films are stored as season=0, episode=1 (matches the {@link SourceSeason} javadoc
+     * convention). One variant per movie event.
+     */
+    private void ingestMovie(long contentId, SourceEpisodeVariant variant) {
+        upsertSource(contentId, 0, 1, variant);
+    }
+
+    private void ingestSeasons(long contentId, List<SourceSeason> seasons) {
+        for (SourceSeason season : seasons) {
+            for (SourceEpisode episode : season.episodes()) {
+                for (SourceEpisodeVariant variant : episode.variants()) {
+                    upsertSource(contentId, season.order(), episode.order(), variant);
+                }
+            }
+        }
+    }
+
+    private void upsertSource(
+            long contentId, int season, int episode, SourceEpisodeVariant variant) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        String provider = variant.identifier().sourceType().toUpperCase(Locale.ROOT);
+        EpisodeSource source =
+                EpisodeSource.builder()
+                        .contentId(contentId)
+                        .season(season)
+                        .episode(episode)
+                        // Kodik carries translator semantics in the variant PK; jut.su has no
+                        // translator concept, so the sourceId is just an episode-shaped key
+                        // ("slug/s1/e1"). Both are written into translator_id verbatim — the
+                        // unique key tolerates either shape since rows are still distinct.
+                        .translatorId(variant.identifier().sourceId())
+                        .translatorName(variant.title())
+                        .provider(provider)
+                        .sourceUrl(variant.mediaUrl())
+                        .sourceType(provider)
+                        .discoveredAt(now)
+                        .lastSeenAt(now)
+                        .build();
+        try {
+            episodeSources.upsert(source);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "catalog-sink: episode_source upsert failed for content_id={} s={} e={}"
+                            + " provider={} translator_id={} ({}: {})",
+                    contentId,
+                    season,
+                    episode,
+                    provider,
+                    variant.identifier().sourceId(),
+                    ex.getClass().getSimpleName(),
+                    ex.getMessage());
+        }
     }
 
     /**
