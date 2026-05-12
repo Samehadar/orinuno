@@ -43,6 +43,9 @@
         <java.version>21</java.version>
         <mybatis-spring-boot-starter.version>3.0.5</mybatis-spring-boot-starter.version>
         <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
+        <!-- Surefire excludes @Tag("e2e") tests by default; override with
+             -DexcludedGroups=none to run Testcontainers-backed ITs locally. -->
+        <excludedGroups>e2e</excludedGroups>
     </properties>
 
     <dependencies>
@@ -148,13 +151,16 @@
                 <configuration>
                     <!-- Include *IT classes alongside *Test/*Tests; e2e-tagged
                          tests (Testcontainers, slow) are opt-in via -Dgroups=e2e.
-                         Default `mvn test` skips them via excludedGroups=e2e. -->
+                         Default `mvn test` skips them via excludedGroups=e2e;
+                         pass -DexcludedGroups=none to flip them on (the property
+                         must be overridable, otherwise the @Tag("e2e") opt-in
+                         is unreachable from the CLI). -->
                     <includes>
                         <include>**/*Test.java</include>
                         <include>**/*Tests.java</include>
                         <include>**/*IT.java</include>
                     </includes>
-                    <excludedGroups>e2e</excludedGroups>
+                    <excludedGroups>${excludedGroups}</excludedGroups>
                 </configuration>
             </plugin>
             <plugin>
