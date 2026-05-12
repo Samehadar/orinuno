@@ -15,11 +15,14 @@ import com.orinuno.meter.catalog.model.CatalogContent;
 import com.orinuno.meter.catalog.model.CatalogContentKind;
 import com.orinuno.meter.catalog.model.CatalogSourceType;
 import com.orinuno.meter.catalog.model.EpisodeSource;
+import com.orinuno.meter.catalog.model.EpisodeVideo;
 import com.orinuno.meter.catalog.repository.EpisodeSourceRepository;
+import com.orinuno.meter.catalog.repository.EpisodeVideoRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -37,10 +40,13 @@ import org.springframework.stereotype.Component;
  * emit on the same identifier re-attempts the binding (idempotent by design — see {@link
  * CatalogPublicApi} + {@link EpisodeSourceRepository#upsert}).
  *
- * <p>{@code episode_video} is intentionally NOT written by this emitter — events today carry the
- * pre-decode URL (Kodik iframe / jut.su episode page) as {@code SourceEpisodeVariant.mediaUrl}, not
- * a decoded CDN URL. The post-decode video URL flows into L2 via a separate path (today
- * orinuno-app's {@code KodikEpisodeDualWriteService}; future: a post-decode event variant).
+ * <p>{@code episode_video} is written from {@link SourceCatalogEvent.VariantDecoded} only (ADR 0021
+ * §B2-decoded). The "discovered" event family (Movie / Series / EpisodesUpdated) carries only the
+ * pre-decode iframe URL — that lands in {@code episode_source.source_url}. The decoded CDN URL is
+ * delivered separately by whichever bounded context owns the decoder (today: {@code orinuno-app}
+ * for Kodik), so the matching {@code episode_source} row must already exist before the decoded
+ * event arrives. If it doesn't, the emit logs a WARN and is dropped — the next "discovered" tick
+ * re-creates the L2 row, the next decode tick re-emits the URL.
  *
  * <p>{@link SourceCatalogEvent.SourceRemoved} stays a no-op — soft-removal of L3/L2 rows is
  * deferred. {@link SourceCatalogEvent.EpisodesUpdated} bypasses the chrome-update path (no {@code
@@ -54,6 +60,7 @@ public class CatalogSinkEventEmitter implements SourceEventEmitter {
 
     private final CatalogPublicApi catalog;
     private final EpisodeSourceRepository episodeSources;
+    private final EpisodeVideoRepository episodeVideos;
     private final Clock clock;
 
     @Override
@@ -85,6 +92,7 @@ public class CatalogSinkEventEmitter implements SourceEventEmitter {
                                 "catalog-sink: ignoring SourceRemoved for {} — soft-removal not"
                                         + " implemented in P1b (deferred)",
                                 e.identifier());
+                case SourceCatalogEvent.VariantDecoded e -> ingestDecoded(e);
             }
         } catch (RuntimeException ex) {
             log.warn(
@@ -147,6 +155,70 @@ public class CatalogSinkEventEmitter implements SourceEventEmitter {
                 }
             }
         }
+    }
+
+    /**
+     * Resolve the canonical row + matching {@code episode_source} for the decoded variant, then
+     * upsert a row into {@code episode_video} keyed by {@code (source_id, quality)}. The variant's
+     * {@code translator_id} matches by {@link SourceIdentifier#sourceId()} on the variant (the same
+     * wire form {@code KodikSourceEventMapper} writes for movie / series events), so the resolver
+     * here is a direct unique-key lookup — no chrome / external-id reconciliation needed.
+     */
+    private void ingestDecoded(SourceCatalogEvent.VariantDecoded e) {
+        CatalogContent content = resolveByAnchor(e.identifier());
+        if (content == null) {
+            return;
+        }
+        CatalogSourceType sourceType = mapSourceType(e.identifier().sourceType());
+        if (sourceType == null) return;
+        String provider = sourceType.name();
+        String translatorId = e.variantIdentifier().sourceId();
+        Optional<EpisodeSource> source =
+                episodeSources.findByUniqueKey(
+                        content.getId(), e.season(), e.episode(), translatorId, provider);
+        if (source.isEmpty()) {
+            log.warn(
+                    "catalog-sink: VariantDecoded for {} season={} episode={} translator={}"
+                            + " arrived before the matching episode_source row exists — dropping"
+                            + " (next discover tick will recreate the L2 row, next decode tick"
+                            + " will re-emit the URL)",
+                    e.identifier(),
+                    e.season(),
+                    e.episode(),
+                    translatorId);
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        EpisodeVideo video =
+                EpisodeVideo.builder()
+                        .sourceId(source.get().getId())
+                        .quality(e.decodedQuality())
+                        .videoUrl(e.decodedMediaUrl())
+                        .videoFormat(inferFormat(e.decodedMediaUrl()))
+                        .decodedAt(now)
+                        .decodeMethod(e.decodeMethod())
+                        .decodeFailedCount(0)
+                        .ttlSeconds(e.ttlSeconds())
+                        .build();
+        try {
+            episodeVideos.upsertDecoded(video);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "catalog-sink: episode_video upsert failed for source_id={} quality={} ({}: {})",
+                    source.get().getId(),
+                    e.decodedQuality(),
+                    ex.getClass().getSimpleName(),
+                    ex.getMessage());
+        }
+    }
+
+    private static String inferFormat(String url) {
+        if (url == null) return null;
+        String lower = url.toLowerCase(Locale.ROOT);
+        if (lower.contains(".m3u8")) return "application/x-mpegURL";
+        if (lower.contains(".mpd")) return "application/dash+xml";
+        if (lower.contains(".mp4")) return "video/mp4";
+        return null;
     }
 
     private void upsertSource(

@@ -106,6 +106,16 @@ class JsonShapeStabilityTest {
 
     @Test
     @DisplayName(
+            "VariantDecoded JSON shape: identifier + season/episode + variantIdentifier +"
+                    + " decoded URL/quality/method + provenance (ADR 0021 B2-decoded)")
+    void variantDecodedShape() throws Exception {
+        SourceCatalogEvent event = sampleVariantDecoded();
+        assertJsonShapeMatches(event, "variant-decoded.json");
+        assertRoundTripsTo(event, SourceCatalogEvent.VariantDecoded.class);
+    }
+
+    @Test
+    @DisplayName(
             "MovieDiscovered with poster URLs (posterUrl + bigPosterUrl + screenshotUrls +"
                     + " trailerUrls) — locks ARCH-0017-FOLLOWUP-POSTER wire shape")
     void movieDiscoveredWithPostersShape() throws Exception {
@@ -160,6 +170,7 @@ class JsonShapeStabilityTest {
         writeFixture(goldenDir, "series-discovered.json", sampleSeriesDiscovered());
         writeFixture(goldenDir, "episodes-updated.json", sampleEpisodesUpdated());
         writeFixture(goldenDir, "source-removed.json", sampleSourceRemoved());
+        writeFixture(goldenDir, "variant-decoded.json", sampleVariantDecoded());
     }
 
     private static SourceCatalogEvent.TitleObserved sampleTitleObserved() {
@@ -280,6 +291,19 @@ class JsonShapeStabilityTest {
     private static SourceCatalogEvent.SourceRemoved sampleSourceRemoved() {
         return new SourceCatalogEvent.SourceRemoved(
                 SourceIdentifier.of("kodik", "movie-deprecated-99"), PROVENANCE);
+    }
+
+    private static SourceCatalogEvent.VariantDecoded sampleVariantDecoded() {
+        return new SourceCatalogEvent.VariantDecoded(
+                SourceIdentifier.of("kodik", "12345"),
+                1,
+                1,
+                SourceIdentifier.of("kodik", "67890"),
+                "https://cloud.kodik.cc/decoded/12345/episode1-720.mp4",
+                "720",
+                "REGEX",
+                null,
+                PROVENANCE);
     }
 
     private static void assertJsonShapeMatches(SourceCatalogEvent event, String fixtureName)

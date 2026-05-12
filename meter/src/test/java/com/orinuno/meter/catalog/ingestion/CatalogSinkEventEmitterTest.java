@@ -13,6 +13,7 @@ package com.orinuno.meter.catalog.ingestion;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -31,7 +32,9 @@ import com.orinuno.meter.catalog.api.CatalogIdentityRequest;
 import com.orinuno.meter.catalog.api.CatalogPublicApi;
 import com.orinuno.meter.catalog.model.CatalogContent;
 import com.orinuno.meter.catalog.model.EpisodeSource;
+import com.orinuno.meter.catalog.model.EpisodeVideo;
 import com.orinuno.meter.catalog.repository.EpisodeSourceRepository;
+import com.orinuno.meter.catalog.repository.EpisodeVideoRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -51,6 +54,7 @@ class CatalogSinkEventEmitterTest {
 
     @Mock private CatalogPublicApi catalog;
     @Mock private EpisodeSourceRepository episodeSources;
+    @Mock private EpisodeVideoRepository episodeVideos;
     @Captor private ArgumentCaptor<CatalogIdentityRequest> requestCaptor;
     @Captor private ArgumentCaptor<EpisodeSource> sourceCaptor;
 
@@ -59,7 +63,7 @@ class CatalogSinkEventEmitterTest {
 
     @BeforeEach
     void setUp() {
-        emitter = new CatalogSinkEventEmitter(catalog, episodeSources, clock);
+        emitter = new CatalogSinkEventEmitter(catalog, episodeSources, episodeVideos, clock);
     }
 
     @Test
@@ -255,6 +259,62 @@ class CatalogSinkEventEmitterTest {
                         provenance()));
 
         verify(episodeSources, times(2)).upsert(any());
+    }
+
+    @Test
+    @DisplayName(
+            "VariantDecoded — resolves canonical row + matching episode_source, then upserts"
+                    + " episode_video with (source_id, quality, url, decode_method, ttl)")
+    void variantDecodedWritesEpisodeVideo() {
+        when(catalog.findOrCreateContent(any())).thenReturn(content(42L));
+        when(episodeSources.findByUniqueKey(eq(42L), eq(1), eq(1), eq("v-77"), eq("KODIK")))
+                .thenReturn(java.util.Optional.of(EpisodeSource.builder().id(900L).build()));
+
+        emitter.emit(
+                new SourceCatalogEvent.VariantDecoded(
+                        SourceIdentifier.of("kodik", "42"),
+                        1,
+                        1,
+                        SourceIdentifier.of("kodik", "v-77"),
+                        "https://cdn.kodik.example/decoded/v-77.m3u8",
+                        "720",
+                        "REGEX",
+                        3600,
+                        provenance()));
+
+        ArgumentCaptor<EpisodeVideo> videoCaptor = ArgumentCaptor.forClass(EpisodeVideo.class);
+        verify(episodeVideos).upsertDecoded(videoCaptor.capture());
+        EpisodeVideo written = videoCaptor.getValue();
+        assertThat(written.getSourceId()).isEqualTo(900L);
+        assertThat(written.getQuality()).isEqualTo("720");
+        assertThat(written.getVideoUrl()).isEqualTo("https://cdn.kodik.example/decoded/v-77.m3u8");
+        assertThat(written.getVideoFormat()).isEqualTo("application/x-mpegURL");
+        assertThat(written.getDecodeMethod()).isEqualTo("REGEX");
+        assertThat(written.getTtlSeconds()).isEqualTo(3600);
+        assertThat(written.getDecodedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName(
+            "VariantDecoded — episode_source row missing → log + drop (no upsertDecoded call)")
+    void variantDecodedDropsWhenSourceRowMissing() {
+        when(catalog.findOrCreateContent(any())).thenReturn(content(42L));
+        when(episodeSources.findByUniqueKey(any(), any(), any(), any(), any()))
+                .thenReturn(java.util.Optional.empty());
+
+        emitter.emit(
+                new SourceCatalogEvent.VariantDecoded(
+                        SourceIdentifier.of("kodik", "42"),
+                        1,
+                        1,
+                        SourceIdentifier.of("kodik", "v-ghost"),
+                        "https://cdn.kodik.example/decoded/x.mp4",
+                        "1080",
+                        null,
+                        null,
+                        provenance()));
+
+        verify(episodeVideos, never()).upsertDecoded(any());
     }
 
     private static CatalogContent content(long id) {

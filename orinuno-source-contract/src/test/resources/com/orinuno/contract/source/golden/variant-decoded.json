@@ -1,0 +1,26 @@
+{
+  "kind" : "variant-decoded",
+  "identifier" : {
+    "sourceType" : "kodik",
+    "sourceId" : "12345"
+  },
+  "season" : 1,
+  "episode" : 1,
+  "variantIdentifier" : {
+    "sourceType" : "kodik",
+    "sourceId" : "67890"
+  },
+  "decodedMediaUrl" : "https://cloud.kodik.cc/decoded/12345/episode1-720.mp4",
+  "decodedQuality" : "720",
+  "decodeMethod" : "REGEX",
+  "ttlSeconds" : null,
+  "provenance" : {
+    "sourceUrl" : "https://kodik-api.com/list",
+    "fetchedAt" : "2026-05-10T12:34:56Z",
+    "sdkVersion" : "kodik-sdk-drift/0.1.0",
+    "parserMode" : "lenient",
+    "schemaDriftFlags" : [
+      "UNKNOWN_FIELD:material_data.deprecated_box"
+    ]
+  }
+}
