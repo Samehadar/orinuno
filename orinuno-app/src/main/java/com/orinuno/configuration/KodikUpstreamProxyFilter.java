@@ -46,7 +46,12 @@ public class KodikUpstreamProxyFilter implements WebFilter {
                     "/api/v1/kodik/",
                     "/api/v1/embed/",
                     "/api/v1/reference/",
-                    "/api/v1/source-events/");
+                    "/api/v1/source-events/",
+                    // ADR 0021 §C1.2 — Kodik L1 read surface moved to source-kodik in C1.1.
+                    // Proxy intercepts before the (now-deleted) orinuno-app ContentController
+                    // would have matched; demo UI (demo/src/api/client.ts) sees identical
+                    // wire shape because ContentDto is field-for-field unchanged.
+                    "/api/v1/content/");
 
     /**
      * Hop-by-hop headers we strip on both legs of the proxy per RFC 7230 §6.1 plus a couple of
