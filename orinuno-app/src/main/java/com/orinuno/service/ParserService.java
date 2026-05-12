@@ -39,7 +39,6 @@ public class ParserService {
     private final OrinunoProperties properties;
     private final KodikCdnHostMetrics kodikCdnHostMetrics;
     private final KodikDecoderMetrics decoderMetrics;
-    private final KodikEpisodeDualWriteService episodeDualWriter;
     private final org.springframework.beans.factory.ObjectProvider<MeterDecodedEventPublisher>
             meterDecodedPublisher;
 
@@ -344,13 +343,10 @@ public class ParserService {
             bestLink = any.getValue();
             pickedQuality = any.getKey();
         }
-        // ADR 0018 Phase 0.4c — episode_video is the sole store for decoded URLs.
-        // KodikEpisodeDualWriteService.mirrorDecode is the single writer (no longer "mirror" of
-        // a variant-table write; kept under the original name to avoid touching test mocks in
-        // this commit — renamed to KodikDecodedVideoWriter in a follow-up).
-        if (episodeDualWriter != null) {
-            episodeDualWriter.mirrorDecode(variant, result, pickedQuality, bestLink);
-        }
+        // ADR 0021 §B1 — episode_source + episode_video are written exclusively by meter,
+        // driven by SourceCatalogEvent.{SeriesDiscovered, MovieDiscovered, EpisodesUpdated,
+        // VariantDecoded} events. orinuno-app's role here ends at: (1) the kodik_episode_variant
+        // mp4_link upsert above; (2) firing the post-decode event to meter via the publisher.
         MeterDecodedEventPublisher publisher =
                 meterDecodedPublisher == null ? null : meterDecodedPublisher.getIfAvailable();
         if (publisher != null) {
