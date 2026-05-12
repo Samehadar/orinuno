@@ -29,6 +29,16 @@ public class CatalogContentReadRepository {
                     + " kinopoisk_id, mdl_id, tmdb_id, created_at, updated_at"
                     + " FROM catalog_content WHERE id = ?";
 
+    /**
+     * ADR 0021 §E2 — lookup canonical content_id by Kinopoisk external id. Used by
+     * MultiSourceController.rankedByKinopoiskId after the orinuno-app KodikContent /
+     * ContentRepository surface retired. Hits the denormalised kinopoisk_id column on
+     * catalog_content (kept in sync by CatalogIdentityResolver alongside the bindings
+     * in catalog_content_external_id).
+     */
+    private static final String FIND_ID_BY_KINOPOISK_ID =
+            "SELECT id FROM catalog_content WHERE kinopoisk_id = ? LIMIT 1";
+
     private static final RowMapper<CatalogContentRow> ROW_MAPPER =
             (rs, rowNum) ->
                     new CatalogContentRow(
@@ -55,6 +65,21 @@ public class CatalogContentReadRepository {
 
     public Optional<CatalogContentRow> findById(long id) {
         return jdbc.query(FIND_BY_ID, ROW_MAPPER, id).stream().findFirst();
+    }
+
+    /**
+     * Resolve the canonical content_id for a Kinopoisk external id. Returns empty when no row
+     * carries this kinopoisk_id (binding not in catalog_content_external_id, or no Kodik
+     * SourceCatalogEvent observed this title yet).
+     */
+    public Optional<Long> findIdByKinopoiskId(String kinopoiskId) {
+        if (kinopoiskId == null || kinopoiskId.isBlank()) {
+            return Optional.empty();
+        }
+        return jdbc
+                .query(FIND_ID_BY_KINOPOISK_ID, (rs, rowNum) -> rs.getLong("id"), kinopoiskId)
+                .stream()
+                .findFirst();
     }
 
     private static Integer getNullableInt(java.sql.ResultSet rs, String col)
