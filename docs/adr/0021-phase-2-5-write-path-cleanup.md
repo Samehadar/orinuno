@@ -167,6 +167,27 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
   stay in orinuno-app as **read-only** for `MultiSourceController` +
   `MultiSourceRanker` — those readers see the orinuno-schema L2 tables go
   stale until Block B3/C migrates them to read from `orinuno_catalog`.
+- `1cded62` refactor(orinuno-app) — **C0.1**: dead `SourceEventController`
+  in orinuno-app (dup of source-kodik's), its unit test, and its end-to-end
+  poster IT all deleted. -491 LOC.
+- `97606eb` feat(source-kodik) — **C1.1**: `ContentController` +
+  read half of `ContentService` ported into orinuno-source-kodik with
+  field-for-field identical `ContentDto`/`EpisodeVariantDto`/`PageRequest`/`PageResponse`
+  so demo UI sees no diff. +521 LOC across 8 new files (4 DTOs + mapper +
+  service + controller + controller test).
+- `83daac3` refactor(orinuno-app) — **C1.2**: cutover. `/api/v1/content/`
+  added to `KodikUpstreamProxyFilter.PROXY_PREFIXES`; orinuno-app
+  `ContentController` + its `MockMvc` test deleted. ContentService + the
+  four DTOs stay (still referenced by `MultiSourceController` →
+  `ParseController` / `ExportController` / `KodikDumpBootstrapService`).
+- `cbc6b98` refactor(orinuno-app) — **C1.3**: `MultiSourceController`
+  switches from `ContentService.findByKinopoiskId` to direct
+  `ContentRepository.findByKinopoiskId`. Frees orinuno-app from holding
+  the `ContentService` read half just for this one lookup; the read
+  itself still hits the orinuno-schema `kodik_content` (which has a live
+  writer via `ParserService.findOrCreateContent`). The L2 flip (real
+  B1-stale-read fix) split out as **C1.4** because every current deploy
+  has `orinuno.catalog-read.url` unset.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -198,11 +219,12 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
 | B2 end-to-end IT — Spring context + Testcontainers MySQL, poll → emit → row | ✅ commit `3a3ea31` |
 | B2-decoded — post-decode URL channel (event variant + meter push endpoint) | ✅ commits `fb04e92` (contract+meter), `297e931` (orinuno-app emit), `4d13912` (IT) |
 | B1 — delete `KodikEpisodeDualWriteService`, route through events | ✅ commit `e7e7e0a` (models + repos stay read-only for `MultiSourceController` / `MultiSourceRanker`; orinuno-schema L2 tables stop receiving fresh writes — known stale-read trade-off until Block B3/C) |
-| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on **C1.3** (`MultiSourceController` switch to meter-readonly L2 reads) |
-| C0.1 — delete dead orinuno-app `SourceEventController` (dup of source-kodik) | ⏳ open (zero-risk, ships first) |
-| C1.1 — port `ContentController` + read half of `ContentService` → source-kodik | ⏳ open |
-| C1.2 — proxy `/api/v1/content/` via `KodikUpstreamProxyFilter`; drop orinuno-app originals | ⏳ blocked on C1.1 |
-| C1.3 — `MultiSourceController` reads from meter-readonly `catalog_content_external_id` (drops `ContentService` dep + fixes B1 stale-read) | ⏳ blocked on C1.2 |
+| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on **C1.4** (flip MultiSourceController L2 reads to meter-readonly DS once `orinuno.catalog-read.url` is configured in dev/monolith profiles) |
+| C0.1 — delete dead orinuno-app `SourceEventController` (dup of source-kodik) | ✅ commit `1cded62` |
+| C1.1 — port `ContentController` + read half of `ContentService` → source-kodik | ✅ commit `97606eb` |
+| C1.2 — proxy `/api/v1/content/` via `KodikUpstreamProxyFilter`; drop orinuno-app originals | ✅ commit `83daac3` |
+| C1.3 — `MultiSourceController` drops `ContentService` dep, calls `ContentRepository` directly | ✅ commit `cbc6b98` |
+| C1.4 — flip `MultiSourceController` L2 reads (`EpisodeSourceRepository`, `EpisodeVideoRepository`) to meter-readonly `orinuno_catalog`; unblocks B3 | ⏳ open — needs `orinuno.catalog-read.url` plumbing in dev/monolith docker-compose first |
 | C2.1 — port `StreamController` + `HlsController` + `HlsManifestService` → source-kodik | ⏳ open |
 | C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ⏳ blocked on C2.1 |
 | C3.1 — port `DownloadController` + `VideoDownloadService` → source-kodik | ⏳ blocked on E2 (relocate Kodik storage knobs first) |
