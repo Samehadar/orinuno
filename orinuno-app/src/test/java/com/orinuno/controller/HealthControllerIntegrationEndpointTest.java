@@ -1,6 +1,5 @@
 package com.orinuno.controller;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
@@ -9,8 +8,6 @@ import com.kodik.drift.DriftRecord;
 import com.kodik.token.KodikTokenEntry;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
-import com.orinuno.model.ParseRequestStatus;
-import com.orinuno.repository.ParseRequestRepository;
 import com.orinuno.service.DecoderHealthTracker;
 import com.orinuno.service.ProxyProviderService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -34,7 +31,6 @@ class HealthControllerIntegrationEndpointTest {
     @Mock private ProxyProviderService proxyProviderService;
     @Mock private KodikResponseMapper kodikResponseMapper;
     @Mock private KodikTokenRegistry kodikTokenRegistry;
-    @Mock private ParseRequestRepository parseRequestRepository;
     @Mock private com.orinuno.service.dumps.KodikDumpService kodikDumpService;
     @Mock private com.orinuno.service.decoder.DecoderPathCache decoderPathCache;
 
@@ -50,7 +46,6 @@ class HealthControllerIntegrationEndpointTest {
                         proxyProviderService,
                         kodikResponseMapper,
                         kodikTokenRegistry,
-                        parseRequestRepository,
                         kodikDumpService,
                         decoderPathCache);
         client = WebTestClient.bindToController(controller).build();
@@ -63,10 +58,9 @@ class HealthControllerIntegrationEndpointTest {
     }
 
     @Test
-    @DisplayName("READY when tokens live, no drift, queue small")
+    @DisplayName("READY when tokens live and no drift")
     void readyWhenAllChecksPass() {
         primeTokens(2);
-        when(parseRequestRepository.countByStatus(any(ParseRequestStatus.class))).thenReturn(3L);
 
         client.get()
                 .uri("/api/v1/health/integration")
@@ -80,15 +74,14 @@ class HealthControllerIntegrationEndpointTest {
                 .isEqualTo("READY")
                 .jsonPath("$.checks.tokens.details.liveCount")
                 .isEqualTo(2)
-                .jsonPath("$.checks.queue.status")
-                .isEqualTo("READY");
+                .jsonPath("$.checks.queue")
+                .doesNotExist();
     }
 
     @Test
     @DisplayName("BLOCKED + 503 when token registry empty")
     void blockedWhenNoLiveTokens() {
         primeTokens(0);
-        when(parseRequestRepository.countByStatus(any(ParseRequestStatus.class))).thenReturn(0L);
 
         client.get()
                 .uri("/api/v1/health/integration")
@@ -106,7 +99,6 @@ class HealthControllerIntegrationEndpointTest {
     @DisplayName("DEGRADED when schema-drift is detected")
     void degradedWhenDriftDetected() {
         primeTokens(1);
-        when(parseRequestRepository.countByStatus(any(ParseRequestStatus.class))).thenReturn(2L);
         when(kodikResponseMapper.getDetectedDrifts())
                 .thenReturn(
                         Map.of(
@@ -127,46 +119,6 @@ class HealthControllerIntegrationEndpointTest {
                 .isEqualTo("DEGRADED")
                 .jsonPath("$.checks.schemaDrift.status")
                 .isEqualTo("DEGRADED");
-    }
-
-    @Test
-    @DisplayName("DEGRADED when PENDING queue is large")
-    void degradedWhenQueueLarge() {
-        primeTokens(1);
-        when(parseRequestRepository.countByStatus(ParseRequestStatus.PENDING)).thenReturn(5_000L);
-        when(parseRequestRepository.countByStatus(ParseRequestStatus.RUNNING)).thenReturn(0L);
-
-        client.get()
-                .uri("/api/v1/health/integration")
-                .exchange()
-                .expectStatus()
-                .isOk()
-                .expectBody()
-                .jsonPath("$.status")
-                .isEqualTo("DEGRADED")
-                .jsonPath("$.checks.queue.status")
-                .isEqualTo("DEGRADED")
-                .jsonPath("$.checks.queue.details.pending")
-                .isEqualTo(5000);
-    }
-
-    @Test
-    @DisplayName("BLOCKED when queue depth read fails")
-    void blockedWhenDbError() {
-        primeTokens(1);
-        when(parseRequestRepository.countByStatus(any(ParseRequestStatus.class)))
-                .thenThrow(new RuntimeException("connection lost"));
-
-        client.get()
-                .uri("/api/v1/health/integration")
-                .exchange()
-                .expectStatus()
-                .isEqualTo(503)
-                .expectBody()
-                .jsonPath("$.status")
-                .isEqualTo("BLOCKED")
-                .jsonPath("$.checks.queue.status")
-                .isEqualTo("BLOCKED");
     }
 
     private void primeTokens(int liveCount) {

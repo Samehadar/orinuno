@@ -7,8 +7,6 @@ import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
 import com.orinuno.model.KodikProxy;
 import com.orinuno.model.OrinunoDumpState;
-import com.orinuno.model.ParseRequestStatus;
-import com.orinuno.repository.ParseRequestRepository;
 import com.orinuno.service.DecoderHealthTracker;
 import com.orinuno.service.ProxyProviderService;
 import com.orinuno.service.decoder.DecoderPathCache;
@@ -37,7 +35,6 @@ public class HealthController {
     private final ProxyProviderService proxyProviderService;
     private final KodikResponseMapper kodikResponseMapper;
     private final KodikTokenRegistry kodikTokenRegistry;
-    private final ParseRequestRepository parseRequestRepository;
     private final KodikDumpService kodikDumpService;
     private final DecoderPathCache decoderPathCache;
 
@@ -231,24 +228,22 @@ public class HealthController {
             summary = "Aggregated readiness for downstream consumers (READY/DEGRADED/BLOCKED)",
             description =
                     "Single endpoint for kodik-parser (and similar) to check before submitting"
-                            + " work. Aggregates token registry, schema-drift, parse-request queue"
-                            + " depth.")
+                            + " work. Aggregates Kodik token registry + schema-drift. Parse-request"
+                            + " queue depth moved to orinuno-source-kodik's actuator after"
+                            + " ADR 0018 Phase 2.5.")
     public ResponseEntity<Map<String, Object>> integrationHealth() {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("service", "orinuno");
 
         IntegrationCheck tokens = checkTokens();
         IntegrationCheck drift = checkSchemaDrift();
-        IntegrationCheck queue = checkQueueDepth();
 
         Map<String, Object> checks = new LinkedHashMap<>();
         checks.put("tokens", tokens.toMap());
         checks.put("schemaDrift", drift.toMap());
-        checks.put("queue", queue.toMap());
         body.put("checks", checks);
 
-        IntegrationStatus overall =
-                IntegrationStatus.worst(tokens.status, drift.status, queue.status);
+        IntegrationStatus overall = IntegrationStatus.worst(tokens.status, drift.status);
         body.put("status", overall.name());
 
         HttpStatus httpStatus =
@@ -294,33 +289,6 @@ public class HealthController {
                 IntegrationStatus.DEGRADED,
                 "Drift detected in " + drifts.size() + " type(s); see /api/v1/health/schema-drift",
                 details);
-    }
-
-    private IntegrationCheck checkQueueDepth() {
-        long pending = safeCount(ParseRequestStatus.PENDING);
-        long running = safeCount(ParseRequestStatus.RUNNING);
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("pending", pending);
-        details.put("running", running);
-        if (pending < 0 || running < 0) {
-            return new IntegrationCheck(
-                    IntegrationStatus.BLOCKED, "Queue depth unavailable (DB error)", details);
-        }
-        if (pending >= 1000) {
-            return new IntegrationCheck(
-                    IntegrationStatus.DEGRADED,
-                    "PENDING queue is large (" + pending + " rows) — worker may be falling behind",
-                    details);
-        }
-        return new IntegrationCheck(IntegrationStatus.READY, "Queue depth nominal", details);
-    }
-
-    private long safeCount(ParseRequestStatus status) {
-        try {
-            return parseRequestRepository.countByStatus(status);
-        } catch (RuntimeException e) {
-            return -1L;
-        }
     }
 
     private enum IntegrationStatus {
