@@ -25,6 +25,13 @@ public class KodikDecoderProperties {
     private int refreshBatchSize = 50;
 
     /**
+     * Pace gate between successive SDK requests during search + decode (formerly
+     * orinuno.kodik.request-delay-ms in orinuno-app's OrinunoProperties.KodikProperties).
+     * Default 500ms preserves legacy behaviour.
+     */
+    private long requestDelayMs = 500;
+
+    /**
      * DECODE-8 — when {@code true} AND Playwright is wired up, the orchestrator falls back to a
      * Playwright network-sniff decoder when the regex/JS path returns empty. Disabled by default
      * because Playwright is heavyweight (full Chromium); enable when you've observed regex breakage
