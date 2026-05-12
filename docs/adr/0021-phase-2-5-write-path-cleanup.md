@@ -39,7 +39,7 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 ### Block A — storage authority cleanup
 
 - **A2-half (done in this PR)** — remove dead L3 + `remote_source_watermark` Liquibase from orinuno-app. Zero behavior change (orinuno-app's primary DS already didn't read those tables; canonical copies live in `orinuno_catalog`).
-- **A3 (dumps)** — `KodikDumpService` + `DumpScheduler` + `KodikDumpBootstrapService` + `orinuno_dump_state` table — decide ownership. Either (a) keep in orinuno-app as platform infrastructure (the calendar/dump polling is source-agnostic in principle), or (b) move into `meter` as the catalog ingestion bootstrap. Recommendation: (a) for now, revisit only if jut.su or future sources start needing equivalent dump bootstrap.
+- **A3 (dumps)** — `KodikDumpService` + `DumpScheduler` + `KodikDumpBootstrapService` + `orinuno_dump_state` table. **Decision (2026-05-12): Kodik-specific, eventually moves to `orinuno-source-kodik`.** Evidence: `KodikDumpService` imports `com.kodik.client.http.RotatingUserAgentProvider` from kodik-sdk and polls `https://dumps.kodikres.com/{calendar,serials,films}.json`; `KodikDumpBootstrapService` injects orinuno-app's `ContentService` to write `kodik_content` rows. None of the surface is source-agnostic — the "platform" framing in the earlier audit was misleading. **Blocked on C1** (the ContentService stack must move before the bootstrap service can follow). Stays in orinuno-app for now without a tracker `⏳ open` shame — its blocker is C1, not a missing decision.
 - **A6** — drop L1 `kodik_*` changelogs from orinuno-app's `liquibase-changelog.yaml`. Predicate: every consumer of `KodikContent` / `KodikEpisodeVariant` in orinuno-app must be either (1) deleted, (2) moved to source-kodik, or (3) refactored to read via HTTP to source-kodik or via meter's L3 read-path. Blocks A8.
 - **A7** — drop L1 `jutsu_*` changelogs from orinuno-app's `liquibase-changelog.yaml`. Same predicate, applied to `JutsuTitle` / `JutsuEpisode` consumers.
 
@@ -103,7 +103,7 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 |------|--------|
 | ADR 0021 + index update | ✅ commit `add982e` |
 | A2-half — drop dead L3 + watermark changelogs from orinuno-app | ✅ commit `a768bc7` |
-| A3 — decide dumps ownership | ⏳ open |
+| A3 — decide dumps ownership | ✅ decided 2026-05-12 (Kodik-specific, blocked on C1 to relocate) |
 | A6 — drop L1 kodik_* changelogs from orinuno-app | ⏳ blocked on Block B + C |
 | A7 — drop L1 jutsu_* changelogs from orinuno-app | ⏳ blocked on jutsu sync scheduler move |
 | B3-a-1 — L2 Liquibase in meter | ✅ commit `600815b` |
