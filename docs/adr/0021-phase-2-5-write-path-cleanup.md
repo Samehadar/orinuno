@@ -88,7 +88,12 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 - `600815b` feat(meter) — L2 `episode_source` + `episode_video` Liquibase in meter (**B3-a-1**).
 - `d4b3474` feat(meter) — `EpisodeSource` + `EpisodeVideo` entities + MyBatis repos in meter (**B3-a-2**).
 - `d963a1b` feat(meter) — `CatalogSinkEventEmitter` writes L2 `episode_source` from events (**B2**).
-- `<this PR>` docs(adr) — record B2-decoded prerequisite + tracker refresh.
+- `92c5493` docs(adr-0021) — record B2-decoded prerequisite + tracker refresh.
+- `099bff8` docs(adr-0021) — A3 dumps decision (Kodik-specific, blocked on C1).
+- `3a3ea31` test(meter) — B2 end-to-end pipeline IT pins the SourceCatalogEvent →
+  catalog_content + episode_source contract against real MyBatis + Testcontainers
+  MySQL; also fixes meter/pom.xml so `-DexcludedGroups=none` actually overrides
+  the `e2e` filter from the CLI.
 
 ## Risks of leaving the gap open
 
@@ -109,6 +114,7 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 | B3-a-1 — L2 Liquibase in meter | ✅ commit `600815b` |
 | B3-a-2 — L2 entities + repos in meter | ✅ commit `d4b3474` |
 | B2 — `CatalogSinkEventEmitter` writes `episode_source` from events | ✅ commit `d963a1b` |
+| B2 end-to-end IT — Spring context + Testcontainers MySQL, poll → emit → row | ✅ commit `3a3ea31` |
 | B2-decoded — post-decode URL channel (event variant or meter API) | ⏳ open — newly identified prereq for B1 |
 | B1 — delete `KodikEpisodeDualWriteService`, route through events | ⏳ blocked on B2-decoded |
 | B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on B1 |
