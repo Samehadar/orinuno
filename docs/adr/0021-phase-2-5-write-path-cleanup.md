@@ -109,6 +109,13 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
   VariantDecoded → `episode_video` test that uses the autowired controller
   bean directly (Spring context + Testcontainers MySQL stay shared with the
   poller-path test).
+- `e7e7e0a` refactor(orinuno-app) — **B1** closes. `KodikEpisodeDualWriteService`
+  + its test are gone (-298 LOC); `ParserService.persistDecode` no longer
+  touches `episode_source` / `episode_video` directly. meter is now the sole
+  writer of both L2 tables. `EpisodeSource` / `EpisodeVideo` models + repos
+  stay in orinuno-app as **read-only** for `MultiSourceController` +
+  `MultiSourceRanker` — those readers see the orinuno-schema L2 tables go
+  stale until Block B3/C migrates them to read from `orinuno_catalog`.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -139,8 +146,8 @@ The trackers in ADR 0018 §"Tracker", ADR 0019 §"Tracker", and ADR 0020 §"Trac
 | B2 — `CatalogSinkEventEmitter` writes `episode_source` from events | ✅ commit `d963a1b` |
 | B2 end-to-end IT — Spring context + Testcontainers MySQL, poll → emit → row | ✅ commit `3a3ea31` |
 | B2-decoded — post-decode URL channel (event variant + meter push endpoint) | ✅ commits `fb04e92` (contract+meter), `297e931` (orinuno-app emit), `4d13912` (IT) |
-| B1 — delete `KodikEpisodeDualWriteService`, route through events | ⏳ unblocked by B2-decoded; held until one migration window proves the push path reliable, then KEDW is dead weight |
-| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on B1 |
+| B1 — delete `KodikEpisodeDualWriteService`, route through events | ✅ commit `e7e7e0a` (models + repos stay read-only for `MultiSourceController` / `MultiSourceRanker`; orinuno-schema L2 tables stop receiving fresh writes — known stale-read trade-off until Block B3/C) |
+| B3 — drop L2 Liquibase from orinuno-app | ⏳ blocked on migrating `MultiSourceController` + `MultiSourceRanker` off the orinuno-schema L2 reads (Block C overlap) |
 | C1 — `ContentController` + `ContentService` triage | ⏳ open |
 | C2 — `StreamController` + `HlsManifestService` to source-kodik | ⏳ open |
 | C3 — `DownloadController` + `VideoDownloadService` to source-kodik | ⏳ open |
