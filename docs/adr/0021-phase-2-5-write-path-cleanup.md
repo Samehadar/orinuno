@@ -217,6 +217,13 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
   `SourceEventMapperTest` + `KodikPosterShapeLiveIT` deleted;
   `ContentMapper` trimmed to the two read-side `toDto` overloads.
   -1285 LOC across 9 files.
+- `5335517` refactor(orinuno-app) — **C5**: orphan META-1 enrichment
+  slice gone. `service/enrichment/*` (5 clients + EnrichmentService) +
+  `KodikContentEnrichmentRepository` + `KodikContentEnrichment` model +
+  XML mapper + Liquibase changeset + 2 unit tests deleted. -888 LOC
+  across 12 files. Audit confirmed nothing outside the enrichment
+  package referenced the service; source-kodik keeps its own copy of
+  the table for future META-1 work.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -255,13 +262,13 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
 | C1.2 — proxy `/api/v1/content/` via `KodikUpstreamProxyFilter`; drop orinuno-app originals | ✅ commit `83daac3` |
 | C1.3 — `MultiSourceController` drops `ContentService` dep, calls `ContentRepository` directly | ✅ commit `cbc6b98` |
 | C1.4 — flip `MultiSourceController` L2 reads to meter-readonly `orinuno_catalog` | ✅ commit `00053e0` (also wired `ORINUNO_CATALOG_READ_URL` into docker-compose.yml + monolith overlay) |
-| C2.1 — port `StreamController` + `HlsController` + `HlsManifestService` → source-kodik | ⏳ open |
+| C2.1 — port `StreamController` + `HlsController` + `HlsManifestService` → source-kodik | ⏳ blocked on Block D (deps: `KodikVideoDecoderService`, `PlaywrightVideoFetcher`, `VideoDownloadService`) |
 | C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ⏳ blocked on C2.1 |
-| C3.1 — port `DownloadController` + `VideoDownloadService` → source-kodik | ⏳ blocked on E2 (relocate Kodik storage knobs first) |
+| C3.1 — port `DownloadController` + `VideoDownloadService` → source-kodik | ⏳ blocked on E2 (Kodik storage knobs) + Block D (decoder deps) |
 | C3.2 — proxy `/api/v1/download/`; drop orinuno-app originals | ⏳ blocked on C3.1 |
 | C4.1 — port `ExportController` + L1-Kodik half of `ExportDataService` → source-kodik | ✅ commit `c4127a7` |
 | C4.2 — proxy `/api/v1/export/`; delete `ExportController`/`ExportDataService`/`SourceEventMapper`/`ContentExportDto`/poster live-IT in orinuno-app | ✅ commit `044deda` |
-| C5.1 — drop enrichment slice from orinuno-app (after caller scope confirmed) | ⏳ open |
+| C5 — drop enrichment slice from orinuno-app | ✅ commit `5335517` (orphan; nothing in orinuno-app calls EnrichmentService outside its own package + tests; source-kodik holds its own copy of the table for future META-1 reactivation) |
 | D1 — parse slice to source-kodik (ADR 0018 Phase 2.5) | ⏳ blocked on Block A + B + C |
 | D2 — `ParseUpstreamProxyFilter` | ⏳ blocked on D1 |
 | D3 — delete orinuno-app parse originals + orinuno-schema table | ⏳ blocked on D1 |
