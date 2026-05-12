@@ -45,6 +45,14 @@ services:
       # orinuno-source-jutsu. Leave blank to keep orinuno-app's local
       # JutsuApiController + JutsuStreamProxyController.
       ORINUNO_SOURCE_JUTSU_BASE_URL: http://source-jutsu:8086
+      # ADR 0021 §C1.4 — meter-readonly DS for MultiSourceController + the
+      # CatalogContent / CatalogEpisode{Source,Video}ReadRepository slice.
+      # Points at the same MySQL instance, orinuno_catalog schema (meter is
+      # the writer). Production should swap the user to one with SELECT-only
+      # grants per ADR 0018 Phase 5.9.
+      ORINUNO_CATALOG_READ_URL: jdbc:mysql://db:3306/orinuno_catalog?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      ORINUNO_CATALOG_READ_USERNAME: root
+      ORINUNO_CATALOG_READ_PASSWORD: root
     volumes:
       - ./data:/app/data
     restart: unless-stopped
