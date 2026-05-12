@@ -56,6 +56,7 @@ public final class JutsuCatalogClient {
     private final WebClient client;
     private final JutsuRateLimiter rateLimiter;
     private final JutsuDriftDetector driftDetector;
+    private final String baseUrl;
 
     public JutsuCatalogClient(
             JutsuConfig config,
@@ -70,17 +71,22 @@ public final class JutsuCatalogClient {
         if (webClientBuilder == null) {
             throw new IllegalArgumentException("webClientBuilder must not be null");
         }
+        this.baseUrl = stripTrailingSlash(config.baseUrl());
         this.client =
                 webClientBuilder
                         .defaultHeader(HttpHeaders.USER_AGENT, config.userAgent())
                         .defaultHeader(HttpHeaders.ACCEPT, "*/*")
                         .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU,ru;q=0.9,en;q=0.8")
-                        .defaultHeader(HttpHeaders.ORIGIN, "https://jut.su")
-                        .defaultHeader(HttpHeaders.REFERER, "https://jut.su/anime/")
+                        .defaultHeader(HttpHeaders.ORIGIN, baseUrl)
+                        .defaultHeader(HttpHeaders.REFERER, baseUrl + "/anime/")
                         .defaultHeader("X-Requested-With", "XMLHttpRequest")
                         .build();
         this.rateLimiter = rateLimiter;
         this.driftDetector = driftDetector;
+    }
+
+    private static String stripTrailingSlash(String url) {
+        return url != null && url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     /** Fetch one catalog page. Always anonymous — see class doc for the rationale. */
@@ -95,7 +101,7 @@ public final class JutsuCatalogClient {
     }
 
     private Mono<String> performPost(JutsuCatalogRequest request) {
-        String absolutePath = "https://jut.su" + request.resolvePath();
+        String absolutePath = baseUrl + request.resolvePath();
         String body = composeFormBody(request);
         String parserSource = "JutsuCatalogClient";
         JutsuParserContext httpCtx = JutsuParserContext.lenient(driftDetector, parserSource);

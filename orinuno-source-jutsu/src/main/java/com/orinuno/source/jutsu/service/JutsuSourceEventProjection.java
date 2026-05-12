@@ -14,6 +14,7 @@
 package com.orinuno.source.jutsu.service;
 
 import com.orinuno.contract.source.SourceCatalogEvent;
+import com.orinuno.source.jutsu.JutsuSourceProperties;
 import com.orinuno.source.jutsu.mapper.JutsuSourceEventMapper;
 import com.orinuno.source.jutsu.model.JutsuEpisode;
 import com.orinuno.source.jutsu.model.JutsuFilm;
@@ -37,6 +38,7 @@ public class JutsuSourceEventProjection {
     private final JutsuEpisodeRepository episodeRepository;
     private final JutsuFilmRepository filmRepository;
     private final Clock clock;
+    private final JutsuSourceProperties props;
 
     /**
      * Page through jut.su titles oldest-first by {@code last_seen_at}, hydrating each one with its
@@ -56,7 +58,8 @@ public class JutsuSourceEventProjection {
                             List<JutsuEpisode> episodes =
                                     episodeRepository.findBySlug(title.getSlug());
                             List<JutsuFilm> films = filmRepository.findBySlug(title.getSlug());
-                            return JutsuSourceEventMapper.toEvent(title, episodes, films, clock);
+                            return JutsuSourceEventMapper.toEvent(
+                                    title, episodes, films, clock, props.getBaseUrl());
                         })
                 .toList();
     }

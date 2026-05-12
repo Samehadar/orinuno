@@ -30,6 +30,7 @@ public final class JutsuAnimeInfoClient {
     private final JutsuRateLimiter rateLimiter;
     private final JutsuSessionManager sessionManager;
     private final JutsuDriftDetector driftDetector;
+    private final String baseUrl;
 
     public JutsuAnimeInfoClient(
             JutsuConfig config,
@@ -48,6 +49,10 @@ public final class JutsuAnimeInfoClient {
         if (webClientBuilder == null) {
             throw new IllegalArgumentException("webClientBuilder must not be null");
         }
+        this.baseUrl =
+                config.baseUrl() != null && config.baseUrl().endsWith("/")
+                        ? config.baseUrl().substring(0, config.baseUrl().length() - 1)
+                        : config.baseUrl();
         this.client =
                 webClientBuilder
                         .defaultHeader(HttpHeaders.USER_AGENT, config.userAgent())
@@ -55,7 +60,7 @@ public final class JutsuAnimeInfoClient {
                                 HttpHeaders.ACCEPT,
                                 "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                         .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU,ru;q=0.9,en;q=0.8")
-                        .defaultHeader(HttpHeaders.REFERER, "https://jut.su/")
+                        .defaultHeader(HttpHeaders.REFERER, baseUrl + "/")
                         .build();
         this.rateLimiter = rateLimiter;
         this.sessionManager = sessionManager;
@@ -67,7 +72,7 @@ public final class JutsuAnimeInfoClient {
         if (slug == null || slug.isBlank()) {
             return Mono.error(new IllegalArgumentException("slug must not be blank"));
         }
-        String url = "https://jut.su/" + slug + "/";
+        String url = baseUrl + "/" + slug + "/";
         return rateLimiter
                 .acquire()
                 .then(sessionManager.cookieHeader().defaultIfEmpty(""))

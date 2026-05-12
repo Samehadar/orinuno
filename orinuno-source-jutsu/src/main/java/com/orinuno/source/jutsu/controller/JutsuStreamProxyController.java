@@ -2,6 +2,7 @@ package com.orinuno.source.jutsu.controller;
 
 import com.orinuno.jutsu.auth.JutsuSessionManager;
 import com.orinuno.jutsu.ratelimit.JutsuRateLimiter;
+import com.orinuno.source.jutsu.JutsuSourceProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -120,17 +121,22 @@ public class JutsuStreamProxyController {
     public JutsuStreamProxyController(
             JutsuRateLimiter rateLimiter,
             JutsuSessionManager sessionManager,
+            JutsuSourceProperties props,
             WebClient.Builder webClientBuilder,
             MeterRegistry meterRegistry) {
         this.rateLimiter = rateLimiter;
         this.sessionManager = sessionManager;
         this.meterRegistry = meterRegistry;
+        String baseUrl =
+                props.getBaseUrl() != null && props.getBaseUrl().endsWith("/")
+                        ? props.getBaseUrl().substring(0, props.getBaseUrl().length() - 1)
+                        : props.getBaseUrl();
         // Dedicated WebClient. We deliberately do NOT raise the in-memory codec limit because
         // {@code bodyToFlux(DataBuffer.class)} streams chunk-by-chunk and never needs the limit.
         this.streamClient =
                 webClientBuilder
                         .defaultHeader(HttpHeaders.USER_AGENT, STABLE_DESKTOP_UA)
-                        .defaultHeader(HttpHeaders.REFERER, "https://jut.su/")
+                        .defaultHeader(HttpHeaders.REFERER, baseUrl + "/")
                         .defaultHeader(HttpHeaders.ACCEPT, "*/*")
                         .build();
         this.forwardedRequests =
