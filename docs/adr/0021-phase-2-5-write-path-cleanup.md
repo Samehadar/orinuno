@@ -117,9 +117,81 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
 
 ### Block D — parse-request slice (the original Phase 2.5)
 
-- **D1** — once Block A + B + C land, `ParserService` + `KodikVideoDecoderService` + `RequestWorker` + decoder helpers have no orinuno-app domain dependencies left except the SDK (`com.kodik.*`) + contract (`com.orinuno.contract.source.*`). Move them to source-kodik. `ParseRequestController`, `ParseRequestService`, `ParseRequestDto`, `RequestHashService`, `ParseRequestMetrics`, `ProgressReporter`, `ThrottledProgressReporter`, `ParseRequestQueueService` go with them.
-- **D2** — `ParseUpstreamProxyFilter` in orinuno-app, gated on `orinuno.source-kodik.base-url`. Symmetric with the existing `KodikUpstreamProxyFilter` / `JutsuUpstreamProxyFilter`.
-- **D3** — delete the orinuno-app originals + the orinuno-schema `orinuno_parse_request` changelog. The table canonically lives in `orinuno_source_kodik` from then on.
+The 2026-05-12 audit revealed that a previous session already pre-staged most of the data layer in source-kodik. The remaining work is the application layer (services + controllers + decoder helpers) plus the cutover. Concrete decomposition follows.
+
+#### What's already in source-kodik (D-prep, no further work)
+
+- `model/ParseRequestPhase`, `model/ParseRequestStatus`, `model/OrinunoParseRequest`
+- `model/KodikDecoderPathCacheEntry`
+- `repository/ParseRequestRepository`, `repository/KodikDecoderPathCacheRepository`
+- `repository/ContentRepository`, `repository/EpisodeVariantRepository`
+- `db/changelog/scripts/20260426010000_create_orinuno_parse_request.sql` + `db/changelog/scripts/20260502020000_create_kodik_decoder_path_cache.sql`
+- After commit `e8f6a26`: `model/dto/ParseRequestDto`, `model/dto/ParseRequestDtoView`, `service/requestlog/RequestHashService`, `service/requestlog/ParseRequestMetrics` (metric names rebased to `orinuno.source.kodik.*`)
+
+#### D1a — port queue services (no decoder coupling)
+
+- `service/requestlog/ParseRequestService` (queue API: enqueue / find / list / cancel). Drops the `OrinunoProperties.RequestsProperties` dep — inline the two knobs (`defaultPageLimit` / `maxPageLimit`) as `@Value("${orinuno.source-kodik.requests.default-page-limit:50}")` etc., or introduce a small `SourceKodikRequestsProperties` record.
+- `service/requestlog/ParseRequestQueueService` (durable claim / heartbeat / terminal-transition primitive).
+- `service/requestlog/ProgressReporter` (interface).
+- `service/requestlog/ThrottledProgressReporter` (DB heartbeat throttle implementation).
+
+No external callers in source-kodik yet → these are orphans until D1c lands ParseRequestController. That's fine for the migration sequence.
+
+#### D1b — port decoder stack
+
+- `service/KodikVideoDecoderService` (regex/JS decoder against Kodik iframe).
+- `service/PlaywrightVideoFetcher` (Playwright network-sniff fallback).
+- `service/decoder/KodikDecodeOrchestrator` (DECODE-8 router across REGEX/SNIFF).
+- `service/decoder/PlaywrightSniffDecoder`.
+- `service/decoder/DecoderPathCache` (in-memory + DB cache for decoded paths).
+- `service/metrics/KodikCdnHostMetrics` (CDN host hit-rate counter — already Kodik-specific).
+
+These pull in `kodik-sdk` (already a dep) + `OrinunoProperties.DecoderProperties` + `PlaywrightProperties`. Decoder + Playwright config knobs need to migrate too — either inlined or as a new `SourceKodikDecoderProperties`/`SourceKodikPlaywrightProperties` slice.
+
+#### D1c — port the orchestrator + controllers
+
+- `service/ParserService` (the full parse pipeline: search → decode → persist). After D1a + D1b it depends only on classes inside source-kodik + the SDK + the contract.
+- `service/requestlog/RequestWorker` (scheduled queue consumer).
+- `mapper/EntityFactory` (KodikSearchResponse → KodikContent / KodikEpisodeVariant entity builder).
+- `controller/ParseController` (`POST /api/v1/parse/search`, `/decode/*`).
+- `controller/ParseRequestController` (`POST /api/v1/parse/requests`, `GET /api/v1/parse/requests/{id}`).
+
+The `MeterDecodedEventPublisher` (commit `297e931`, currently in orinuno-app) moves with ParserService too — it consumes the SDK's `DecodeAttemptResult` + the contract's `SourceCatalogEvent`, no orinuno-app domain types.
+
+#### D1d — port matching tests
+
+- `ParserServiceTest` + `ParserServiceErrorPathsTest`
+- `DecoderMaintenanceSchedulerTest`
+- `ParseRequestServiceTest` + `ParseRequestQueueServiceTest`
+- `RequestWorkerTest`
+- `MeterDecodedEventPublisherTest`
+- `KodikDecodeOrchestratorTest`
+- etc.
+
+Test ports happen alongside their main-class siblings; this is bookkeeping for the tracker.
+
+#### D2 — reverse-proxy filter prefix
+
+After D1c, `/api/v1/parse/` is served by source-kodik. Add `"/api/v1/parse/"` to `KodikUpstreamProxyFilter.PROXY_PREFIXES` so demo UI + external callers keep hitting orinuno-app and get transparently forwarded. Same pattern as C1.2 / C4.2 cutovers.
+
+#### D3 — delete originals + orinuno-schema parse-request table
+
+- Delete `orinuno-app/.../service/ParserService.java` + `KodikVideoDecoderService.java` + the entire `service/decoder/` + `service/requestlog/` packages + matching tests.
+- Delete `orinuno-app/.../controller/ParseController.java` + `ParseRequestController.java`.
+- Delete `orinuno-app/.../mapper/EntityFactory.java`.
+- Delete `orinuno-app/.../model/OrinunoParseRequest.java` + `ParseRequestPhase.java` + `ParseRequestStatus.java` + `model/dto/ParseRequestDto.java` + `ParseRequestDtoView.java`.
+- Delete `orinuno-app/.../service/MeterDecodedEventPublisher.java` (moves with ParserService in D1c).
+- Delete `repository/ParseRequestRepository.java` + matching XML mapper.
+- Delete the orinuno-schema `20260426010000_create_orinuno_parse_request.sql` changeset + drop from master `liquibase-changelog.yaml`. Same `EpisodeVariantMapper` JOIN caveat as B3-full: deferred until the remaining JOIN-against-orinuno-schema-L2 queries in `EpisodeVariantMapper.xml` migrate off the primary DS.
+- Delete `ContentService.java` + `ContentMapper.java` (after D1c moves their last writers / users out).
+- Delete `service/PlaywrightVideoFetcher.java` and its config.
+- Drop the `OrinunoProperties.KodikProperties` subtree (Block E2 piggybacks here).
+
+Sequence: D3 must wait for `EpisodeVariantMapper.xml` decoded-skip JOINs to be migrated off the orinuno-schema L2 tables (or for ParserService's decoded-skip query to move into the source-kodik decoder), so this is the final blocker on B3-full as well.
+
+#### D5 — KodikDumpBootstrapService follow-up
+
+A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `DumpScheduler`, `orinuno_dump_state` table) stays Kodik-specific and moves with the parse pipeline. After D1c lands, the bootstrap service's last orinuno-app dep (`ContentService.findOrCreateContent` + `saveVariants`) goes away — port it alongside D3's cleanup or as a small follow-up. The matching `20260502010000_create_orinuno_dump_state.sql` changeset can move to source-kodik then too.
 
 ### Block E — guards + docs
 
@@ -224,6 +296,14 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
   across 12 files. Audit confirmed nothing outside the enrichment
   package referenced the service; source-kodik keeps its own copy of
   the table for future META-1 work.
+- `e8f6a26` feat(source-kodik) — **D-prep**: parse-request leaf classes
+  (ParseRequestDto + ParseRequestDtoView + RequestHashService +
+  ParseRequestMetrics) added to source-kodik. +257 LOC, no orinuno-app
+  changes. Combined with the previous-session D-prep that landed the
+  data layer (Phase/Status models, OrinunoParseRequest, repositories,
+  Liquibase changeset), source-kodik now hosts ~half the Block D files
+  needed before D1a / D1b / D1c can land. Refined Block D decomposition
+  in this PR.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -269,9 +349,14 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
 | C4.1 — port `ExportController` + L1-Kodik half of `ExportDataService` → source-kodik | ✅ commit `c4127a7` |
 | C4.2 — proxy `/api/v1/export/`; delete `ExportController`/`ExportDataService`/`SourceEventMapper`/`ContentExportDto`/poster live-IT in orinuno-app | ✅ commit `044deda` |
 | C5 — drop enrichment slice from orinuno-app | ✅ commit `5335517` (orphan; nothing in orinuno-app calls EnrichmentService outside its own package + tests; source-kodik holds its own copy of the table for future META-1 reactivation) |
-| D1 — parse slice to source-kodik (ADR 0018 Phase 2.5) | ⏳ blocked on Block A + B + C |
-| D2 — `ParseUpstreamProxyFilter` | ⏳ blocked on D1 |
-| D3 — delete orinuno-app parse originals + orinuno-schema table | ⏳ blocked on D1 |
+| D-prep — leaf data classes (DTOs + RequestHashService + ParseRequestMetrics) in source-kodik | ✅ commit `e8f6a26` |
+| D1a — port queue services (ParseRequestService + ParseRequestQueueService + ProgressReporter + ThrottledProgressReporter) | ⏳ open |
+| D1b — port decoder stack (KodikVideoDecoderService + PlaywrightVideoFetcher + KodikDecodeOrchestrator + PlaywrightSniffDecoder + DecoderPathCache + KodikCdnHostMetrics) | ⏳ blocked on D1a (shared `OrinunoProperties` subtree relocate) |
+| D1c — port ParserService + RequestWorker + EntityFactory + ParseController + ParseRequestController + MeterDecodedEventPublisher | ⏳ blocked on D1b |
+| D1d — port matching tests | ⏳ blocked on D1c |
+| D2 — `/api/v1/parse/` → `KodikUpstreamProxyFilter` | ⏳ blocked on D1c |
+| D3 — delete orinuno-app parse originals + orinuno-schema `orinuno_parse_request` changeset; closes B3-full at the same time | ⏳ blocked on D2 |
+| D5 — relocate `KodikDumpBootstrapService` + `orinuno_dump_state` changeset (A3 decision) | ⏳ blocked on D3 (needs `ContentService.findOrCreateContent` callers gone first) |
 | E1 — ArchUnit guard against Kodik imports in orinuno-app | ⏳ blocked on Block C |
 | E2 — `OrinunoProperties.KodikProperties` → `KodikSourceProperties` | ⏳ blocked on Block C |
 | E3 — README + AGENTS.md sync to final shape | ⏳ blocked on Block C |
