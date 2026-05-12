@@ -28,6 +28,8 @@ databaseChangeLog:
   - include:
       file: db/changelog/scripts/20260426010000_create_orinuno_parse_request.sql
   - include:
+      file: db/changelog/scripts/20260502010000_create_orinuno_dump_state.sql
+  - include:
       file: db/changelog/scripts/20260502020000_create_kodik_decoder_path_cache.sql
   - include:
       file: db/changelog/scripts/20260502030000_create_kodik_calendar_state.sql

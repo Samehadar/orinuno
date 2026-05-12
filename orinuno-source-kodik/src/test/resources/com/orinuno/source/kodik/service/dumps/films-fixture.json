@@ -1,0 +1,62 @@
+[
+  {
+    "id": "movie-117218",
+    "type": "anime",
+    "title": "Test Anime Movie",
+    "title_orig": "Test Anime",
+    "other_title": "T.A.M.",
+    "year": 2026,
+    "quality": "WEB-DLRip 720p",
+    "translation": {"id": 910, "title": "AniStar", "type": "voice"},
+    "kp_link": null,
+    "kinopoisk_id": "kp-1234",
+    "imdb_id": null,
+    "shikimori_id": "62726",
+    "worldart_link": "http://example.test/wa",
+    "link": "//kodikplayer.com/video/117218/abc/720p",
+    "player_link": "//kodikplayer.com/video/117218/abc/720p",
+    "camrip": false,
+    "lgbt": false,
+    "blocked_countries": [],
+    "created_at": "2026-05-01T00:00:00Z",
+    "updated_at": "2026-05-02T00:00:00Z",
+    "material_data": {
+      "title": "Test Anime Movie",
+      "anime_kind": "movie",
+      "all_status": "released",
+      "all_genres": ["Adventure", "Sci-Fi"]
+    }
+  },
+  {
+    "id": "movie-99",
+    "type": "foreign-movie",
+    "title": "Foreign Film",
+    "year": 2025,
+    "quality": "BDRip 1080p",
+    "translation": {"id": 5, "title": "Original", "type": "subtitles"},
+    "kinopoisk_id": "kp-5678",
+    "link": "//kodikplayer.com/video/99/x/1080p",
+    "blocked_countries": ["DE"]
+  },
+  {
+    "this_is_not": "a_real_dump_entry_just_a_garbage_object_for_skip_test"
+  },
+  {
+    "id": "serial-42",
+    "type": "anime-serial",
+    "title": "Tiny Serial",
+    "year": 2026,
+    "translation": {"id": 1, "title": "Anidub", "type": "voice"},
+    "shikimori_id": "999",
+    "seasons": {
+      "1": {
+        "link": "//kodikplayer.com/seria/42/x/720p",
+        "title": "Season 1",
+        "episodes": {
+          "1": "//kodikplayer.com/seria/42/x/720p?ep=1",
+          "2": "//kodikplayer.com/seria/42/x/720p?ep=2"
+        }
+      }
+    }
+  }
+]
