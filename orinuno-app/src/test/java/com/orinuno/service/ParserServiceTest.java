@@ -59,6 +59,7 @@ class ParserServiceTest {
                         properties,
                         kodikCdnHostMetrics,
                         decoderMetrics,
+                        null,
                         null);
     }
 
@@ -232,6 +233,7 @@ class ParserServiceTest {
                         props,
                         kodikCdnHostMetrics,
                         decoderMetrics,
+                        null,
                         null);
 
         when(episodeVariantRepository.findExpiredLinks(anyInt(), anyInt())).thenReturn(List.of());
@@ -260,6 +262,7 @@ class ParserServiceTest {
                         props,
                         kodikCdnHostMetrics,
                         decoderMetrics,
+                        null,
                         null);
 
         when(episodeVariantRepository.findFailedDecode(anyInt())).thenReturn(List.of());
@@ -288,6 +291,7 @@ class ParserServiceTest {
                         props,
                         kodikCdnHostMetrics,
                         decoderMetrics,
+                        null,
                         null);
 
         List<KodikEpisodeVariant> expired =
