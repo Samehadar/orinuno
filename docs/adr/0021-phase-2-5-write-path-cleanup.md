@@ -412,7 +412,7 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | ADR 0021 + index update | ✅ commit `add982e` |
 | A2-half — drop dead L3 + watermark changelogs from orinuno-app | ✅ commit `a768bc7` |
 | A3 — decide dumps ownership | ✅ decided 2026-05-12 (Kodik-specific, blocked on C1 to relocate) |
-| A6 — drop L1 kodik_* changelogs from orinuno-app | ⏳ blocked on Block B + C |
+| A6 — drop L1 kodik_* changelogs from orinuno-app | ✅ collapsed into commit `b5c722d` (E2 stage 3a). With Block B/C/D landed and orinuno-app holding zero MyBatis mappers + zero L1 / L2 / L3 writes against its primary DS, the per-context changelog pruning stopped needing a dedicated commit — stage 3a wiped the entire `db/changelog/scripts/` directory + master `liquibase-changelog.yaml` to empty in one stroke. Verified: `find orinuno-app/src/main/resources -name "*.sql"` returns nothing; `liquibase-changelog.yaml` ships `databaseChangeLog: []` so Spring Boot's Liquibase auto-config still finds a master without applying any DDL. |
 | A7 — drop L1 jutsu_* changelogs from orinuno-app | ✅ commit `aca0475` (also dropped the jutsu sync schedulers + live-fallback + read services + DTOs — none had non-self callers after `2543816`) |
 | B3-a-1 — L2 Liquibase in meter | ✅ commit `600815b` |
 | B3-a-2 — L2 entities + repos in meter | ✅ commit `d4b3474` |
@@ -421,7 +421,7 @@ A3 decided the dumps slice (`KodikDumpService`, `KodikDumpBootstrapService`, `Du
 | B2-decoded — post-decode URL channel (event variant + meter push endpoint) | ✅ commits `fb04e92` (contract+meter), `297e931` (orinuno-app emit), `4d13912` (IT) |
 | B1 — delete `KodikEpisodeDualWriteService`, route through events | ✅ commit `e7e7e0a` (models + repos stay read-only for `MultiSourceController` / `MultiSourceRanker`; orinuno-schema L2 tables stop receiving fresh writes — known stale-read trade-off until Block B3/C) |
 | B3-partial — drop orphan MyBatis L2 surface (repos + mappers) from orinuno-app | ✅ commit `fa7f050` |
-| B3-full — drop L2 Liquibase from orinuno-app (incl. backfill) | ⏳ blocked on migrating `EpisodeVariantMapper.xml`'s JOINs (`findByIdWithDecodedVideo` / `findExpiredLinks` / similar) off the orinuno-schema L2 tables — either via the meter-readonly JdbcTemplate or by moving the decoded-skip logic into the source-kodik ParserService in Block D |
+| B3-full — drop L2 Liquibase from orinuno-app (incl. backfill) | ✅ collapsed into commit `b5c722d` (E2 stage 3a). The blocker (`EpisodeVariantMapper.xml`'s `findByIdWithDecodedVideo` / `findExpiredLinks` JOINs against the orinuno-schema L2 tables) cleared earlier: B3-partial removed the mapper, then D3 retired every remaining consumer of the L2 read path (ParserService + decoder maintenance both moved to source-kodik against the meter-readonly DS). Stage 3a's full `scripts/*.sql` wipe carries the L2 changesets (`create_episode_source.sql`, `create_episode_video.sql`, `backfill_episode_video_from_kodik_variant.sql`, `drop_kodik_variant_l2_columns.sql`) along with the L1 set. orinuno-app no longer creates or owns any L2 table in its primary DS. |
 | C0.1 — delete dead orinuno-app `SourceEventController` (dup of source-kodik) | ✅ commit `1cded62` |
 | C1.1 — port `ContentController` + read half of `ContentService` → source-kodik | ✅ commit `97606eb` |
 | C1.2 — proxy `/api/v1/content/` via `KodikUpstreamProxyFilter`; drop orinuno-app originals | ✅ commit `83daac3` |
