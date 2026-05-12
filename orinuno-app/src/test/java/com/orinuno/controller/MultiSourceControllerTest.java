@@ -4,14 +4,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.orinuno.catalog.readonly.CatalogEpisodeSourceReadRepository;
+import com.orinuno.catalog.readonly.CatalogEpisodeVideoReadRepository;
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
 import com.orinuno.model.KodikContent;
 import com.orinuno.repository.ContentRepository;
-import com.orinuno.repository.EpisodeSourceRepository;
-import com.orinuno.repository.EpisodeVideoRepository;
 import com.orinuno.service.orchestration.MultiSourceRanker;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,8 +27,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 @ExtendWith(MockitoExtension.class)
 class MultiSourceControllerTest {
 
-    @Mock private EpisodeSourceRepository sourceRepository;
-    @Mock private EpisodeVideoRepository videoRepository;
+    @Mock private CatalogEpisodeSourceReadRepository sourceRepository;
+    @Mock private CatalogEpisodeVideoReadRepository videoRepository;
     @Mock private ContentRepository contentRepository;
     @Mock private JutsuClient jutsuClient;
 

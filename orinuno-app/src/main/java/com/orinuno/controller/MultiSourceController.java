@@ -1,13 +1,13 @@
 package com.orinuno.controller;
 
+import com.orinuno.catalog.readonly.CatalogEpisodeSourceReadRepository;
+import com.orinuno.catalog.readonly.CatalogEpisodeVideoReadRepository;
 import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.drift.JutsuDriftHealth;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
 import com.orinuno.model.KodikContent;
 import com.orinuno.repository.ContentRepository;
-import com.orinuno.repository.EpisodeSourceRepository;
-import com.orinuno.repository.EpisodeVideoRepository;
 import com.orinuno.service.orchestration.MultiSourceRanker;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankedCandidate;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankingPreferences;
@@ -49,19 +49,25 @@ import reactor.core.scheduler.Schedulers;
 @Slf4j
 @RestController
 @RequiredArgsConstructor
+// ADR 0021 §C1.4 — controller depends on the meter-readonly DS (Phase 5.4) for L2 reads.
+// Monolith deploys without orinuno.catalog-read.url set have no catalogReadJdbcTemplate
+// bean → the two CatalogEpisode*ReadRepository beans are also absent → this controller
+// is not wired and /api/v1/anime/* returns 404. Acceptable for OSS-contributor dev
+// boots where the ranker isn't the demo path; the docker-compose.yml full-split topology
+// always has the readonly DS configured.
+@org.springframework.boot.autoconfigure.condition.ConditionalOnBean(
+        name = "catalogReadJdbcTemplate")
 @Tag(name = "Multi-source", description = "AP-7: ranked provider candidates for an episode")
 public class MultiSourceController {
 
-    private final EpisodeSourceRepository sourceRepository;
-    private final EpisodeVideoRepository videoRepository;
+    private final CatalogEpisodeSourceReadRepository sourceRepository;
+    private final CatalogEpisodeVideoReadRepository videoRepository;
     private final MultiSourceRanker ranker;
     // ADR 0021 §C1.3 — dropped the legacy ContentService dependency; the ranker only ever
     // needed content_id from kinopoiskId, which is a one-column lookup on ContentRepository.
-    // Going through ContentService was forcing orinuno-app to keep the entire Kodik L1 read
-    // stack just for this lookup. The read against kodik_content stays orinuno-schema for
-    // now (kodik_content has a live writer via ContentService.findOrCreateContent in
-    // ParserService + KodikDumpBootstrapService); flipping to meter's catalog_content
-    // would orphan the lookup when monolith deploys don't set orinuno.catalog-read.url.
+    // The read against kodik_content stays orinuno-schema for now (kodik_content has a live
+    // writer via ContentService.findOrCreateContent in ParserService +
+    // KodikDumpBootstrapService); it moves to source-kodik with Block D.
     private final ContentRepository contentRepository;
     private final JutsuClient jutsuClient;
 

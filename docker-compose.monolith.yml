@@ -15,6 +15,13 @@ services:
     environment:
       ORINUNO_SOURCE_KODIK_BASE_URL: ""
       ORINUNO_SOURCE_JUTSU_BASE_URL: ""
+      # ADR 0021 §C1.4 — monolith has no meter, so orinuno_catalog has no
+      # writer. Leave the readonly URL blank to keep the
+      # CatalogContent/Episode{Source,Video}ReadRepository bean tree
+      # dormant; MultiSourceController degrades to 404 on /api/v1/anime/*
+      # in this profile, which is acceptable for OSS-contributor dev
+      # boots where the multi-source ranker isn't the demo path.
+      ORINUNO_CATALOG_READ_URL: ""
 
   source-kodik:
     # Compose treats `profiles` as opt-in — listing only "never" here means
