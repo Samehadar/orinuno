@@ -25,6 +25,9 @@ public final class HlsManifestParser {
     private static final Pattern STREAM_INF_BANDWIDTH =
             Pattern.compile("BANDWIDTH=(\\d+)", Pattern.CASE_INSENSITIVE);
 
+    private static final Pattern EXTINF_DURATION =
+            Pattern.compile("#EXTINF:([0-9]+(?:\\.[0-9]+)?)", Pattern.CASE_INSENSITIVE);
+
     private HlsManifestParser() {}
 
     public static boolean isValidManifest(String manifestText) {
@@ -76,33 +79,61 @@ public final class HlsManifestParser {
     }
 
     /**
-     * Extract every media-segment URI from a media playlist. Skips comments, blank lines, and any
-     * line that looks like a nested {@code .m3u8} variant (defensive — if a master playlist ever
-     * sneaks past {@link #isMasterPlaylist}, we still produce zero segments rather than queueing
-     * the variant URI as a "segment").
+     * Extract every media segment from a media playlist, each carrying the URI and the {@code
+     * #EXTINF} duration parsed from the preceding header (or {@code null} when missing/malformed).
+     * Skips comments, blank lines, and any line that looks like a nested {@code .m3u8} variant
+     * (defensive — if a master playlist ever sneaks past {@link #isMasterPlaylist}, we still
+     * produce zero segments rather than queueing the variant URI as a "segment").
      */
-    public static List<String> extractMediaSegmentUris(String manifestText) {
+    public static List<HlsSegment> extractMediaSegments(String manifestText) {
         if (manifestText == null) {
             return List.of();
         }
-        List<String> out = new ArrayList<>();
+        List<HlsSegment> out = new ArrayList<>();
+        Double pendingDuration = null;
         for (String raw : manifestText.split("\\R")) {
             String line = raw.trim();
-            if (line.isEmpty() || line.startsWith("#")) {
+            if (line.isEmpty()) {
+                continue;
+            }
+            if (line.startsWith("#EXTINF")) {
+                pendingDuration = parseExtInfDuration(line);
+                continue;
+            }
+            if (line.startsWith("#")) {
                 continue;
             }
             if (looksLikeVariantPlaylist(line)) {
+                pendingDuration = null;
                 continue;
             }
-            out.add(line);
+            out.add(new HlsSegment(line, pendingDuration));
+            pendingDuration = null;
         }
         return out;
+    }
+
+    /** Backward-compatible URI-only view over {@link #extractMediaSegments(String)}. */
+    public static List<String> extractMediaSegmentUris(String manifestText) {
+        return extractMediaSegments(manifestText).stream().map(HlsSegment::url).toList();
     }
 
     private static boolean looksLikeVariantPlaylist(String uri) {
         int q = uri.indexOf('?');
         String pathOnly = q >= 0 ? uri.substring(0, q) : uri;
         return pathOnly.toLowerCase().endsWith(".m3u8");
+    }
+
+    private static Double parseExtInfDuration(String extInfLine) {
+        Matcher m = EXTINF_DURATION.matcher(extInfLine);
+        if (m.find()) {
+            try {
+                return Double.parseDouble(m.group(1));
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static long parseBandwidth(String streamInfLine) {

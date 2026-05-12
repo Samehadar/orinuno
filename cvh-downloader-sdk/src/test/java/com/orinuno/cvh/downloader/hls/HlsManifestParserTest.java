@@ -35,4 +35,47 @@ class HlsManifestParserTest {
         String text = "#EXTM3U\nfake.m3u8\nseg1.ts\nfake2.m3u8?token=abc\n";
         assertThat(HlsManifestParser.extractMediaSegmentUris(text)).containsExactly("seg1.ts");
     }
+
+    @Test
+    void extractMediaSegmentsCarriesExtInfDuration() {
+        String text =
+                "#EXTM3U\n"
+                        + "#EXTINF:4.5,\n"
+                        + "seg1.ts\n"
+                        + "#EXTINF:6,\n"
+                        + "seg2.ts\n"
+                        + "#EXTINF:5.25,title\n"
+                        + "seg3.ts\n";
+        assertThat(HlsManifestParser.extractMediaSegments(text))
+                .containsExactly(
+                        new HlsSegment("seg1.ts", 4.5),
+                        new HlsSegment("seg2.ts", 6.0),
+                        new HlsSegment("seg3.ts", 5.25));
+    }
+
+    @Test
+    void extractMediaSegmentsHandlesMissingExtInf() {
+        String text = "#EXTM3U\nseg1.ts\n#EXTINF:5.0,\nseg2.ts\n";
+        assertThat(HlsManifestParser.extractMediaSegments(text))
+                .containsExactly(new HlsSegment("seg1.ts", null), new HlsSegment("seg2.ts", 5.0));
+    }
+
+    @Test
+    void extractMediaSegmentsHandlesNullInput() {
+        assertThat(HlsManifestParser.extractMediaSegments(null)).isEmpty();
+    }
+
+    @Test
+    void extractMediaSegmentsDoesNotLeakDurationAcrossVariantSkip() {
+        String text = "#EXTM3U\n#EXTINF:5.0,\nfake.m3u8\n#EXTINF:7.0,\nseg.ts\n";
+        assertThat(HlsManifestParser.extractMediaSegments(text))
+                .containsExactly(new HlsSegment("seg.ts", 7.0));
+    }
+
+    @Test
+    void extractMediaSegmentsToleratesMalformedExtInf() {
+        String text = "#EXTM3U\n#EXTINF:not-a-number,\nseg1.ts\n";
+        assertThat(HlsManifestParser.extractMediaSegments(text))
+                .containsExactly(new HlsSegment("seg1.ts", null));
+    }
 }

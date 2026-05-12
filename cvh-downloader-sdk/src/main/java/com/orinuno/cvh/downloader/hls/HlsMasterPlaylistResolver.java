@@ -77,10 +77,10 @@ public class HlsMasterPlaylistResolver {
                     new String(variantBytes, StandardCharsets.UTF_8),
                     depth + 1);
         }
-        List<String> segmentUris = HlsManifestParser.extractMediaSegmentUris(manifestText);
-        List<String> absolutized = new ArrayList<>(segmentUris.size());
-        for (String s : segmentUris) {
-            absolutized.add(absolutize(manifestUrl, s));
+        List<HlsSegment> segments = HlsManifestParser.extractMediaSegments(manifestText);
+        List<HlsSegment> absolutized = new ArrayList<>(segments.size());
+        for (HlsSegment s : segments) {
+            absolutized.add(new HlsSegment(absolutize(manifestUrl, s.url()), s.durationSeconds()));
         }
         return new HlsMediaPlaylist(manifestUrl, absolutized);
     }
