@@ -206,6 +206,17 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
   (used by ParserService's decoded-skip + TTL-expiry queries) migrate
   off the primary DS — recorded as B3-full in the tracker, blocked on
   Block D's parse-slice move.
+- `c4127a7` feat(source-kodik) — **C4.1**: `ExportController` +
+  `ContentExportService` + `ContentExportDto` + `toExportDto` mapper
+  helpers (extractPosterUrl / deriveOngoing / etc.) ported to
+  source-kodik. +314 LOC across 4 new files.
+- `044deda` refactor(orinuno-app) — **C4.2**: cutover.
+  `KodikUpstreamProxyFilter.PROXY_PREFIXES` gains `/api/v1/export/`;
+  legacy `ExportController` + `ExportDataService` + `SourceEventMapper`
+  + `ContentExportDto` + `ExportDataServiceTest` +
+  `SourceEventMapperTest` + `KodikPosterShapeLiveIT` deleted;
+  `ContentMapper` trimmed to the two read-side `toDto` overloads.
+  -1285 LOC across 9 files.
 - `aca0475` refactor(orinuno-app) — **A7** closes. -4716 LOC across 41 files:
   drops `com.orinuno.jutsu.*` (model + repository + sync schedulers + live-fallback +
   read), `com.orinuno.model.dto.jutsu.*`, `JutsuFallbackConfiguration`, the 6 `jutsu_*`
@@ -248,8 +259,8 @@ Local-file storage + ffmpeg remux. Single-source (kodik). Mirror of C2.
 | C2.2 — proxy `/api/v1/stream/` + `/api/v1/hls/`; drop orinuno-app originals | ⏳ blocked on C2.1 |
 | C3.1 — port `DownloadController` + `VideoDownloadService` → source-kodik | ⏳ blocked on E2 (relocate Kodik storage knobs first) |
 | C3.2 — proxy `/api/v1/download/`; drop orinuno-app originals | ⏳ blocked on C3.1 |
-| C4.1 — port `ExportController` + L1-Kodik half of `ExportDataService` → source-kodik | ⏳ open |
-| C4.2 — delete `SourceEventMapper` + the projection half of `ExportDataService` in orinuno-app | ⏳ blocked on C0.1 + C4.1 |
+| C4.1 — port `ExportController` + L1-Kodik half of `ExportDataService` → source-kodik | ✅ commit `c4127a7` |
+| C4.2 — proxy `/api/v1/export/`; delete `ExportController`/`ExportDataService`/`SourceEventMapper`/`ContentExportDto`/poster live-IT in orinuno-app | ✅ commit `044deda` |
 | C5.1 — drop enrichment slice from orinuno-app (after caller scope confirmed) | ⏳ open |
 | D1 — parse slice to source-kodik (ADR 0018 Phase 2.5) | ⏳ blocked on Block A + B + C |
 | D2 — `ParseUpstreamProxyFilter` | ⏳ blocked on D1 |
