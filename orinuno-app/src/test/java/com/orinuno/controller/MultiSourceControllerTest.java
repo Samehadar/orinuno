@@ -8,10 +8,10 @@ import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.drift.JutsuDriftDetector;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
-import com.orinuno.model.dto.ContentDto;
+import com.orinuno.model.KodikContent;
+import com.orinuno.repository.ContentRepository;
 import com.orinuno.repository.EpisodeSourceRepository;
 import com.orinuno.repository.EpisodeVideoRepository;
-import com.orinuno.service.ContentService;
 import com.orinuno.service.orchestration.MultiSourceRanker;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,7 +29,7 @@ class MultiSourceControllerTest {
 
     @Mock private EpisodeSourceRepository sourceRepository;
     @Mock private EpisodeVideoRepository videoRepository;
-    @Mock private ContentService contentService;
+    @Mock private ContentRepository contentRepository;
     @Mock private JutsuClient jutsuClient;
 
     private WebTestClient client;
@@ -46,7 +46,7 @@ class MultiSourceControllerTest {
                         sourceRepository,
                         videoRepository,
                         new MultiSourceRanker(),
-                        contentService,
+                        contentRepository,
                         jutsuClient);
         client = WebTestClient.bindToController(controller).build();
     }
@@ -122,8 +122,10 @@ class MultiSourceControllerTest {
             "GET /api/v1/anime/by-kinopoisk/{kpId}/episodes/{s}/{e}/sources looks up content then"
                     + " returns ranked candidates")
     void byKinopoiskPathLooksUpContentThenRanks() {
-        ContentDto content = ContentDto.builder().id(99L).kinopoiskId("123456").build();
-        when(contentService.findByKinopoiskId(eq("123456"))).thenReturn(Optional.of(content));
+        KodikContent content =
+                KodikContent.builder().id(99L).kinopoiskId("123456").build();
+        when(contentRepository.findByKinopoiskId(eq("123456")))
+                .thenReturn(Optional.of(content));
         EpisodeSource src =
                 EpisodeSource.builder()
                         .id(1L)
@@ -162,7 +164,7 @@ class MultiSourceControllerTest {
     @DisplayName(
             "GET /api/v1/anime/by-kinopoisk/... returns 404 when no kodik_content matches the id")
     void byKinopoiskPathReturns404WhenContentMissing() {
-        when(contentService.findByKinopoiskId(eq("nonexistent"))).thenReturn(Optional.empty());
+        when(contentRepository.findByKinopoiskId(eq("nonexistent"))).thenReturn(Optional.empty());
 
         client.get()
                 .uri("/api/v1/anime/by-kinopoisk/nonexistent/episodes/1/1/sources")

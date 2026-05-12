@@ -4,10 +4,10 @@ import com.orinuno.jutsu.JutsuClient;
 import com.orinuno.jutsu.drift.JutsuDriftHealth;
 import com.orinuno.model.EpisodeSource;
 import com.orinuno.model.EpisodeVideo;
-import com.orinuno.model.dto.ContentDto;
+import com.orinuno.model.KodikContent;
+import com.orinuno.repository.ContentRepository;
 import com.orinuno.repository.EpisodeSourceRepository;
 import com.orinuno.repository.EpisodeVideoRepository;
-import com.orinuno.service.ContentService;
 import com.orinuno.service.orchestration.MultiSourceRanker;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankedCandidate;
 import com.orinuno.service.orchestration.MultiSourceRanker.RankingPreferences;
@@ -55,7 +55,14 @@ public class MultiSourceController {
     private final EpisodeSourceRepository sourceRepository;
     private final EpisodeVideoRepository videoRepository;
     private final MultiSourceRanker ranker;
-    private final ContentService contentService;
+    // ADR 0021 §C1.3 — dropped the legacy ContentService dependency; the ranker only ever
+    // needed content_id from kinopoiskId, which is a one-column lookup on ContentRepository.
+    // Going through ContentService was forcing orinuno-app to keep the entire Kodik L1 read
+    // stack just for this lookup. The read against kodik_content stays orinuno-schema for
+    // now (kodik_content has a live writer via ContentService.findOrCreateContent in
+    // ParserService + KodikDumpBootstrapService); flipping to meter's catalog_content
+    // would orphan the lookup when monolith deploys don't set orinuno.catalog-read.url.
+    private final ContentRepository contentRepository;
     private final JutsuClient jutsuClient;
 
     @GetMapping("/api/v1/anime/{contentId}/episodes/{season}/{episode}/sources")
@@ -91,17 +98,17 @@ public class MultiSourceController {
             @PathVariable Integer season,
             @PathVariable Integer episode,
             @RequestParam(required = false) String prefer) {
-        return Mono.fromCallable(() -> contentService.findByKinopoiskId(kinopoiskId))
+        return Mono.fromCallable(() -> contentRepository.findByKinopoiskId(kinopoiskId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(
-                        (Optional<ContentDto> dto) -> {
-                            if (dto.isEmpty()) {
+                        (Optional<KodikContent> row) -> {
+                            if (row.isEmpty()) {
                                 Map<String, Object> body = new LinkedHashMap<>();
                                 body.put("error", "kinopoiskId not found");
                                 body.put("kinopoiskId", kinopoiskId);
                                 return Mono.just(ResponseEntity.status(404).body(body));
                             }
-                            return rankedFor(dto.get().getId(), season, episode, prefer);
+                            return rankedFor(row.get().getId(), season, episode, prefer);
                         });
     }
 
