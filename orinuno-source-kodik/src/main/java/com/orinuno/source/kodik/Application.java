@@ -14,7 +14,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /**
  * Entry point for the orinuno-source-kodik service. {@code kodik-sdk-spring-boot-starter} on the
@@ -41,5 +43,21 @@ public class Application {
     @ConditionalOnMissingBean
     public Clock systemClock() {
         return Clock.systemUTC();
+    }
+
+    /**
+     * Dedicated pool for the long-running maintenance jobs: {@code CalendarDeltaScheduler} (CAL-6
+     * watcher), {@code DumpScheduler} (DUMP-1 HEAD poller), and decoder maintenance ticks. Same
+     * pattern orinuno-app + orinuno-source-jutsu use — separate pool so a slow Kodik response can
+     * never starve Spring's default scheduler. 2 threads matches the legacy orinuno-app sizing.
+     */
+    @Bean(name = "decoderMaintenanceTaskScheduler", destroyMethod = "shutdown")
+    public TaskScheduler decoderMaintenanceTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("kodik-decoder-maint-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(false);
+        scheduler.initialize();
+        return scheduler;
     }
 }
