@@ -36,12 +36,15 @@ import java.time.Duration;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+// Gated on the same Environment property as CatalogReadDataSourceConfiguration. See
+// CatalogEpisodeSourceReadRepository for why the chain switched away from the racy
+// @ConditionalOnBean(Class) pattern.
 @Slf4j
 @Component
-@ConditionalOnBean(CatalogContentReadRepository.class)
+@ConditionalOnProperty(prefix = "orinuno.catalog-read", name = "url")
 public class CatalogReadCache {
 
     private final CatalogContentReadRepository delegate;

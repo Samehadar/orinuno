@@ -20,13 +20,18 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+// Gate matches CatalogReadDataSourceConfiguration's @ConditionalOnProperty so component
+// scanning and the bean-factory post-processor evaluate against the same Environment
+// property, not the bean-name registry. @ConditionalOnBean on @Repository was racy —
+// worked by luck when more user beans existed; broke after Phase 2/5 shrank orinuno-app
+// because the scan order shifted.
 @Repository
-@ConditionalOnBean(name = "catalogReadJdbcTemplate")
+@ConditionalOnProperty(prefix = "orinuno.catalog-read", name = "url")
 public class CatalogEpisodeSourceReadRepository {
 
     private static final String FIND_BY_EPISODE =
