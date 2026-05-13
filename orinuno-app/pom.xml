@@ -48,18 +48,18 @@
             <version>${project.version}</version>
         </dependency>
         <!--
-            kodik-sdk-spring-boot-starter — ADR 0018 Phase 1.7. Provides auto-configured beans
-            for the Kodik HTTP client / token registry / decoder metrics / embed shortcut /
-            schema-drift detector and a LifecycleRunner for startup-time token validation. The
-            orinuno.kodik.* env var contract is preserved via application.yml aliasing onto
-            the starter's kodik.sdk.* prefix; @ConditionalOnMissingBean lets orinuno-app
-            override individual beans (e.g. driftDetector via DriftDetectorConfig).
+            ADR 0021 Phase 2/5 cleanup retired kodik-sdk-spring-boot-starter from orinuno-app.
+            The starter auto-configures the Kodik API client + token registry + decoder
+            stack; those beans now live in orinuno-source-kodik (the per-source deployable
+            consumes the starter directly). orinuno-app no longer has any consumer of
+            com.kodik.client / com.kodik.token / com.kodik.decoder — verified by the
+            BoundedContextArchitectureTest E1 ArchUnit guard — so the auto-config was dead
+            weight, and after E2 stage 3b deleted WebClientConfiguration the starter's
+            kodikTokenValidator(WebClient) constructor lost its dependency and the
+            application failed to boot in the docker-compose stack. Dependency dropped
+            here; kodik-sdk (com.kodik.drift + com.kodik.client.http +
+            com.kodik.client.embed.KodikIdType, all gateway-level) stays.
         -->
-        <dependency>
-            <groupId>com.orinuno</groupId>
-            <artifactId>kodik-sdk-spring-boot-starter</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         <!--
             jutsu-sdk — Step 2 of the API/module split. Carries the rate limiter, session
             manager, decoder and source parser. orinuno-app keeps a thin
