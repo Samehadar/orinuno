@@ -49,13 +49,15 @@ import reactor.core.scheduler.Schedulers;
 @RestController
 @RequiredArgsConstructor
 // ADR 0021 §C1.4 — controller depends on the meter-readonly DS (Phase 5.4) for L2 reads.
-// Monolith deploys without orinuno.catalog-read.url set have no catalogReadJdbcTemplate
-// bean → the two CatalogEpisode*ReadRepository beans are also absent → this controller
-// is not wired and /api/v1/anime/* returns 404. Acceptable for OSS-contributor dev
-// boots where the ranker isn't the demo path; the docker-compose.yml full-split topology
-// always has the readonly DS configured.
-@org.springframework.boot.autoconfigure.condition.ConditionalOnBean(
-        name = "catalogReadJdbcTemplate")
+// Gated on the same Environment property as CatalogReadDataSourceConfiguration so
+// component scan + bean-factory post-processor order does not race. Monolith deploys
+// without orinuno.catalog-read.url set leave the controller (and the read repositories)
+// unwired → /api/v1/anime/* returns 404. Acceptable for OSS-contributor dev boots where
+// the ranker isn't the demo path; docker-compose.yml's full-split topology always has
+// the readonly DS configured.
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        prefix = "orinuno.catalog-read",
+        name = "url")
 @Tag(name = "Multi-source", description = "AP-7: ranked provider candidates for an episode")
 public class MultiSourceController {
 
