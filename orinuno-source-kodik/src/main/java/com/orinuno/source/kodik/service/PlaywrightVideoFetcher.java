@@ -199,8 +199,7 @@ public class PlaywrightVideoFetcher {
      * request, then use page.evaluate(fetch()) to download the video FROM the browser context with
      * all cookies/headers intact.
      */
-    private String fetchVideoBlocking(
-            String kodikUrl, Path targetPath, DownloadProgress progress)
+    private String fetchVideoBlocking(String kodikUrl, Path targetPath, DownloadProgress progress)
             throws Exception {
         browserSemaphore.acquire();
         try {
@@ -210,8 +209,7 @@ public class PlaywrightVideoFetcher {
         }
     }
 
-    private String doFetchVideoBlocking(
-            String kodikUrl, Path targetPath, DownloadProgress progress)
+    private String doFetchVideoBlocking(String kodikUrl, Path targetPath, DownloadProgress progress)
             throws Exception {
         var pwProps = playwrightProperties;
         Path targetDir = targetPath.getParent();

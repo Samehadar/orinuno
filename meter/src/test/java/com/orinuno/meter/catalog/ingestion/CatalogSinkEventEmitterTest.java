@@ -295,8 +295,7 @@ class CatalogSinkEventEmitterTest {
     }
 
     @Test
-    @DisplayName(
-            "VariantDecoded — episode_source row missing → log + drop (no upsertDecoded call)")
+    @DisplayName("VariantDecoded — episode_source row missing → log + drop (no upsertDecoded call)")
     void variantDecodedDropsWhenSourceRowMissing() {
         when(catalog.findOrCreateContent(any())).thenReturn(content(42L));
         when(episodeSources.findByUniqueKey(any(), any(), any(), any(), any()))

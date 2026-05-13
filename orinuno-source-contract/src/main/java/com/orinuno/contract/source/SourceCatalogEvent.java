@@ -165,8 +165,8 @@ public sealed interface SourceCatalogEvent {
      *
      * <p>{@code decodeMethod} mirrors the DECODE-8 discriminator on {@code episode_video} ({@code
      * REGEX} / {@code SNIFF} / {@code PROVIDER_API} / …); {@code ttlSeconds} is provider-specific
-     * (Aniboom CDN tokens expire after ~6h, Sibnet direct URLs are stable so the field stays
-     * {@code null}). Both are optional and forwarded verbatim to {@code episode_video}.
+     * (Aniboom CDN tokens expire after ~6h, Sibnet direct URLs are stable so the field stays {@code
+     * null}). Both are optional and forwarded verbatim to {@code episode_video}.
      */
     record VariantDecoded(
             @Nonnull SourceIdentifier identifier,

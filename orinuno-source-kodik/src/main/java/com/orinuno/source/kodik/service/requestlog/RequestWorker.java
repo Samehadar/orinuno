@@ -132,13 +132,10 @@ public class RequestWorker {
         LocalDateTime threshold =
                 LocalDateTime.ofInstant(
                         clock.instant()
-                                .minus(
-                                        Duration.ofMillis(
-                                                requestsProperties.getStaleAfterMs())),
+                                .minus(Duration.ofMillis(requestsProperties.getStaleAfterMs())),
                         ZoneId.systemDefault());
         try {
-            int recovered =
-                    repository.recoverStale(threshold, requestsProperties.getMaxRetries());
+            int recovered = repository.recoverStale(threshold, requestsProperties.getMaxRetries());
             if (recovered > 0) {
                 log.warn("⚠️ Recovered {} stale RUNNING parse requests", recovered);
             }

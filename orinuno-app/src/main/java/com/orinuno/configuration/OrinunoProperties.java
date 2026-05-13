@@ -9,9 +9,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * orinuno-app gateway properties.
  *
  * <p>ADR 0021 §E2 stage 3b — every L1 / decoder / proxy / storage / playwright / calendar / dumps
- * subtree retired with the slice that consumed it. orinuno-app is now a thin gateway +
- * cross-source orchestrator; the few configuration knobs that remain here cover the cross-cutting
- * concerns the gateway still owns:
+ * subtree retired with the slice that consumed it. orinuno-app is now a thin gateway + cross-source
+ * orchestrator; the few configuration knobs that remain here cover the cross-cutting concerns the
+ * gateway still owns:
  *
  * <ul>
  *   <li>{@link ParseProperties} — inbound rate limit for {@code POST /api/v1/parse/requests}.

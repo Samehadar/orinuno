@@ -55,7 +55,8 @@ class KodikTokenValidatorDriftSamplingTest {
                                           {"id":"x","title":"t"}
                                         ],"probe_only_field":"yes"}"""));
         KodikResponseMapper mapper = new KodikResponseMapper();
-        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
+        KodikTokenValidator validator =
+                new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
@@ -77,7 +78,8 @@ class KodikTokenValidatorDriftSamplingTest {
                                                 + KodikTokenValidator.INVALID_TOKEN_ERROR
                                                 + "\",\"unexpected\":\"drift-ish\"}"));
         KodikResponseMapper mapper = new KodikResponseMapper();
-        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
+        KodikTokenValidator validator =
+                new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("bad", "title", "x"), "bad", "probe");
 
@@ -92,7 +94,8 @@ class KodikTokenValidatorDriftSamplingTest {
         WebClient webClient =
                 stubWebClient((m, u) -> respond(HttpStatus.INTERNAL_SERVER_ERROR, "{\"oops\":1}"));
         KodikResponseMapper mapper = new KodikResponseMapper();
-        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
+        KodikTokenValidator validator =
+                new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 
@@ -114,7 +117,8 @@ class KodikTokenValidatorDriftSamplingTest {
         DriftSamplingProperties cfg = new DriftSamplingProperties();
         cfg.setEnabled(false);
         KodikResponseMapper mapper = new KodikResponseMapper(new DriftDetector(cfg));
-        KodikTokenValidator validator = new KodikTokenValidator(webClient, config, registry, mapper);
+        KodikTokenValidator validator =
+                new KodikTokenValidator(webClient, config, registry, mapper);
 
         boolean ok = validator.probe("/search", params("tok", "title", "x"), "tok", "probe");
 

@@ -212,8 +212,7 @@ public class KodikCalendarHttpClient {
 
     private static WebClient buildWebClient(KodikCalendarProperties calendarProperties) {
         long timeoutMs = Math.max(1, calendarProperties.getRequestTimeoutSeconds()) * 1000L;
-        int memoryCap =
-                (int) Math.min(Integer.MAX_VALUE, calendarProperties.getMaxResponseBytes());
+        int memoryCap = (int) Math.min(Integer.MAX_VALUE, calendarProperties.getMaxResponseBytes());
         HttpClient http =
                 HttpClient.create()
                         .followRedirect(true)

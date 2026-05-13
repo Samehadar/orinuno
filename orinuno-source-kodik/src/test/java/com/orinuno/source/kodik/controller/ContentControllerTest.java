@@ -66,9 +66,7 @@ class ContentControllerTest {
     @DisplayName("findByKinopoiskId — 200 + body when present")
     void findByKinopoiskIdPresent() {
         when(contentService.findByKinopoiskId("283290"))
-                .thenReturn(
-                        Optional.of(
-                                ContentDto.builder().id(7L).kinopoiskId("283290").build()));
+                .thenReturn(Optional.of(ContentDto.builder().id(7L).kinopoiskId("283290").build()));
 
         var response = controller.findByKinopoiskId("283290").block();
         assertThat(response).isNotNull();
@@ -90,8 +88,7 @@ class ContentControllerTest {
     @DisplayName("findVariants — 200 + (possibly empty) list")
     void findVariantsAlwaysReturnsList() {
         when(contentService.findVariantsByContentId(42L))
-                .thenReturn(
-                        List.of(EpisodeVariantDto.builder().id(1L).contentId(42L).build()));
+                .thenReturn(List.of(EpisodeVariantDto.builder().id(1L).contentId(42L).build()));
 
         var response = controller.findVariants(42L).block();
         assertThat(response).isNotNull();

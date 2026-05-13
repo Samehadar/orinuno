@@ -204,7 +204,8 @@ public class CatalogSinkEventEmitter implements SourceEventEmitter {
             episodeVideos.upsertDecoded(video);
         } catch (RuntimeException ex) {
             log.warn(
-                    "catalog-sink: episode_video upsert failed for source_id={} quality={} ({}: {})",
+                    "catalog-sink: episode_video upsert failed for source_id={} quality={} ({}:"
+                            + " {})",
                     source.get().getId(),
                     e.decodedQuality(),
                     ex.getClass().getSimpleName(),

@@ -16,9 +16,9 @@ import org.springframework.stereotype.Component;
  * pool, so a slow Kodik response (~30s timeout) never blocks Spring's default scheduler.
  *
  * <p>No-op when {@code orinuno.source-kodik.dumps.enabled=false}. The interval is read once at
- * startup; restart the app to change it. Restored from orinuno-app under ADR 0021 §D5; the
- * {@code decoderMaintenanceTaskScheduler} qualifier matches the bean orinuno-source-kodik
- * already publishes for the decoder maintenance jobs.
+ * startup; restart the app to change it. Restored from orinuno-app under ADR 0021 §D5; the {@code
+ * decoderMaintenanceTaskScheduler} qualifier matches the bean orinuno-source-kodik already
+ * publishes for the decoder maintenance jobs.
  */
 @Slf4j
 @Component
@@ -45,10 +45,8 @@ public class DumpScheduler {
             log.info("📦 Dump scheduler disabled (orinuno.source-kodik.dumps.enabled=false)");
             return;
         }
-        Duration interval =
-                Duration.ofMinutes(Math.max(1, properties.getPollIntervalMinutes()));
-        Instant first =
-                Instant.now().plusSeconds(Math.max(0, properties.getInitialDelaySeconds()));
+        Duration interval = Duration.ofMinutes(Math.max(1, properties.getPollIntervalMinutes()));
+        Instant first = Instant.now().plusSeconds(Math.max(0, properties.getInitialDelaySeconds()));
         handle =
                 scheduler.scheduleWithFixedDelay(
                         () -> {

@@ -63,11 +63,11 @@ public class ContentDtoMapper {
     }
 
     /**
-     * Denormalised export DTO: groups variants by season → episode → variant under a
-     * Kodik-derived chrome envelope (poster URL + status flags). Ported from orinuno-app's
-     * ContentMapper.toExportDto (ADR 0021 §C4.1). Caller supplies the pre-filtered list of
-     * variants — typically {@code findByContentIdWithDecodedVideo} so the response only
-     * contains variants with a populated episode_video row.
+     * Denormalised export DTO: groups variants by season → episode → variant under a Kodik-derived
+     * chrome envelope (poster URL + status flags). Ported from orinuno-app's
+     * ContentMapper.toExportDto (ADR 0021 §C4.1). Caller supplies the pre-filtered list of variants
+     * — typically {@code findByContentIdWithDecodedVideo} so the response only contains variants
+     * with a populated episode_video row.
      */
     public ContentExportDto toExportDto(KodikContent content, List<KodikEpisodeVariant> variants) {
         Map<Integer, Map<Integer, List<KodikEpisodeVariant>>> grouped =

@@ -44,7 +44,10 @@ public class ParseRequestMetrics {
     @PostConstruct
     public void init() {
         for (ParseRequestStatus status : ParseRequestStatus.values()) {
-            Gauge.builder("orinuno.source.kodik.parse.requests", repository, r -> safeCount(r, status))
+            Gauge.builder(
+                            "orinuno.source.kodik.parse.requests",
+                            repository,
+                            r -> safeCount(r, status))
                     .description("Number of source-kodik parse requests in the given status")
                     .tags(Tags.of("status", status.name()))
                     .register(meterRegistry);

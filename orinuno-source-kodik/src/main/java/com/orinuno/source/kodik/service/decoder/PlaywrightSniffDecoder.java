@@ -29,8 +29,8 @@ public class PlaywrightSniffDecoder {
 
     /**
      * Quality bucket key used for sniff results. Intentionally NOT numeric — see {@link
-     * com.orinuno.source.kodik.service.ParserService#pickBestQualityEntry} which drops non-numeric keys. The
-     * orchestrator's persistence layer treats this key specially.
+     * com.orinuno.source.kodik.service.ParserService#pickBestQualityEntry} which drops non-numeric
+     * keys. The orchestrator's persistence layer treats this key specially.
      */
     static final String SNIFF_QUALITY_KEY = "auto";
 

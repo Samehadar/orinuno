@@ -37,10 +37,10 @@ import org.springframework.stereotype.Service;
  * benefits from existing idempotency rules (kinopoisk_id-keyed lookup with title+year fallback,
  * COALESCE upsert that never overwrites a valid mp4_link).
  *
- * <p>The downloads themselves are gated behind {@code orinuno.source-kodik.dumps.download-body=true}
- * — accidentally hammering Kodik's CDN with multi-GB GETs is exactly the failure mode this gate
- * exists to prevent. Operators bootstrap by toggling the flag, calling {@link #bootstrap(String)},
- * then turning it back off.
+ * <p>The downloads themselves are gated behind {@code
+ * orinuno.source-kodik.dumps.download-body=true} — accidentally hammering Kodik's CDN with multi-GB
+ * GETs is exactly the failure mode this gate exists to prevent. Operators bootstrap by toggling the
+ * flag, calling {@link #bootstrap(String)}, then turning it back off.
  *
  * <p>This service does NOT register any scheduled job; it's invoked imperatively from an admin tool
  * or a one-off CLI / startup hook. {@link KodikDumpService} is the watcher that runs on a cadence;

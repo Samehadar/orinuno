@@ -2,9 +2,6 @@ package com.kodik.client.exception;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.kodik.client.exception.KodikApiResponseErrorMapper;
-import com.kodik.client.exception.KodikUpstreamException;
-import com.kodik.client.exception.KodikValidationException;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
