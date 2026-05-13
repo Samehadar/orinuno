@@ -45,9 +45,9 @@ class BoundedContextArchitectureTest {
     /**
      * Allow-list predicate for ADR 0021 §E1. Matches any class living under {@code com.kodik..}
      * that is NOT in one of the three gateway-level utility sub-packages. Used by the
-     * orinuno-app↛kodik-sdk-internals rule below. Allow-list (instead of deny-list) keeps the
-     * guard tight against future SDK package additions: any new {@code com.kodik.foo} subpackage
-     * is blocked by default and a contributor has to justify adding it to this list.
+     * orinuno-app↛kodik-sdk-internals rule below. Allow-list (instead of deny-list) keeps the guard
+     * tight against future SDK package additions: any new {@code com.kodik.foo} subpackage is
+     * blocked by default and a contributor has to justify adding it to this list.
      */
     private static final DescribedPredicate<JavaClass> KODIK_SDK_INTERNALS =
             JavaClass.Predicates.resideInAPackage("com.kodik..")
@@ -56,8 +56,9 @@ class BoundedContextArchitectureTest {
                                     "com.kodik.drift..",
                                     "com.kodik.client.http..",
                                     "com.kodik.client.embed.."))
-                    .as("Kodik SDK internals (com.kodik.. outside the drift / client.http /"
-                            + " client.embed gateway-level allow-list)");
+                    .as(
+                            "Kodik SDK internals (com.kodik.. outside the drift / client.http /"
+                                    + " client.embed gateway-level allow-list)");
 
     @ArchTest
     static final ArchRule catalog_internal_is_sealed =
@@ -110,13 +111,13 @@ class BoundedContextArchitectureTest {
                     .dependOnClassesThat(KODIK_SDK_INTERNALS)
                     .because(
                             "ADR 0021 §E1 — Kodik write-path code lives in"
-                                + " orinuno-source-kodik. orinuno-app talks to Kodik via"
-                                + " HTTP (KodikUpstreamProxyFilter reverse-proxies"
-                                + " /api/v1/parse/, /api/v1/stream/, /api/v1/hls/,"
-                                + " /api/v1/download/, /api/v1/export/) and via the"
-                                + " meter-readonly DS for L2/L3 reads. Direct Kodik"
-                                + " SDK calls (KodikApiClient, token registry, decoder"
-                                + " orchestrator, DTO/exception types) re-introduce the"
-                                + " coupling Phase 2/5 dismantled and let the monolith"
-                                + " seam silently regrow.");
+                                    + " orinuno-source-kodik. orinuno-app talks to Kodik via"
+                                    + " HTTP (KodikUpstreamProxyFilter reverse-proxies"
+                                    + " /api/v1/parse/, /api/v1/stream/, /api/v1/hls/,"
+                                    + " /api/v1/download/, /api/v1/export/) and via the"
+                                    + " meter-readonly DS for L2/L3 reads. Direct Kodik"
+                                    + " SDK calls (KodikApiClient, token registry, decoder"
+                                    + " orchestrator, DTO/exception types) re-introduce the"
+                                    + " coupling Phase 2/5 dismantled and let the monolith"
+                                    + " seam silently regrow.");
 }

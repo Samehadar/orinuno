@@ -131,52 +131,22 @@ class B2EpisodeSourcePipelineIT {
                     + " rows; watermark advances")
     void seriesDiscoveredPipelineWritesL3ChromeAndL2Sources() {
         String body =
-                "["
-                    + "{"
-                    + "\"kind\":\"series-discovered\","
+                "[{\"kind\":\"series-discovered\","
                     + "\"identifier\":{\"sourceType\":\"kodik\",\"sourceId\":\"naruto-2002\"},"
-                    + "\"info\":{"
-                    + "\"titleRu\":\"Наруто\","
-                    + "\"titleEn\":\"Naruto\","
-                    + "\"year\":2002,"
+                    + "\"info\":{\"titleRu\":\"Наруто\",\"titleEn\":\"Naruto\",\"year\":2002,"
                     + "\"kindHint\":\"ANIME\","
-                    + "\"externalIds\":{\"shikimoriId\":\"1\",\"kinopoiskId\":\"283290\"}"
-                    + "},"
-                    + "\"seasons\":[{"
-                    + "\"title\":\"Сезон 1\","
-                    + "\"order\":1,"
-                    + "\"episodes\":["
-                    + "{"
-                    + "\"title\":\"Эпизод 1\","
-                    + "\"duration\":\"PT24M\","
-                    + "\"order\":1,"
-                    + "\"variants\":[{"
+                    + "\"externalIds\":{\"shikimoriId\":\"1\",\"kinopoiskId\":\"283290\"}},\"seasons\":[{\"title\":\"Сезон"
+                    + " 1\",\"order\":1,\"episodes\":[{\"title\":\"Эпизод"
+                    + " 1\",\"duration\":\"PT24M\",\"order\":1,\"variants\":[{"
                     + "\"identifier\":{\"sourceType\":\"kodik\",\"sourceId\":\"naruto-2002:s1e1:rus\"},"
-                    + "\"mediaUrl\":\"https://kodik.example/s1e1.iframe\","
-                    + "\"title\":\"AniLibria\","
-                    + "\"streamQuality\":\"720p\","
-                    + "\"duration\":\"PT24M\""
-                    + "}]"
-                    + "},"
-                    + "{"
-                    + "\"title\":\"Эпизод 2\","
-                    + "\"duration\":\"PT24M\","
-                    + "\"order\":2,"
-                    + "\"variants\":[{"
+                    + "\"mediaUrl\":\"https://kodik.example/s1e1.iframe\",\"title\":\"AniLibria\","
+                    + "\"streamQuality\":\"720p\",\"duration\":\"PT24M\"}]},{\"title\":\"Эпизод"
+                    + " 2\",\"duration\":\"PT24M\",\"order\":2,\"variants\":[{"
                     + "\"identifier\":{\"sourceType\":\"kodik\",\"sourceId\":\"naruto-2002:s1e2:rus\"},"
-                    + "\"mediaUrl\":\"https://kodik.example/s1e2.iframe\","
-                    + "\"title\":\"AniLibria\","
-                    + "\"streamQuality\":\"720p\","
-                    + "\"duration\":\"PT24M\""
-                    + "}]"
-                    + "}"
-                    + "]}],"
-                    + "\"provenance\":{"
+                    + "\"mediaUrl\":\"https://kodik.example/s1e2.iframe\",\"title\":\"AniLibria\","
+                    + "\"streamQuality\":\"720p\",\"duration\":\"PT24M\"}]}]}],\"provenance\":{"
                     + "\"sourceUrl\":\"https://kodik-api.com/list\","
-                    + "\"fetchedAt\":\"2026-05-12T08:00:00Z\""
-                    + "}"
-                    + "}"
-                    + "]";
+                    + "\"fetchedAt\":\"2026-05-12T08:00:00Z\"}}]";
         HANDLER.set(exchange -> sendJson(exchange, 200, body));
 
         poller.pollOnce();
@@ -223,8 +193,8 @@ class B2EpisodeSourcePipelineIT {
         // Watermark must advance to the event's fetchedAt — locks the poller side of B2.
         List<Map<String, Object>> watermark =
                 jdbc.queryForList(
-                        "SELECT source_type, last_fetched_at, last_event_count, last_error"
-                                + " FROM orinuno_remote_source_watermark WHERE source_type='kodik'");
+                        "SELECT source_type, last_fetched_at, last_event_count, last_error FROM"
+                                + " orinuno_remote_source_watermark WHERE source_type='kodik'");
         assertThat(watermark).hasSize(1);
         assertThat(((Number) watermark.get(0).get("last_event_count")).intValue()).isEqualTo(1);
         assertThat(watermark.get(0).get("last_error")).isNull();
@@ -242,23 +212,15 @@ class B2EpisodeSourcePipelineIT {
         // first test). Without this seed, the decoded handler logs WARN + drops — verified
         // separately in CatalogSinkEventEmitterTest.variantDecodedDropsWhenSourceRowMissing.
         String seedBody =
-                "["
-                    + "{"
-                    + "\"kind\":\"series-discovered\","
+                "[{\"kind\":\"series-discovered\","
                     + "\"identifier\":{\"sourceType\":\"kodik\",\"sourceId\":\"naruto-2002\"},"
-                    + "\"info\":{\"titleRu\":\"Наруто\",\"kindHint\":\"ANIME\","
-                    + "\"externalIds\":{}},"
-                    + "\"seasons\":[{\"order\":1,\"episodes\":[{"
-                    + "\"order\":1,\"variants\":[{"
+                    + "\"info\":{\"titleRu\":\"Наруто\",\"kindHint\":\"ANIME\",\"externalIds\":{}},"
+                    + "\"seasons\":[{\"order\":1,\"episodes\":[{\"order\":1,\"variants\":[{"
                     + "\"identifier\":{\"sourceType\":\"kodik\",\"sourceId\":\"naruto-2002:s1e1:rus\"},"
                     + "\"mediaUrl\":\"https://kodik.example/s1e1.iframe\","
-                    + "\"streamQuality\":\"720p\""
-                    + "}]"
-                    + "}]}],"
+                    + "\"streamQuality\":\"720p\"}]}]}],"
                     + "\"provenance\":{\"sourceUrl\":\"https://kodik-api.com/list\","
-                    + "\"fetchedAt\":\"2026-05-12T08:00:00Z\"}"
-                    + "}"
-                    + "]";
+                    + "\"fetchedAt\":\"2026-05-12T08:00:00Z\"}}]";
         HANDLER.set(exchange -> sendJson(exchange, 200, seedBody));
         poller.pollOnce();
 

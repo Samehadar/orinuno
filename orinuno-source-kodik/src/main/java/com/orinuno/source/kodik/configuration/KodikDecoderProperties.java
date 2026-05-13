@@ -26,8 +26,8 @@ public class KodikDecoderProperties {
 
     /**
      * Pace gate between successive SDK requests during search + decode (formerly
-     * orinuno.kodik.request-delay-ms in orinuno-app's OrinunoProperties.KodikProperties).
-     * Default 500ms preserves legacy behaviour.
+     * orinuno.kodik.request-delay-ms in orinuno-app's OrinunoProperties.KodikProperties). Default
+     * 500ms preserves legacy behaviour.
      */
     private long requestDelayMs = 500;
 

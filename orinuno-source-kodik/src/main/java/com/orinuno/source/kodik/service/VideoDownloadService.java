@@ -1,9 +1,9 @@
 package com.orinuno.source.kodik.service;
 
 import com.orinuno.source.kodik.configuration.KodikStorageProperties;
-import com.orinuno.source.kodik.service.download.DownloadProgress;
 import com.orinuno.source.kodik.model.KodikEpisodeVariant;
 import com.orinuno.source.kodik.repository.EpisodeVariantRepository;
+import com.orinuno.source.kodik.service.download.DownloadProgress;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -13,7 +13,6 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

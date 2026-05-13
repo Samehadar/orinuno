@@ -118,11 +118,7 @@ class MeterDecodedEventPublisherTest {
 
         // contentId missing — must not even attempt a POST.
         publisher.publishDecoded(
-                KodikEpisodeVariant.builder()
-                        .id(42L)
-                        .seasonNumber(1)
-                        .episodeNumber(3)
-                        .build(),
+                KodikEpisodeVariant.builder().id(42L).seasonNumber(1).episodeNumber(3).build(),
                 sampleResult(),
                 "720",
                 "https://x");
@@ -179,5 +175,4 @@ class MeterDecodedEventPublisherTest {
         }
         throw new AssertionError("predicate never became true within 3s");
     }
-
 }

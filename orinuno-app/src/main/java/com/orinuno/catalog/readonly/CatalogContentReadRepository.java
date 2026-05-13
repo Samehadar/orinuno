@@ -33,8 +33,8 @@ public class CatalogContentReadRepository {
      * ADR 0021 §E2 — lookup canonical content_id by Kinopoisk external id. Used by
      * MultiSourceController.rankedByKinopoiskId after the orinuno-app KodikContent /
      * ContentRepository surface retired. Hits the denormalised kinopoisk_id column on
-     * catalog_content (kept in sync by CatalogIdentityResolver alongside the bindings
-     * in catalog_content_external_id).
+     * catalog_content (kept in sync by CatalogIdentityResolver alongside the bindings in
+     * catalog_content_external_id).
      */
     private static final String FIND_ID_BY_KINOPOISK_ID =
             "SELECT id FROM catalog_content WHERE kinopoisk_id = ? LIMIT 1";

@@ -53,8 +53,8 @@ public class KodikWebClientConfiguration {
 
     /**
      * ADR 0021 §D1b — CDN HEAD/GET proxy client (no auto-redirect so the upstream Location header
-     * surfaces to StreamController. Used by both the decoder + StreamController/HlsController
-     * stack once they land in D1b-2 + C2.
+     * surfaces to StreamController. Used by both the decoder + StreamController/HlsController stack
+     * once they land in D1b-2 + C2.
      */
     @Bean
     public WebClient kodikCdnWebClient(RotatingUserAgentProvider userAgentProvider) {

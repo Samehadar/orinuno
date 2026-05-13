@@ -33,8 +33,8 @@ public class ContentWriteService {
      * absent.
      *
      * <p>ADR 0018 Phase 5.6 — the catalog-ingestion hand-off lives in meter now. This service only
-     * owns the L1 Kodik row; the L1 → L3 bridge is served by source-kodik's
-     * {@code /api/v1/source-events/ready} stream which meter polls.
+     * owns the L1 Kodik row; the L1 → L3 bridge is served by source-kodik's {@code
+     * /api/v1/source-events/ready} stream which meter polls.
      */
     public KodikContent findOrCreateContent(KodikContent content) {
         if (content.getKinopoiskId() != null && !content.getKinopoiskId().isBlank()) {

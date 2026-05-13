@@ -8,7 +8,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.orinuno.source.kodik.configuration.KodikDecoderProperties;
 import com.orinuno.source.kodik.model.KodikContent;
 import com.orinuno.source.kodik.model.OrinunoParseRequest;
 import com.orinuno.source.kodik.model.dto.ParseRequestDto;

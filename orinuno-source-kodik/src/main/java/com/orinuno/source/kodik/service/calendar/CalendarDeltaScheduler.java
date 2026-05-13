@@ -40,8 +40,7 @@ public class CalendarDeltaScheduler {
 
     @PostConstruct
     void start() {
-        KodikCalendarProperties.DeltaWatcherProperties cfg =
-                calendarProperties.getDeltaWatcher();
+        KodikCalendarProperties.DeltaWatcherProperties cfg = calendarProperties.getDeltaWatcher();
         if (!calendarProperties.isEnabled() || !cfg.isEnabled()) {
             log.info(
                     "📅 CAL-6: delta watcher disabled (calendar.enabled={},"

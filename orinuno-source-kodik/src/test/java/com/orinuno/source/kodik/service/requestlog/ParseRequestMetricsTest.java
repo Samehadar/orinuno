@@ -33,7 +33,8 @@ class ParseRequestMetricsTest {
     @Test
     @DisplayName("registers status gauges, tick timer and completed counters")
     void registersExpectedMeters() {
-        assertThat(meterRegistry.find("orinuno.source.kodik.parse.request.worker.tick").timer()).isNotNull();
+        assertThat(meterRegistry.find("orinuno.source.kodik.parse.request.worker.tick").timer())
+                .isNotNull();
         assertThat(
                         meterRegistry
                                 .find("orinuno.source.kodik.parse.request.processing")

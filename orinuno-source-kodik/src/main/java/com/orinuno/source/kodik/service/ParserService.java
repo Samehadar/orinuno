@@ -233,8 +233,7 @@ public class ParserService {
 
     private void runBoundedDecodeBatch(String label, List<KodikEpisodeVariant> batch) {
         Duration tickTimeout =
-                Duration.ofSeconds(
-                        decoderProperties.getMaintenance().getTickTimeoutSeconds());
+                Duration.ofSeconds(decoderProperties.getMaintenance().getTickTimeoutSeconds());
         try {
             Flux.fromIterable(batch)
                     .delayElements(Duration.ofMillis(decoderProperties.getRequestDelayMs()))
