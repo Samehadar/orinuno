@@ -18,6 +18,9 @@ import com.kodik.drift.DriftRecord;
 import com.kodik.token.KodikTokenEntry;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
+import com.orinuno.source.kodik.model.KodikProxy;
+import com.orinuno.source.kodik.service.DecoderHealthTracker;
+import com.orinuno.source.kodik.service.ProxyProviderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.ArrayList;
@@ -39,6 +42,8 @@ public class HealthController {
 
     private final KodikTokenRegistry kodikTokenRegistry;
     private final KodikResponseMapper kodikResponseMapper;
+    private final DecoderHealthTracker decoderHealthTracker;
+    private final ProxyProviderService proxyProviderService;
 
     @GetMapping
     @Operation(summary = "General health check")
@@ -81,6 +86,40 @@ public class HealthController {
         result.put("counts", counts);
         result.put("tiers", details);
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/decoder")
+    @Operation(summary = "Decoder health and statistics (PF6)")
+    public ResponseEntity<Map<String, Object>> decoderHealth() {
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("successRate", decoderHealthTracker.getSuccessRate());
+        status.put("totalDecoded", decoderHealthTracker.getTotalDecoded().get());
+        status.put("totalFailed", decoderHealthTracker.getTotalFailed().get());
+        status.put("lastFailureStep", decoderHealthTracker.getLastFailureStep().get());
+        status.put("lastFailureMessage", decoderHealthTracker.getLastFailureMessage().get());
+        status.put("lastFailureTime", decoderHealthTracker.getLastFailureTime().get());
+        return ResponseEntity.ok(status);
+    }
+
+    @GetMapping("/proxy")
+    @Operation(summary = "Proxy pool statistics")
+    public ResponseEntity<Map<String, Object>> proxyHealth() {
+        List<KodikProxy> activeProxies = proxyProviderService.getActiveProxies();
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("activeProxies", activeProxies.size());
+        status.put(
+                "proxies",
+                activeProxies.stream()
+                        .map(
+                                p ->
+                                        Map.of(
+                                                "id", p.getId(),
+                                                "host", p.getHost(),
+                                                "port", p.getPort(),
+                                                "type", p.getProxyType().name(),
+                                                "failCount", p.getFailCount()))
+                        .toList());
+        return ResponseEntity.ok(status);
     }
 
     @GetMapping("/schema-drift")

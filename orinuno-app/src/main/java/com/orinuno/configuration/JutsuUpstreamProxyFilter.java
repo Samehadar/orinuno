@@ -88,7 +88,10 @@ public class JutsuUpstreamProxyFilter implements WebFilter {
 
     private static boolean shouldProxy(String path) {
         for (String prefix : PROXY_PREFIXES) {
-            if (path.startsWith(prefix)) {
+            // See KodikUpstreamProxyFilter.shouldProxy — bare-collection requests
+            // (`/api/v1/sources/jutsu?page=1`) need to match too, not just sub-paths.
+            String bare = prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix;
+            if (path.equals(bare) || path.startsWith(bare + "/")) {
                 return true;
             }
         }
