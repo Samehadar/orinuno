@@ -70,7 +70,24 @@ public class KodikUpstreamProxyFilter implements WebFilter {
                     // ADR 0021 §C3.2 — local-file download route moved to source-kodik
                     // (C3.1). VideoDownloadService landed alongside C2.1 (commit
                     // 06370b3); this commit retires orinuno-app's DownloadController.
-                    "/api/v1/download/");
+                    "/api/v1/download/",
+                    // ADR 0021 §E2 stage 1 ported the calendar service slice into
+                    // source-kodik but dropped the HTTP entry point (the demo UI's
+                    // Calendar tab silently 404'd). Controller restored under
+                    // com.orinuno.source.kodik.controller.KodikCalendarController; the
+                    // prefix is added here so orinuno-app reverse-proxies the surface.
+                    "/api/v1/calendar/",
+                    // Kodik-specific health sub-endpoints owned by source-kodik
+                    // (DecoderHealthTracker, ProxyProviderService, KodikResponseMapper
+                    // schema-drift counters, KodikTokenRegistry tier snapshot). NB: do
+                    // NOT add bare /api/v1/health/ — that's the gateway's own
+                    // HealthController (`com.orinuno.controller.HealthController`)
+                    // returning {status:"UP", service:"orinuno"}. The shouldProxy
+                    // matcher uses prefix + "/" so these only catch the sub-paths.
+                    "/api/v1/health/decoder",
+                    "/api/v1/health/proxy",
+                    "/api/v1/health/schema-drift",
+                    "/api/v1/health/tokens");
 
     /**
      * Hop-by-hop headers we strip on both legs of the proxy per RFC 7230 §6.1 plus a couple of
@@ -114,7 +131,13 @@ public class KodikUpstreamProxyFilter implements WebFilter {
 
     private static boolean shouldProxy(String path) {
         for (String prefix : PROXY_PREFIXES) {
-            if (path.startsWith(prefix)) {
+            // Trailing slash on the prefix means "this segment or anything beneath", but the
+            // demo UI (and any other REST consumer) reaches the bare collection root without
+            // a trailing slash — e.g. `/api/v1/content?page=0` for paging. Strip the trailing
+            // slash from the prefix and accept either the bare form OR anything that starts
+            // with prefix + "/". This matches Spring's PathPattern semantics.
+            String bare = prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix;
+            if (path.equals(bare) || path.startsWith(bare + "/")) {
                 return true;
             }
         }

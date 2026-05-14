@@ -43,6 +43,10 @@ data/*
 # Mirror the data/* whitelist here so token state never escapes the local checkout.
 orinuno-app/data/*
 !orinuno-app/data/README.md
+# Same story for the per-source services when launched via `mvn -pl <module>
+# spring-boot:run` (CWD = module dir, KODIK_TOKEN_FILE defaults to ./data/...).
+orinuno-source-kodik/data/
+orinuno-source-jutsu/data/
 
 ### Environment ###
 .env
