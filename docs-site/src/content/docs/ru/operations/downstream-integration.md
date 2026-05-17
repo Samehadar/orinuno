@@ -6,5 +6,5 @@ description: Сквозной runbook для downstream-консьюмеров (
 {/* TODO: перевести на русский. */}
 
 :::note
-Русский перевод пока не готов. См. [английскую версию](/orinuno/operations/downstream consumer-integration/).
+Русский перевод пока не готов. См. [английскую версию](/orinuno/operations/downstream-integration/).
 :::

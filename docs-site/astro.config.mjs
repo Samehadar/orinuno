@@ -97,7 +97,7 @@ export default defineConfig({
         {
           label: 'Operations',
           items: [
-            { slug: 'operations/downstream consumer-integration' },
+            { slug: 'operations/downstream-integration' },
             { slug: 'operations/proxy-pool' },
             { slug: 'operations/kodik-tokens' },
             { slug: 'operations/ttl-refresh' },
