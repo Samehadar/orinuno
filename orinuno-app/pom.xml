@@ -20,7 +20,6 @@
 
     <properties>
         <java.version>21</java.version>
-        <mybatis-spring-boot-starter.version>3.0.5</mybatis-spring-boot-starter.version>
         <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
         <!--
             Kept in lock-step with orinuno-parent's <jsoup.version>: orinuno-app inherits
@@ -113,10 +112,26 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
+        <!--
+            ADR 0021 Phase 2/5 cleanup retired every @Mapper interface +
+            MyBatis-backed L1/L2 write path from orinuno-app. The gateway no
+            longer scans @MapperScan, owns zero *.xml mappers, and the
+            catalog-readonly slice talks to MySQL via plain JdbcTemplate
+            (CatalogReadDataSourceConfiguration → catalogReadJdbcTemplate).
+            mybatis-spring-boot-starter was wiring a SqlSessionFactory + the
+            ClassPathMapperScanner that complains "No MyBatis mapper was
+            found in '[com.orinuno]' package" on every boot — pure dead
+            weight. Both the prod and test-scope starters dropped here; no
+            *Test or *IT class references mybatis/@Mapper/SqlSession either.
+            spring-boot-starter-jdbc declared explicitly so the
+            org.springframework.jdbc.core.JdbcTemplate the catalog-readonly
+            repos consume keeps its dependency edge (used to ride in via
+            the mybatis starter's transitives) + HikariCP for the primary
+            DataSource Spring Boot auto-config wires from spring.datasource.*.
+        -->
         <dependency>
-            <groupId>org.mybatis.spring.boot</groupId>
-            <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>${mybatis-spring-boot-starter.version}</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
@@ -180,12 +195,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mybatis.spring.boot</groupId>
-            <artifactId>mybatis-spring-boot-starter-test</artifactId>
-            <version>${mybatis-spring-boot-starter.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
