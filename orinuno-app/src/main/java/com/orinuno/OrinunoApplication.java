@@ -11,9 +11,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 // ADR 0021 §E2 — orinuno-app owns no @Mapper interfaces (the per-source services
 // hold their own L1 mappers; the meter-readonly DS uses JdbcTemplate directly).
-// mybatis-spring-boot-starter is still on the production classpath out of
-// inertia; auto-config wires a SqlSessionFactory against the primary DataSource
-// that nothing consumes. Tracked as a follow-up dep-trim alongside ADR 0021 E3.
+// mybatis-spring-boot-starter was dropped from this module's pom in the same
+// cleanup pass — production + test classpaths are MyBatis-free.
 @SpringBootApplication
 @EnableScheduling
 @ConfigurationPropertiesScan("com.orinuno")
