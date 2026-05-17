@@ -26,12 +26,20 @@ import io.swagger.v3.oas.annotations.media.Schema;
     @JsonSubTypes.Type(value = JutsuEpisodeMetaDto.class, name = "episode"),
     @JsonSubTypes.Type(value = JutsuFilmMetaDto.class, name = "film"),
 })
+// NOTE: do NOT add `oneOf = {JutsuEpisodeMetaDto.class, JutsuFilmMetaDto.class}` here.
+// Springdoc already emits the parent→child link via the `oneOf` it derives from the
+// sealed `permits` clause, and the children's `implements JutsuPageMetaDto` makes
+// springdoc emit a child→parent `allOf` reference. Re-declaring `oneOf` explicitly
+// duplicates the parent→child edge and creates a parent→child→parent cycle in the
+// generated openapi.json, which crashes starlight-openapi-plugin during static-route
+// rendering (RangeError: Maximum call stack size exceeded → heap OOM in CI). The
+// discriminator+mapping below is sufficient for clients to dispatch on `kind` without
+// the redundant `oneOf`.
 @Schema(
         description =
                 "Lightweight metadata for one jut.su viewer page. The `kind` discriminator selects"
                         + " between an episode (`season`, `episode`) and a full-length film"
                         + " (`filmIndex`).",
-        oneOf = {JutsuEpisodeMetaDto.class, JutsuFilmMetaDto.class},
         discriminatorProperty = "kind",
         discriminatorMapping = {
             @DiscriminatorMapping(value = "episode", schema = JutsuEpisodeMetaDto.class),
