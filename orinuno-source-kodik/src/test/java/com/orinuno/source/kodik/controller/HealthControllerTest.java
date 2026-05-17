@@ -1,8 +1,8 @@
 /*
  * HealthControllerTest — ADR 0018 Phase 2.4d invariant.
  *
- * Locks the slim health surface this service exposes to operators / parser-
- * kodik:
+ * Locks the slim health surface this service exposes to operators / downstream
+ * consumers:
  *
  *   1. /api/v1/health returns UP + service="orinuno-source-kodik" so callers
  *      can distinguish source-kodik from orinuno-app in their probes.
@@ -11,8 +11,8 @@
  *   3. /api/v1/health/schema-drift reflects the KodikResponseMapper drift
  *      registry — CLEAN when empty, DRIFT_DETECTED when not.
  *
- * Pure unit test — no Spring context. Mocks the two SDK beans the controller
- * depends on and asserts on the returned Map shape directly.
+ * Pure unit test — no Spring context. Mocks the four collaborators the
+ * controller depends on and asserts on the returned Map shape directly.
  */
 package com.orinuno.source.kodik.controller;
 
@@ -24,6 +24,8 @@ import com.kodik.drift.DriftRecord;
 import com.kodik.token.KodikTokenEntry;
 import com.kodik.token.KodikTokenRegistry;
 import com.kodik.token.KodikTokenTier;
+import com.orinuno.source.kodik.service.DecoderHealthTracker;
+import com.orinuno.source.kodik.service.ProxyProviderService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -41,11 +43,18 @@ class HealthControllerTest {
 
     @Mock private KodikTokenRegistry kodikTokenRegistry;
     @Mock private KodikResponseMapper kodikResponseMapper;
+    @Mock private DecoderHealthTracker decoderHealthTracker;
+    @Mock private ProxyProviderService proxyProviderService;
 
     @Test
     @DisplayName("/api/v1/health returns UP + service name = orinuno-source-kodik")
     void healthReportsServiceName() {
-        HealthController controller = new HealthController(kodikTokenRegistry, kodikResponseMapper);
+        HealthController controller =
+                new HealthController(
+                        kodikTokenRegistry,
+                        kodikResponseMapper,
+                        decoderHealthTracker,
+                        proxyProviderService);
 
         ResponseEntity<Map<String, Object>> response = controller.health();
 
@@ -67,7 +76,12 @@ class HealthControllerTest {
         when(kodikTokenRegistry.snapshot())
                 .thenReturn(Map.of(KodikTokenTier.STABLE, List.of(live)));
 
-        HealthController controller = new HealthController(kodikTokenRegistry, kodikResponseMapper);
+        HealthController controller =
+                new HealthController(
+                        kodikTokenRegistry,
+                        kodikResponseMapper,
+                        decoderHealthTracker,
+                        proxyProviderService);
         Map<String, Object> body = controller.tokensHealth().getBody();
 
         assertThat(body).containsEntry("status", "OK").containsEntry("liveCount", 1);
@@ -91,7 +105,12 @@ class HealthControllerTest {
         when(kodikResponseMapper.getTotalChecks()).thenReturn(new AtomicInteger(42));
         when(kodikResponseMapper.getTotalDriftsDetected()).thenReturn(new AtomicInteger(0));
 
-        HealthController controller = new HealthController(kodikTokenRegistry, kodikResponseMapper);
+        HealthController controller =
+                new HealthController(
+                        kodikTokenRegistry,
+                        kodikResponseMapper,
+                        decoderHealthTracker,
+                        proxyProviderService);
         Map<String, Object> body = controller.schemaDrift().getBody();
 
         assertThat(body)
@@ -114,7 +133,12 @@ class HealthControllerTest {
         when(kodikResponseMapper.getTotalChecks()).thenReturn(new AtomicInteger(100));
         when(kodikResponseMapper.getTotalDriftsDetected()).thenReturn(new AtomicInteger(17));
 
-        HealthController controller = new HealthController(kodikTokenRegistry, kodikResponseMapper);
+        HealthController controller =
+                new HealthController(
+                        kodikTokenRegistry,
+                        kodikResponseMapper,
+                        decoderHealthTracker,
+                        proxyProviderService);
         Map<String, Object> body = controller.schemaDrift().getBody();
 
         assertThat(body)
