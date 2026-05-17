@@ -52,7 +52,7 @@ curl -sS http://localhost:8085/api/v1/health/tokens | jq '.liveCount'
 ```
 
 If you want one call that also covers schema-drift and queue-depth, use the
-[integration health endpoint](/orinuno/operations/downstream consumer-integration/#1-pre-flight-checklist):
+[integration health endpoint](/orinuno/operations/downstream-integration/#1-pre-flight-checklist):
 
 ```sh
 curl -sS http://localhost:8085/api/v1/health/integration | jq

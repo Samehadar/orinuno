@@ -9,7 +9,7 @@ The synchronous `POST /api/v1/parse/search` endpoint stays open for the
 entire decode cycle, which can run for tens of minutes on large anime
 serials (e.g. Naruto: 220 episodes × N translations). Phase 2 introduces
 an async parse-request log so callers — primarily
-[downstream consumer discovery](#downstream consumer-discovery-flow) — can submit work,
+[downstream consumer discovery](#downstream-consumer-discovery-flow) — can submit work,
 get an id immediately, and poll progress (or, in production, react to
 `/api/v1/export/ready` updates) without holding HTTP connections open.
 
