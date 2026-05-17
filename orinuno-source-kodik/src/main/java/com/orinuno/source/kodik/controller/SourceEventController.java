@@ -1,7 +1,7 @@
 /*
  * SourceEventController — ADR 0018 Phase 2.6.
  *
- * Producer-side event stream of this service's L1 Kodik catalog. Both Kin's
+ * Producer-side event stream of this service's L1 Kodik catalog. The OSS aggregator and any out-of-tree
  * external bridge and the future OSS meter aggregator poll this endpoint for
  * SourceCatalogEvent payloads and decide what to do with them. The wire-format JSON
  * shape is identical to what orinuno-app emits today (mirrors ADR 0017's
@@ -45,8 +45,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(
         name = "Source Events",
         description =
-                "Producer-side SourceCatalogEvent stream — open contract for any consumer (Kin"
-                        + " meter, OSS aggregators) to ingest Kodik catalog state.")
+                "Producer-side SourceCatalogEvent stream — open contract for any downstream"
+                        + " consumer ( meter, OSS aggregators) to ingest Kodik catalog state.")
 public class SourceEventController {
 
     private static final int DEFAULT_LIMIT = 20;

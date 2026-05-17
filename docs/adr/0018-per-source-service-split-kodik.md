@@ -35,7 +35,7 @@ Three tiers:
    - Each owns its L1 schema (`kodik_*` / `jutsu_*`), its own MySQL schema or database, its own REST surface (`/api/v1/kodik/*`, `/api/v1/sources/jutsu/*`, `/api/v1/parse/*` Kodik slice, etc.), and exposes `/api/v1/source-events/ready` emitting `SourceCatalogEvent` per ADR 0017.
 
 2. **Two `meter`s — identical event contract, symmetric role, different ownership**:
-   - `external meter` (proprietary, Kin) — already operational. Consumes events via `external bridge` and lands `ContentExportRequest` into the external aggregator'scatalog (the consumer DB). No change required by this ADR.
+   - `external meter` (proprietary, out of repo) — already operational. Consumes events via `external bridge` and lands `ContentExportRequest` into the external aggregator catalog (the consumer DB). No change required by this ADR.
    - `meter` (NEW OSS service, Phase 5) — symmetric to external meter. Consumes the same `SourceCatalogEvent` from per-source services, runs identity resolution, writes L2/L3 (`episode_source`, `episode_video`, `catalog_*`) into a **shared catalog DB**.
 
 3. **`orinuno` (NOT renamed)** — remains the public-facing API. Stateless relative to catalog. Read-only consumer of the shared catalog DB (via second MyBatis datasource + Caffeine cache). Reverse-proxies `/api/v1/kodik/*`, `/api/v1/sources/jutsu/*`, `/api/v1/parse/*` to the appropriate per-source service. Houses cross-source orchestration (`MultiSourceRanker`, source-registry endpoints, demo UI backing). Still embeds `sibnet-sdk` and `aniboom-sdk` as stateless decoder libraries (ADR 0016 §"Source classification" rule unchanged — decoder-only sources do not get standalone services). **Deployable in multiple instances behind a load balancer.**
@@ -182,7 +182,7 @@ flowchart LR
 | 5.* | `meter` OSS service; catalog write-path moves into `meter`; `orinuno` read-only repository + Caffeine cache; multi-instance `orinuno`; DB user separation; full split docker-compose | ✅ done (5.1, 5.2a, 5.3, 5.4, 5.5, 5.6, 5.7, 5.7a, 5.8, 5.9, 5.10, 5.11, 5.13 ✅; 5.12 deferred per ADR 0020) |
 | 6 | Kafka outbox + event sourcing (future ADR, triggered by §"Future evolution") | ⏳ deferred |
 
-### Phase 2 migration recipe — Kin downstream consumer / external bridge cutover
+### Phase 2 migration recipe — downstream consumer / external bridge cutover
 
 External consumers (the external aggregator's`external Kodik parser`, `external bridge`) reach the Kodik routes via the `orinuno` reverse-proxy by default — no code change required when Phase 2.8's filter is enabled. To bypass the orinuno hop entirely and call `orinuno-source-kodik` directly:
 

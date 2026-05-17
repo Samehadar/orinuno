@@ -1,7 +1,7 @@
 /*
  * SourceEventController — ADR 0019 Phase 4.6.
  *
- * Producer-side event stream of this service's L1 jut.su catalog. Both Kin's
+ * Producer-side event stream of this service's L1 jut.su catalog. The OSS aggregator and any out-of-tree
  * external bridge (if it ever cuts over) and the OSS meter (Phase 4.11)
  * poll this endpoint for SourceCatalogEvent payloads. Wire shape identical to
  * orinuno-source-kodik's stream — sealed event hierarchy from
@@ -30,8 +30,9 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(
         name = "Source Events",
         description =
-                "Producer-side SourceCatalogEvent stream — open contract for any consumer (Kin"
-                        + " meter, OSS meter, OSS aggregators) to ingest jut.su catalog state.")
+                "Producer-side SourceCatalogEvent stream — open contract for any downstream"
+                        + " consumer ( meter, OSS meter, OSS aggregators) to ingest jut.su catalog"
+                        + " state.")
 public class SourceEventController {
 
     private static final int DEFAULT_LIMIT = 20;

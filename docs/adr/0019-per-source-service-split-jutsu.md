@@ -14,7 +14,7 @@ ADR 0018 codified the per-source service split and shipped Kodik as the first cu
 
 - catch SDK / contract drift now (jut.su's HTML drift detector is more aggressive than Kodik's JSON drift; the standalone deployable must keep its existing failure isolation guarantees intact);
 - size the Phase 4 PR fan-out before the gate clears (live-fallback Playwright + circuit breaker + negative cache + sticky-session SDK don't all fit in one PR comfortably);
-- pre-publish the `downstream jut.su consumer` / consumer cutover recipe so Kin (and any OSS consumer) can plan their config flips.
+- pre-publish the `downstream jut.su consumer` / consumer cutover recipe so any downstream consumer can plan their config flips.
 
 **Triggers fired (same four as ADR 0018, jut.su-specific notes):**
 
@@ -134,7 +134,7 @@ External callers — the external aggregator'shypothetical `downstream jut.su co
 External consumers reach jut.su via the orinuno gateway by default — no code change required when Phase 4.8's filter is enabled. To bypass:
 
 - demo UI — `VITE_API_URL` already empty (relative paths through orinuno's reverse-proxy); no change.
-- Any future Kin `downstream jut.su consumer` — set `SOURCEJUTSU_BASE_URL=http://orinuno-source-jutsu:8086` to bypass orinuno hop. Endpoint paths and shapes are identical.
+- Any future external `downstream jut.su consumer` — set `SOURCEJUTSU_BASE_URL=http://orinuno-source-jutsu:8086` to bypass orinuno hop. Endpoint paths and shapes are identical.
 
 ## Considered alternatives
 

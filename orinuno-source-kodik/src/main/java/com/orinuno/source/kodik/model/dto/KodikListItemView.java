@@ -1,8 +1,8 @@
 package com.orinuno.source.kodik.model.dto;
 
 /**
- * Minimal subset of Kodik /list result fields exposed via Orinuno's proxy. downstream consumer uses this
- * to decide what to enqueue (gap-fill, ongoing). Avoids forwarding the entire Kodik payload
+ * Minimal subset of Kodik /list result fields exposed via Orinuno's proxy. downstream consumer uses
+ * this to decide what to enqueue (gap-fill, ongoing). Avoids forwarding the entire Kodik payload
  * (including obfuscated kodik link, internal flags, etc.) and keeps the contract stable across
  * Kodik schema drift.
  */

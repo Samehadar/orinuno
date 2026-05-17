@@ -58,7 +58,7 @@ Dependencies: `jackson-annotations` (for `@JsonTypeInfo` / `@JsonSubTypes` on th
 | `ContentCommonInfo.{kinopoiskId, imdbId, shikimoriId, myDramaListId, tmdbId}` (each is `<consumer-namespace>.common.model.<X>Id` wrapping `Optional<String>`) | yes | one `ExternalIds` record with plain `@Nullable String` fields. Adds `malId / anidbId / anilistId / worldartAnimationId / worldartCinemaId` that meter doesn't track but Kodik exposes (`worldart_link`) and AnimeParsers consumes. |
 | `ContentCommonInfo.{videoQuality, audioQuality, ageRestriction}` (consumer-coupled enums) | yes | open `String` fields. Sources emit "1080p HD" / "16+" verbatim; consumers parse if they care. |
 | `EpisodeVariant.streamQuality: StreamQuality` (consumer-coupled enum from `common.model.manual.source`) | yes | open `String streamQuality` on `SourceEpisodeVariant`. |
-| `filepath` / `posterFilepath` / `bigPosterFilepath` / `trailerFilepaths` (semantically MinIO object keys in Kin) | yes | rename to `mediaUrl` (on `SourceEpisodeVariant`) / `posterUrl` / `bigPosterUrl` / `screenshotUrls` / `trailerUrls` (all on `SourceContentInfo`, see ARCH-0017-FOLLOWUP-POSTER). Meaning becomes "fully-qualified producer-side URL". Meter's `external bridge` (consumer-side adapter, lives in `external aggregator`) downloads them into MinIO and translates the resulting object keys via a `PosterAttachments` record into meter's `posterFilepath` / `bigPosterFilepath` / `trailerFilepaths` family. Note: meter has no `previewImageFilepath` field — the screenshot list is producer-side only and is consumed as the in-orinuno fallback for `posterUrl`. |
+| `filepath` / `posterFilepath` / `bigPosterFilepath` / `trailerFilepaths` (semantically MinIO object keys on consumer side) | yes | rename to `mediaUrl` (on `SourceEpisodeVariant`) / `posterUrl` / `bigPosterUrl` / `screenshotUrls` / `trailerUrls` (all on `SourceContentInfo`, see ARCH-0017-FOLLOWUP-POSTER). Meaning becomes "fully-qualified producer-side URL". Meter's `external bridge` (consumer-side adapter, lives in `external aggregator`) downloads them into MinIO and translates the resulting object keys via a `PosterAttachments` record into meter's `posterFilepath` / `bigPosterFilepath` / `trailerFilepaths` family. Note: meter has no `previewImageFilepath` field — the screenshot list is producer-side only and is consumed as the in-orinuno fallback for `posterUrl`. |
 | `Season`, `Episode` records (modulo `filepath`) | no | copied verbatim with the rename. |
 | Sealed `ContentExportRequest` with `ExportMovieRequest | ExportSerialRequest` deduction | no | adopted as `SourceCatalogEvent` shape. Adds `TitleObserved` (today's L1 → L3 hand-off without seasons/episodes — what `KodikCatalogIngestion` and `JutsuCatalogIngestion` actually emit), `EpisodesUpdated` (incremental refresh), `SourceRemoved` (upstream removal). |
 | Builder/record/Lombok/Jackson `@JsonTypeInfo(DEDUCTION)` patterns | no | kept as-is — proven shape, no reason to invent something different. |
@@ -108,7 +108,7 @@ flowchart LR
     p4 -.->|"out of scope, lives in external aggregator"| p6["external bridge\n(SourceCatalogEvent → ContentExportRequest)"]
 ```
 
-P1, P2, P3 land in this PR (or the next 1–2 sequential PRs against this ADR). P4 reuses the SDK publish pipeline (`IDEA-SDK-4`). P-deferred and the Kin bridge are gated behind their own consumers materialising — neither is part of this ADR's tracker.
+P1, P2, P3 land in this PR (or the next 1–2 sequential PRs against this ADR). P4 reuses the SDK publish pipeline (`IDEA-SDK-4`). P-deferred and the external bridge are gated behind their own consumers materialising — neither is part of this ADR's tracker.
 
 ## Blocked on
 
@@ -129,14 +129,14 @@ Nothing. Module + emitter + refactor are independent of P1a (jut.su L1) and P1b 
 | Golden-file JSON shape stability test inside `orinuno-source-contract` | this PR |
 | `CatalogIngestionIT` stays green (Spring picks up the default emitter, behaviour unchanged) | this PR |
 | Maven Central publish pipeline reuses `IDEA-SDK-4` plumbing | deferred — Maven Central отложен до явного внешнего потребителя; артефакты публикуются в локальный / internal Maven repo. Решение зафиксируется отдельным ADR при появлении триггера. |
-| `OutboxEventEmitter` + `<context>_event_outbox` table | deferred — шипится когда появится второй консьюмер `SourceCatalogEvent` (Kin `external bridge` → событие-driven вместо poll, либо OSS meter-сервис из ADR 0018 захочет at-least-once delivery). Дальнейший апгрейд до Kafka-event-sourcing трекается отдельным будущим ADR. |
+| `OutboxEventEmitter` + `<context>_event_outbox` table | deferred — шипится когда появится второй консьюмер `SourceCatalogEvent` (the external bridge → событие-driven вместо poll, либо OSS meter-сервис из ADR 0018 захочет at-least-once delivery). Дальнейший апгрейд до Kafka-event-sourcing трекается отдельным будущим ADR. |
 | `external bridge` in `external aggregator` (consumes `SourceCatalogEvent`, emits `ContentExportRequest`) | done (2026-05-10), follow-up landed |
 | `SourceContentInfo` poster URLs + `PosterAttachments` translator + scheduler download restore (ARCH-0017-FOLLOWUP-POSTER) | done (2026-05-10) |
 
 ## Successor context
 
 После ADR 0016 ⇒ Layout A "stay monolith". [ADR 0018](0018-per-source-service-split-kodik.md) (2026-05-11) перевернул направление на Layout B (per-source split + отдельный OSS `meter` сервис). `SourceCatalogEvent` + `SourceEventEmitter` контракт **остаётся неизменным** — он становится единственным API между:
-1. per-source services (`orinuno-source-kodik`, `orinuno-source-jutsu`) и Kin `external bridge`;
+1. per-source services (`orinuno-source-kodik`, `orinuno-source-jutsu`) и the external bridge;
 2. теми же per-source services и новым OSS `meter` сервисом.
 
 Симметрия двух meter'ов (proprietary + OSS) под одним контрактом — главный результат ADR 0017, который Phase 5 нового плана только усиливает.

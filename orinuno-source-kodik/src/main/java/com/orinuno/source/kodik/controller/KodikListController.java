@@ -15,9 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
 /**
- * Thin proxy over Kodik /list. Used by downstream consumer discovery to enumerate the catalogue without
- * exposing the raw Kodik response. Schema drift (HIGH-severity) surfaces as RFC 7234 Warning
- * header.
+ * Thin proxy over Kodik /list. Used by downstream consumer discovery to enumerate the catalogue
+ * without exposing the raw Kodik response. Schema drift (HIGH-severity) surfaces as RFC 7234
+ * Warning header.
  */
 @Slf4j
 @RestController

@@ -607,7 +607,7 @@ P4 — жить в monolith, пока не сработает один из тр
 **Контекст:** ADR 0016 закрепил modular monolith как трajectory; ADR 0017 закрывает оставшийся пробел в boundary-discipline — producer-side wire format между source bounded context и любым consumer'ом (in-process L3 sink, the external meter через будущий `external bridge`, OSS aggregator). До этого PR контракт был типизирован catalog-internal записями (`CatalogIdentityRequest`), что блокировало Maven Central публикацию и делало любую внешнюю интеграцию (downstream consumer shrinking, OSS подписчики) обходом catalog'а напрямую.
 
 **Что сделано:**
-- Новый Maven-модуль `orinuno-source-contract` (sibling рядом с SDK-модулями): pure DTOs (`SourceIdentifier`, `ExternalIds`, `Provenance`, `ContentKindHint`, `SourceContentInfo`, `SourceSeason`, `SourceEpisode`, `SourceEpisodeVariant`), sealed `SourceCatalogEvent` с пятью вариантами (`TitleObserved` / `MovieDiscovered` / `SeriesDiscovered` / `EpisodesUpdated` / `SourceRemoved`), функциональный интерфейс `SourceEventEmitter`. Зависимости: `jackson-annotations`, `jakarta.annotation-api`, `lombok` (provided). **Без Spring, без jsoup, без slf4j, без Kin-типов.** Готов к публикации на Maven Central через тот же pipeline, что планируется для SDK-модулей (см. `IDEA-SDK-4`).
+- Новый Maven-модуль `orinuno-source-contract` (sibling рядом с SDK-модулями): pure DTOs (`SourceIdentifier`, `ExternalIds`, `Provenance`, `ContentKindHint`, `SourceContentInfo`, `SourceSeason`, `SourceEpisode`, `SourceEpisodeVariant`), sealed `SourceCatalogEvent` с пятью вариантами (`TitleObserved` / `MovieDiscovered` / `SeriesDiscovered` / `EpisodesUpdated` / `SourceRemoved`), функциональный интерфейс `SourceEventEmitter`. Зависимости: `jackson-annotations`, `jakarta.annotation-api`, `lombok` (provided). **Без Spring, без jsoup, без slf4j, без consumer-coupled типов.** Готов к публикации на Maven Central через тот же pipeline, что планируется для SDK-модулей (см. `IDEA-SDK-4`).
 - Golden-file JSON shape stability test (`JsonShapeStabilityTest` + 5 fixture-файлов в `src/test/resources/com/orinuno/contract/source/golden/`) — фиксирует wire format. Любая случайная переиначка контракта (rename, reorder, type change) ломает тест до merge. Discriminator: `@JsonTypeInfo(NAME)` с `kind` property (kebab-case значения `title-observed` / `movie-discovered` / …).
 - В `orinuno-app`: новый `CatalogSinkEventEmitter` (`com.orinuno.catalog.ingestion`) — default in-process `@Component`, реализующий `SourceEventEmitter`. Переводит `SourceCatalogEvent` обратно в `CatalogIdentityRequest` и зовёт `CatalogPublicApi.findOrCreateContent(...)`. Failure isolation сместилась с per-bridge try/catch на one-shot inside emitter.
 - Рефакторинг `KodikCatalogIngestion` (`com.orinuno.service`) и `JutsuCatalogIngestion` (`com.orinuno.jutsu.sync`): теперь зависят от `SourceEventEmitter` (а не от `CatalogPublicApi`); строят `SourceCatalogEvent.TitleObserved` (с `Provenance`, открыто-string `sourceType`, `ExternalIds` builder) и эмитят. Helper-методы `mapKind(...)`, `parseYear(...)`, `resolveSourceId(...)` остались статическими и продолжают тестироваться unit-тестами.
@@ -617,7 +617,7 @@ P4 — жить в monolith, пока не сработает один из тр
 
 **Что осталось (out of scope этого PR):**
 - **Maven Central publish** — переиспользует pipeline от `IDEA-SDK-4` (всё ещё PENDING на нашей стороне). Когда первый OSS consumer материализуется — публикуем артефакт.
-- **`OutboxEventEmitter` + `<context>_event_outbox` таблица** — deferred. Пишем outbox-implementation только когда появится второй consumer (the external aggregator's`external bridge` или remote OSS aggregator). До тех пор default in-process emitter — единственный.
+- **`OutboxEventEmitter` + `<context>_event_outbox` таблица** — deferred. Пишем outbox-implementation только когда появится второй consumer (the external aggregator's `external bridge` или remote OSS aggregator). До тех пор default in-process emitter — единственный.
 - **Episode-level emit** (`MovieDiscovered`, `SeriesDiscovered`, `EpisodesUpdated` с реальными вариантами) — пока default emitter форвардит только chrome через `findOrCreateContent`, эпизоды игнорируются. Реализуется когда P2 (canonical REST API) расширит resolver на canonical episodes.
 
 ---
@@ -635,7 +635,7 @@ P4 — жить в monolith, пока не сработает один из тр
 
 **Архитектурный смысл:**
 - `SourceCatalogEvent` теперь несёт **producer-side URLs** (что сорс показал). OSS-consumer (Telegram-бот, indexer) рендерит их напрямую.
-- `external bridge::PosterAttachments` — consumer-side **MinIO object keys** (что Kin сложил у себя). Boundary между URL-семантикой и filepath-семантикой явный — никто не путает их в одном поле.
+- `external bridge::PosterAttachments` — consumer-side **MinIO object keys** (что консьюмер сложил у себя). Boundary между URL-семантикой и filepath-семантикой явный — никто не путает их в одном поле.
 - Мы НЕ ввели `meterapi.dto.ContentCommonInfo.previewImageFilepath` — этого поля в meter не существует (audit-table в ADR 0017 ошибочно его упоминал). Реальный набор: `posterFilepath` + `bigPosterFilepath` + `trailerFilepaths`.
 
 ---
