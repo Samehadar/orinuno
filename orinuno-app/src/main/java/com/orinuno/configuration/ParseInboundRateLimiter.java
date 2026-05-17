@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  * Prometheus ({@code orinuno_inbound_throttle_total{consumer=…}}).
  *
  * <p>This is single-instance only: every replica owns its own buckets. Consumers running against a
- * replicated deployment will see effectively N×budget — see operations/kodik-parser-integration §6.
+ * replicated deployment will see effectively N×budget — see operations/integration §6.
  */
 @Slf4j
 @Component

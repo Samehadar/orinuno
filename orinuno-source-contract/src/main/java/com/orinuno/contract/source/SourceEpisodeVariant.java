@@ -8,17 +8,16 @@ import java.util.Objects;
 
 /**
  * One playable variant for an episode (e.g. one translation track for a Kodik episode, one quality
- * level for a sibnet upload, one direct mp4 link). Mirrors meter's {@code EpisodeVariant} with the
- * Kin-coupled bits replaced:
+ * level for a sibnet upload, one direct mp4 link). Consumer-neutral shape:
  *
  * <ul>
- *   <li>{@code identifier} stays the same shape (per-source key) but uses {@link SourceIdentifier}
- *       (open-string source type) instead of meter's closed {@code SourceType}.
- *   <li>{@code mediaUrl} replaces meter's {@code filepath} — meaning is the same (a URL/path that a
- *       player can resolve), but the field name no longer implies a MinIO key. Kin's {@code
- *       external-bridge} translates {@code mediaUrl} → {@code filepath} on its side.
- *   <li>{@code streamQuality} is a plain string ({@code "1080p"}, {@code "HD"}, …) instead of
- *       meter's closed {@code StreamQuality} enum.
+ *   <li>{@code identifier} is the per-source key wrapped in {@link SourceIdentifier} with an
+ *       open-string source type, so new sources can be added without recompiling the contract.
+ *   <li>{@code mediaUrl} is the playable URL/path the consumer should hand to its player or
+ *       download pipeline. Downstream aggregators that store media in their own object store
+ *       translate {@code mediaUrl} → their internal filepath shape on the consumer side.
+ *   <li>{@code streamQuality} is a plain string ({@code "1080p"}, {@code "HD"}, …) instead of a
+ *       closed enum.
  * </ul>
  *
  * <p>{@code mediaUrl} is currently the only non-nullable field beyond {@code identifier} — variants

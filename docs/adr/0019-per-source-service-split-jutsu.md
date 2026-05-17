@@ -14,12 +14,12 @@ ADR 0018 codified the per-source service split and shipped Kodik as the first cu
 
 - catch SDK / contract drift now (jut.su's HTML drift detector is more aggressive than Kodik's JSON drift; the standalone deployable must keep its existing failure isolation guarantees intact);
 - size the Phase 4 PR fan-out before the gate clears (live-fallback Playwright + circuit breaker + negative cache + sticky-session SDK don't all fit in one PR comfortably);
-- pre-publish the `jutsu-parser` / consumer cutover recipe so Kin (and any OSS consumer) can plan their config flips.
+- pre-publish the the downstream jut.su consumer / consumer cutover recipe so any downstream consumer can plan their config flips.
 
 **Triggers fired (same four as ADR 0018, jut.su-specific notes):**
 
 1. **Standalone product** — selling/integrating jut.su parser separately. jut.su has a smaller user base than Kodik but is the only AAA path for the ~20 simulcast titles per season that Kodik doesn't license, so OSS users frequently want jut.su without the Kodik stack.
-2. **OSS ↔ corporate split** — community contributions on HTML drift / selectors land faster when the parser ships independently. jut.su's DOM is hand-curated; a single mid-season layout change today requires a Kin-internal release.
+2. **OSS ↔ corporate split** — community contributions on HTML drift / selectors land faster when the parser ships independently. jut.su's DOM is hand-curated; a single mid-season layout change today requires a consumer-internal release.
 3. **Per-parser failure isolation** — jut.su's live-fallback path (Playwright/Chromium scrape) is the most fragile thing in `orinuno-app` today. Premium-tier 403s, slug 404s, sticky-session breakage, Chromium OOMs — none of these should be able to take down the Kodik path or the orinuno gateway.
 4. **Preventive scaling** — same Aniboom/Sibnet/Shikimori expansion argument from ADR 0018.
 
@@ -100,7 +100,7 @@ jut.su already emits `SourceCatalogEvent` via the same in-process emitter today 
 
 ### REST surface stability — identical promise
 
-External callers — Kin's hypothetical `jutsu-parser` (none today), the demo UI's `/jutsu` route, future OSS consumers — hit the orinuno gateway. Direct calls to `orinuno-source-jutsu` are an optional perf/independence shortcut, not a correctness requirement.
+External callers — the external aggregator's hypothetical the downstream jut.su consumer (none today), the demo UI's `/jutsu` route, future OSS consumers — hit the orinuno gateway. Direct calls to `orinuno-source-jutsu` are an optional perf/independence shortcut, not a correctness requirement.
 
 ### Reactor changes
 
@@ -134,7 +134,7 @@ External callers — Kin's hypothetical `jutsu-parser` (none today), the demo UI
 External consumers reach jut.su via the orinuno gateway by default — no code change required when Phase 4.8's filter is enabled. To bypass:
 
 - demo UI — `VITE_API_URL` already empty (relative paths through orinuno's reverse-proxy); no change.
-- Any future Kin `jutsu-parser` — set `SOURCEJUTSU_BASE_URL=http://orinuno-source-jutsu:8086` to bypass orinuno hop. Endpoint paths and shapes are identical.
+- Any future external the downstream jut.su consumer — set `SOURCEJUTSU_BASE_URL=http://orinuno-source-jutsu:8086` to bypass orinuno hop. Endpoint paths and shapes are identical.
 
 ## Considered alternatives
 

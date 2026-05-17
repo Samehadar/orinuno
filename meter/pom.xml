@@ -17,11 +17,11 @@
 
     <name>meter (OSS catalog collector)</name>
     <description>
-        OSS-side counterpart of Kin's proprietary downstream-repo/meter. Subscribes to
-        /api/v1/source-events/ready on every per-source service (orinuno-source-kodik,
-        future orinuno-source-jutsu, …), reconciles the events through
-        CatalogIdentityResolver, and persists the canonical catalog (catalog_content,
-        catalog_episode, catalog_episode_source_link, episode_source, episode_video)
+        OSS catalog collector. Subscribes to /api/v1/source-events/ready on every
+        per-source service (orinuno-source-kodik, orinuno-source-jutsu, …), reconciles
+        the events through CatalogIdentityResolver, and persists the canonical catalog
+        (catalog_content, catalog_episode, catalog_episode_source_link, episode_source,
+        episode_video)
         into a shared MySQL schema.
 
         Shared-DB contract (ADR 0018 Phase 5):
@@ -63,8 +63,8 @@
         <!--
             WebFlux for the source-event poller (one WebClient per per-source service).
             meter exposes no public REST surface today — its consumers read the catalog
-            DB directly (orinuno) or via Kin's proprietary catalog API (legacy backend).
-            Health/diagnostics ride on the actuator port only.
+            DB directly (orinuno) or through their own adapters. Health/diagnostics
+            ride on the actuator port only.
         -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

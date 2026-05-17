@@ -25,7 +25,7 @@ public interface CatalogPublicApi {
      * none exists yet.
      *
      * <p>Lookup order, mirroring {@code meter}'s {@code CatalogContentFindOrCreateService} but
-     * stripped of Kin business logic: shikimori → mal → imdb → kinopoisk → mdl → tmdb →
+     * stripped of consumer business logic: shikimori → mal → imdb → kinopoisk → mdl → tmdb →
      * (sourceType, sourceId). The first hit wins; the others are still attached as bindings to the
      * resolved canonical row, but never trigger a merge of two existing canonical rows (P1b "first
      * writer wins" tie-break — auto-merge is deferred to a later phase, see {@code TECH_DEBT.md}).

@@ -1,10 +1,10 @@
 package com.orinuno.model.dto;
 
 /**
- * Minimal subset of Kodik /list result fields exposed via Orinuno's proxy. kodik-parser uses this
- * to decide what to enqueue (gap-fill, ongoing). Avoids forwarding the entire Kodik payload
- * (including obfuscated kodik link, internal flags, etc.) and keeps the contract stable across
- * Kodik schema drift.
+ * Minimal subset of Kodik /list result fields exposed via Orinuno's proxy. Downstream discovery
+ * consumers use this to decide what to enqueue (gap-fill, ongoing). Avoids forwarding the entire
+ * Kodik payload (including obfuscated kodik link, internal flags, etc.) and keeps the contract
+ * stable across Kodik schema drift.
  */
 public record KodikListItemView(
         String id,

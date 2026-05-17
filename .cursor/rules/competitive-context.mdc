@@ -39,7 +39,7 @@ These projects solve similar problems and serve as reference for feature ideas, 
 - Raw response first pattern (all Kodik responses → `Map<String, Object>` → then DTO mapping)
 - 67+ live API stability tests in `KodikApiStabilityTest`
 - Video download pipeline (Playwright + HLS + ffmpeg remux)
-- Export API for downstream-repo integration
+- Export API + producer-side SourceCatalogEvent stream for downstream-aggregator integration
 
 ## Known Gaps vs Competitors
 

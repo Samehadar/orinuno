@@ -11,7 +11,7 @@ ADR 0016 (2026-05-07) chose Layout A — modular monolith with bounded contexts 
 
 1. **Standalone product trigger** — we want independently deployable `orinuno-source-kodik` and `orinuno-source-jutsu` artefacts so that one source can be sold, integrated, or run without the other. ADR 0016 §"Triggers for moving to Layout B" item 3 fired.
 
-2. **OSS ↔ corporate split (new trigger, not in ADR 0016)** — extract per-source parsers as **open-source services** to attract community contributions (drift fixes, new selectors, edge-case parsers) while keeping the rest of the corporate corporate pipeline (`downstream-repo/meter`, `kodik-parser`, frontend) private. This requires the parser to be a **first-class deployable** with its own repository, issue tracker, and release cadence — not an internal context inside a monolith. The "have your cake and eat it" — OSS surface for the parts of the codebase that are non-secret, corporate consumption via the existing `external-bridge`.
+2. **OSS ↔ corporate split (new trigger, not in ADR 0016)** — extract per-source parsers as **open-source services** to attract community contributions (drift fixes, new selectors, edge-case parsers) while keeping the rest of the corporate corporate pipeline (`external meter`, the downstream consumer, frontend) private. This requires the parser to be a **first-class deployable** with its own repository, issue tracker, and release cadence — not an internal context inside a monolith. The "have your cake and eat it" — OSS surface for the parts of the codebase that are non-secret, corporate consumption via the existing `external bridge`.
 
 3. **Per-parser failure isolation** — current monolith share thread pools, DB connections, and rate-limit budgets across all sources. jut.su HTML drift / live-scrape pressure, Kodik API outages or token-rotation failures, future Aniboom catalog issues — any of them can bleed into the rest. ADR 0016 §"Triggers" item 2 fired; with two catalog sources active plus three more on the roadmap, this becomes a permanent operational concern.
 
@@ -19,7 +19,7 @@ ADR 0016 (2026-05-07) chose Layout A — modular monolith with bounded contexts 
 
 The market evidence from ADR 0016 §"Reference projects" (AnimeParsers, kodik-api-rust, kodikwrapper, KodikDownloader — none split) is still real, but it cuts the **opposite** way now: those projects are **single-source** libraries. orinuno's design point is multi-source, and the OSS-community-feedback flywheel needs per-source repositories to land contributions cleanly.
 
-ADR 0017 (`orinuno-source-contract`) and the corresponding `external-bridge` (in `downstream-repo`, landed 2026-05-10) already turned the per-source → catalog hand-off into a stable contract. ~80% of the boundary discipline needed for the split is already paid. The remaining cost is mechanical: lift Kodik out of `orinuno-app` (it is the only source not yet fully extracted into an SDK — `client/`, `service/Kodik*`, `service/decoder/`, `token/` still live inside the deployable).
+ADR 0017 (`orinuno-source-contract`) and the corresponding `external bridge` (in the external aggregator (out of repo), landed 2026-05-10) already turned the per-source → catalog hand-off into a stable contract. ~80% of the boundary discipline needed for the split is already paid. The remaining cost is mechanical: lift Kodik out of `orinuno-app` (it is the only source not yet fully extracted into an SDK — `client/`, `service/Kodik*`, `service/decoder/`, `token/` still live inside the deployable).
 
 ## Decision
 
@@ -35,8 +35,8 @@ Three tiers:
    - Each owns its L1 schema (`kodik_*` / `jutsu_*`), its own MySQL schema or database, its own REST surface (`/api/v1/kodik/*`, `/api/v1/sources/jutsu/*`, `/api/v1/parse/*` Kodik slice, etc.), and exposes `/api/v1/source-events/ready` emitting `SourceCatalogEvent` per ADR 0017.
 
 2. **Two `meter`s — identical event contract, symmetric role, different ownership**:
-   - `downstream-repo/meter` (proprietary, Kin) — already operational. Consumes events via `external-bridge` and lands `ContentExportRequest` into Kin's catalog (Kin DB). No change required by this ADR.
-   - `meter` (NEW OSS service, Phase 5) — symmetric to Kin meter. Consumes the same `SourceCatalogEvent` from per-source services, runs identity resolution, writes L2/L3 (`episode_source`, `episode_video`, `catalog_*`) into a **shared catalog DB**.
+   - `external meter` (proprietary, out of repo) — already operational. Consumes events via `external bridge` and lands `ContentExportRequest` into the external aggregator's catalog (consumer DB). No change required by this ADR.
+   - `meter` (NEW OSS service, Phase 5) — symmetric to external meter. Consumes the same `SourceCatalogEvent` from per-source services, runs identity resolution, writes L2/L3 (`episode_source`, `episode_video`, `catalog_*`) into a **shared catalog DB**.
 
 3. **`orinuno` (NOT renamed)** — remains the public-facing API. Stateless relative to catalog. Read-only consumer of the shared catalog DB (via second MyBatis datasource + Caffeine cache). Reverse-proxies `/api/v1/kodik/*`, `/api/v1/sources/jutsu/*`, `/api/v1/parse/*` to the appropriate per-source service. Houses cross-source orchestration (`MultiSourceRanker`, source-registry endpoints, demo UI backing). Still embeds `sibnet-sdk` and `aniboom-sdk` as stateless decoder libraries (ADR 0016 §"Source classification" rule unchanged — decoder-only sources do not get standalone services). **Deployable in multiple instances behind a load balancer.**
 
@@ -60,7 +60,7 @@ ADR 0016 §"Source classification" rule survives verbatim:
 Rationale (full discussion in §"Considered alternatives"):
 
 - **No HTTP hop between `orinuno` and `meter`** — multi-instance `orinuno` does not turn `meter` into a critical-path service. `meter` may be down for hours; `orinuno` read path keeps serving cached and DB-resident data.
-- **Symmetric to Kin meter pattern** — `downstream-repo/meter` also owns its catalog DB; the OSS topology mirrors the corporate one.
+- **Symmetric to external meter pattern** — `external meter` also owns its catalog DB; the OSS topology mirrors the corporate one.
 - **No second contract surface to maintain** — `SourceCatalogEvent` (already shipped) stays the only between-service contract. Catalog read access is intra-deployment (shared DB).
 - **DB-level least privilege** — `meter_writer` MySQL user has DML grants on catalog tables; `orinuno_reader` has SELECT-only. Any accidental write attempt from `orinuno` fails at the DB driver.
 
@@ -68,7 +68,7 @@ Acknowledged trade-off: schema coupling between `meter` and `orinuno`. Migration
 
 ### Event contract — preserved verbatim from ADR 0017
 
-`SourceCatalogEvent` + `SourceEventEmitter` interface + `orinuno-source-contract` Maven module — no shape changes. Per-source services emit; both `meter`s (Kin proprietary + OSS) consume identically via `*RemoteEventPoller` HTTP poll against `/api/v1/source-events/ready`. The artefact stays publishable to a local / internal Maven repo; **Maven Central is explicitly deferred** until an external consumer requests it (no value in publishing speculatively).
+`SourceCatalogEvent` + `SourceEventEmitter` interface + `orinuno-source-contract` Maven module — no shape changes. Per-source services emit; both `meter`s (out-of-repo proprietary + OSS) consume identically via `*RemoteEventPoller` HTTP poll against `/api/v1/source-events/ready`. The artefact stays publishable to a local / internal Maven repo; **Maven Central is explicitly deferred** until an external consumer requests it (no value in publishing speculatively).
 
 ### REST surface stability
 
@@ -81,7 +81,7 @@ External URLs unchanged. `orinuno` reverse-proxies:
 - `/api/v1/catalog/*` → `orinuno` reads directly from shared catalog DB (NEW endpoint, Phase 5)
 - `/api/v1/source-events/ready` → per-source service serves its own; consumed by both `meter`s
 
-`kodik-parser` in `downstream-repo` keeps its current endpoint surface against `orinuno`; the reverse-proxy is invisible. Demo UI (`demo/`, port 3000) likewise unaffected.
+the downstream consumer in the external aggregator (out of repo) keeps its current endpoint surface against `orinuno`; the reverse-proxy is invisible. Demo UI (`demo/`, port 3000) likewise unaffected.
 
 ### Bounded-context discipline → service boundary discipline
 
@@ -176,18 +176,18 @@ flowchart LR
 | 0.3 | ArchUnit + Liquibase boundary guards | ✅ done |
 | 0.4 | `kodik_episode_variant` L1+L2 split (ADR 0016 §"Known tech debt" → unblocks Kodik extraction) | ✅ done |
 | 1.* | Kodik SDK extraction into `kodik-sdk` (+ `kodik-sdk-spring-boot-starter`); absorb `kodik-sdk-drift` | ✅ done (Phases 1.1–1.4, 1.6, 1.7, 1.8, 1.9) |
-| 2.* | `orinuno-source-kodik` standalone deployable; reverse-proxy in `orinuno`; external-bridge cutover; demo UI continues working unchanged | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
+| 2.* | `orinuno-source-kodik` standalone deployable; reverse-proxy in `orinuno`; external bridge cutover; demo UI continues working unchanged | 🚧 in progress (2.1–2.4, 2.6, 2.8–2.11 ✅; 2.5 + 2.12 ⏳) |
 | 3 | Validation gate (14 days prod stability of `orinuno-source-kodik`) | 🗑️ dropped — pre-prod refactor mode, no prod traffic to gate on |
 | 4.* | `orinuno-source-jutsu` extraction (mirror of Phase 2) | ✅ done (per ADR 0019 — 4.1, 4.2, 4.3, 4.4, 4.4d, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12 all landed) |
 | 5.* | `meter` OSS service; catalog write-path moves into `meter`; `orinuno` read-only repository + Caffeine cache; multi-instance `orinuno`; DB user separation; full split docker-compose | ✅ done (5.1, 5.2a, 5.3, 5.4, 5.5, 5.6, 5.7, 5.7a, 5.8, 5.9, 5.10, 5.11, 5.13 ✅; 5.12 deferred per ADR 0020) |
 | 6 | Kafka outbox + event sourcing (future ADR, triggered by §"Future evolution") | ⏳ deferred |
 
-### Phase 2 migration recipe — Kin kodik-parser / external-bridge cutover
+### Phase 2 migration recipe — downstream consumer / external bridge cutover
 
-External consumers (Kin's `downstream-repo/kodik-parser`, `downstream-repo/external-bridge`) reach the Kodik routes via the `orinuno` reverse-proxy by default — no code change required when Phase 2.8's filter is enabled. To bypass the orinuno hop entirely and call `orinuno-source-kodik` directly:
+External consumers (the external aggregator's `external Kodik parser`, `external bridge`) reach the Kodik routes via the `orinuno` reverse-proxy by default — no code change required when Phase 2.8's filter is enabled. To bypass the orinuno hop entirely and call `orinuno-source-kodik` directly:
 
-- `downstream-repo/kodik-parser/src/main/resources/application.yml` — override `SOURCEKODIK_BASE_URL=http://orinuno-source-kodik:8086` (or whatever DNS name the deployer chose). Endpoint paths (`/api/v1/kodik/*`, `/api/v1/embed/*`, `/api/v1/reference/*`, `/api/v1/source-events/*`) are identical, so no client changes.
-- `downstream-repo/external-bridge` — point its source-events poller at `http://orinuno-source-kodik:8086/api/v1/source-events/ready` instead of `http://orinuno:8085/...`. Watermark / payload shape identical.
+- `external Kodik parser/src/main/resources/application.yml` — override `SOURCEKODIK_BASE_URL=http://orinuno-source-kodik:8086` (or whatever DNS name the deployer chose). Endpoint paths (`/api/v1/kodik/*`, `/api/v1/embed/*`, `/api/v1/reference/*`, `/api/v1/source-events/*`) are identical, so no client changes.
+- `external bridge` — point its source-events poller at `http://orinuno-source-kodik:8086/api/v1/source-events/ready` instead of `http://orinuno:8085/...`. Watermark / payload shape identical.
 
 The reverse-proxy stays as the durable fallback: consumers that keep pointing at `orinuno` continue to work unchanged. Direct routing is a perf/independence optimisation, not a correctness requirement.
 

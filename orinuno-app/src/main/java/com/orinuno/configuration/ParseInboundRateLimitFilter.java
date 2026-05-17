@@ -31,9 +31,9 @@ import reactor.core.publisher.Mono;
  *       {@code 429} with a {@code Retry-After} header.
  * </ul>
  *
- * Runs ahead of {@link ApiKeyAuthFilter} so that misconfigured callers get a deterministic 400
- * before the api-key check, which is essential for kodik-parser bring-up. See
- * operations/kodik-parser-integration §2.
+ * Runs ahead of {@link ApiKeyAuthFilter} so misconfigured callers get a deterministic 400 before
+ * the api-key check, which is essential for downstream-consumer bring-up. See
+ * operations/integration §2.
  */
 @Slf4j
 @Component

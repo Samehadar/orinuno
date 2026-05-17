@@ -7,18 +7,16 @@ import java.util.Objects;
 
 /**
  * Third-party external-database identifiers harvested from a source's metadata. Every field is a
- * plain {@code @Nullable String} on purpose — this artifact does not depend on any project's
- * internal value-object wrappers, and consumers (Kin's meter, future OSS aggregators) re-wrap as
- * needed.
+ * plain {@code @Nullable String} on purpose — this artifact does not depend on any consumer's
+ * internal value-object wrappers; downstream aggregators re-wrap as needed.
  *
- * <p>Coverage matches the union of:
+ * <p>Coverage union:
  *
  * <ul>
- *   <li>meter's {@code ContentCommonInfo} ids: {@code kinopoiskId}, {@code imdbId}, {@code
- *       shikimoriId}, {@code myDramaListId} (renamed {@code mdlId}), {@code tmdbId}.
- *   <li>fields that AnimeParsers / kodik-api-rust / kodikwrapper expose but meter doesn't track
- *       today: {@code malId}, {@code anidbId}, {@code anilistId}, {@code worldartAnimationId},
- *       {@code worldartCinemaId}.
+ *   <li>Canonical-catalog ids commonly tracked by aggregators: {@code kinopoiskId}, {@code imdbId},
+ *       {@code shikimoriId}, {@code mdlId}, {@code tmdbId}.
+ *   <li>Anime-database ids that AnimeParsers / kodik-api-rust / kodikwrapper expose: {@code malId},
+ *       {@code anidbId}, {@code anilistId}, {@code worldartAnimationId}, {@code worldartCinemaId}.
  * </ul>
  *
  * <p>Whitespace-only strings are normalised to {@code null} in the constructor so consumers don't

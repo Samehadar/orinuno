@@ -35,7 +35,7 @@ Module-by-module ownership (see root `README.md` for the full table):
 | `orinuno-source-kodik` | `orinuno_source_kodik` L1 schema (kodik_*, parse-request queue, decoder cache, calendar) | every Kodik route enumerated above + `/api/v1/source-events/ready` |
 | `orinuno-source-jutsu` | `orinuno_source_jutsu` L1 schema (jutsu_title / jutsu_episode / jutsu_film / jutsu_sync_state) | `/api/v1/sources/jutsu/*` + `/api/v1/source-events/ready` |
 | `meter` | `orinuno_catalog` schema (catalog_* + episode_source + episode_video) | consumes `/api/v1/source-events/ready`; exposes nothing publicly today (read happens over the shared DB via `catalogReadJdbcTemplate`) |
-| `orinuno-source-contract` | `SourceCatalogEvent` sealed family | Maven artifact, Spring-free, Kin-free |
+| `orinuno-source-contract` | `SourceCatalogEvent` sealed family | Maven artifact, Spring-free, consumer-neutral |
 | `kodik-sdk` | Kodik HTTP / decoder / token / drift | Spring-free (WebFlux only) |
 | `kodik-sdk-spring-boot-starter` | auto-config glue for kodik-sdk | wires `KodikApiClient` + token registry into any Boot host |
 | `jutsu-sdk` / `sibnet-sdk` / `aniboom-sdk` | per-source decoders | Spring-free |
@@ -94,7 +94,7 @@ adding new keys.
 - **Open-source standalone**: No dependencies on any private backend project. No company-specific references, tokens, or imports.
 - **Kodik API domain**: `kodik-api.com` (with hyphen). NOT `kodikapi.com`.
 - **Kodik tokens**: Managed by `kodik-sdk`'s `KodikTokenRegistry` over `data/kodik_tokens.json` (gitignored). Tier model + `functions_availability` matrix mirror AnimeParsers' `kdk_tokns/tokens.json`. Full contract in `data/TOKENS.md`. Never commit real token values. First boot seeds from `KODIK_TOKEN` env, or scrapes `kodik-add.com/add-players.min.js` as a legacy fallback. **DEAD-tier is not terminal**: `validateAll()` re-probes dead entries every `kodik.sdk.token.dead-revalidation-interval-minutes` (default 24h) and `markValid()` auto-promotes them back to `unstable` on first success.
-- **No-polling rule for parse-requests**: machine consumers (kodik-parser) MUST drive completion via the `SourceCatalogEvent` stream at `/api/v1/source-events/ready?updatedSince=…` on the per-source service that emitted the events, not by polling per-request endpoints.
+- **No-polling rule for parse-requests**: machine consumers (downstream consumer) MUST drive completion via the `SourceCatalogEvent` stream at `/api/v1/source-events/ready?updatedSince=…` on the per-source service that emitted the events, not by polling per-request endpoints.
 - **jut.su drift modes (ADR 0015)**: SDK parsers run in **lenient** mode by default — schema drift is logged + counted, parsing continues best-effort. **Strict** mode (`JutsuParserContext.strict()`) is reserved for replay tests against captured fixtures. Never flip production calls to strict; instead add a fixture and let strict-mode replay catch the regression.
 - **Retry with backoff**: Kodik decoder uses `Retry.backoff(maxRetries, 2s)`. Lives in `orinuno-source-kodik`. Do not strip retry from the SDK or the orchestrator.
 - **TTL links**: mp4 links from Kodik CDN expire. `episode_video.decoded_at` (owned by meter) tracks when a link was decoded. Scheduled task in orinuno-source-kodik refreshes expired links via the `SourceCatalogEvent.VariantDecoded` outbox.

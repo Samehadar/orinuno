@@ -99,7 +99,7 @@ class ParseInboundRateLimitFilterTest {
                         MockServerHttpRequest.post("/api/v1/parse/requests")
                                 .header(
                                         ParseInboundRateLimitFilter.CREATED_BY_HEADER,
-                                        "kodik-parser"));
+                                        "demo-consumer"));
 
         filter.filter(exchange, chain).block();
 
@@ -116,7 +116,7 @@ class ParseInboundRateLimitFilterTest {
                             MockServerHttpRequest.post("/api/v1/parse/requests")
                                     .header(
                                             ParseInboundRateLimitFilter.CREATED_BY_HEADER,
-                                            "kodik-parser"));
+                                            "demo-consumer"));
             filter.filter(ok, chain).block();
         }
         MockServerWebExchange overflow =
@@ -124,7 +124,7 @@ class ParseInboundRateLimitFilterTest {
                         MockServerHttpRequest.post("/api/v1/parse/requests")
                                 .header(
                                         ParseInboundRateLimitFilter.CREATED_BY_HEADER,
-                                        "kodik-parser"));
+                                        "demo-consumer"));
 
         filter.filter(overflow, chain).block();
 
@@ -136,7 +136,7 @@ class ParseInboundRateLimitFilterTest {
         Counter counter =
                 meterRegistry
                         .find("orinuno.inbound.throttle")
-                        .tag("consumer", "kodik-parser")
+                        .tag("consumer", "demo-consumer")
                         .counter();
         assertThat(counter).isNotNull();
         assertThat(counter.count()).isEqualTo(1.0);

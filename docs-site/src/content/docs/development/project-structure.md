@@ -25,7 +25,7 @@ service split) the modules are:
 **Libraries:**
 
 - `orinuno-source-contract/` — sealed `SourceCatalogEvent` contract
-  shared with every consumer (meter, kodik-parser, future OSS
+  shared with every consumer (meter, downstream consumer, future OSS
   aggregators). See
   [`docs/adr/0017-source-event-contract.md`](https://github.com/Samehadar/orinuno/blob/master/docs/adr/0017-source-event-contract.md).
 - `kodik-sdk/` — Spring-free Kodik HTTP client + decoder + token registry +

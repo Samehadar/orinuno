@@ -56,7 +56,7 @@
         <!--
             Sealed SourceCatalogEvent contract for /api/v1/source-events/ready.
             Identical shape to what orinuno-source-kodik emits; consumers (meter,
-            Kin jutsu-parser) require no change to subscribe.
+            external downstream jut.su consumer) require no change to subscribe.
         -->
         <dependency>
             <groupId>com.orinuno</groupId>

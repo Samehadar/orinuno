@@ -17,7 +17,7 @@ ADR 0018 introduced "OSS `meter` as a separate service" and "`orinuno` as multi-
 
 ## Decision
 
-### 1. `meter` is a separate Spring Boot deployable, symmetric to Kin's proprietary `downstream-repo/meter`
+### 1. `meter` is a separate Spring Boot deployable, symmetric to the external aggregator's proprietary `external meter`
 
 The OSS `meter/` module is the *single writer* of the canonical catalog (`catalog_content`, `catalog_content_external_id`, `catalog_episode`, `catalog_episode_source_link`). It owns:
 
@@ -25,7 +25,7 @@ The OSS `meter/` module is the *single writer* of the canonical catalog (`catalo
 - the `CatalogPublicApi` + `CatalogIdentityResolver` + `CatalogSinkEventEmitter` write-path (moved from `orinuno-app` in Phase 5.3);
 - the `*RemoteEventPoller` workers that poll each per-source service's `/api/v1/source-events/ready` and reconcile into the canonical store (Phase 5.5 for Kodik; ADR 0019 Phase 4.11 for jut.su).
 
-Symmetry with Kin's proprietary meter is the contract that ADR 0017 promised: both meters (Kin + OSS) consume the same `SourceCatalogEvent` wire shape. They differ only in deployment ownership (Kin proprietary in `downstream-repo/`, OSS in this repo) and in their consumers (Kin meter feeds Kin-internal catalog APIs; OSS meter feeds `orinuno`'s read-path).
+Symmetry with the external aggregator's proprietary meter is the contract that ADR 0017 promised: both meters (out-of-repo + OSS) consume the same `SourceCatalogEvent` wire shape. They differ only in deployment ownership (proprietary out of repo, OSS in this repo) and in their consumers (external meter feeds consumer-internal catalog APIs; OSS meter feeds `orinuno`'s read-path).
 
 ### 2. Catalog read-path = shared MySQL DB, NOT an HTTP API
 

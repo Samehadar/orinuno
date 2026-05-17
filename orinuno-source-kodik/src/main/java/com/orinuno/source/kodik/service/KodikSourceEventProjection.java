@@ -2,7 +2,7 @@
  * KodikSourceEventProjection — ADR 0018 Phase 2.6.
  *
  * Reads kodik_content + kodik_episode_variant rows from this service's own MySQL schema
- * and renders them as producer-side SourceCatalogEvent payloads. Consumer (Kin meter-
+ * and renders them as producer-side SourceCatalogEvent payloads. Consumer (the external meter
  * source-bridge or the future OSS meter) polls via GET /api/v1/source-events/ready and
  * decides what to do with the events.
  *

@@ -9,7 +9,7 @@
  *
  * Spring Boot Actuator's /actuator/health is also exposed (port 8087) for
  * standard readiness probes; this controller adds the Kodik-specific checks
- * a kodik-parser operator needs when troubleshooting a standalone deploy.
+ * an operator needs when troubleshooting a standalone deploy.
  */
 package com.orinuno.source.kodik.controller;
 

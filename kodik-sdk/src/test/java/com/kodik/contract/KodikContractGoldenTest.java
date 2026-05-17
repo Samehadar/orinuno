@@ -74,8 +74,9 @@ class KodikContractGoldenTest {
 
         KodikSearchResponse.Result row = parsed.getResults().get(0);
         // These getters cover the snake_case → camelCase @JsonProperty
-        // bindings that downstream code (orinuno-source-kodik, kodik-parser)
-        // depends on. A regression on any one of them breaks the wire form.
+        // bindings that downstream code (orinuno-source-kodik plus any
+        // out-of-tree consumer) depends on. A regression on any one of
+        // them breaks the wire form.
         assertThat(row.getId()).isEqualTo("serial-52242");
         assertThat(row.getType()).isEqualTo("anime-serial");
         assertThat(row.getTitle()).isEqualTo("Наруто [ТВ-1]");

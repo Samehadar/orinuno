@@ -12,7 +12,7 @@
 --   old_value     prior snapshot of the affected field (NULL for NEW_ANIME)
 --   new_value     the value as observed in the fresh fetch
 --   detected_at   when the watcher noticed (server clock)
---   consumer_id   nullable per-consumer cursor (kodik-parser / web / …)
+--   consumer_id   nullable per-consumer cursor (discovery worker / web / …)
 --   consumed_at   nullable timestamp when consumer marked it processed
 --
 -- Two indexes back the two main read patterns:

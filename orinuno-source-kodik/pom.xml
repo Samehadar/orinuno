@@ -23,8 +23,8 @@
         registry / decoder metrics in one line; owns its own MySQL schema (kodik_*),
         exposes the historical /api/v1/kodik/*, /api/v1/embed/*, /api/v1/calendar*,
         /api/v1/download/*, /api/v1/hls/*, /api/v1/stream/* endpoints plus the canonical
-        /api/v1/source-events/ready event stream that both downstream-repo/meter and the
-        future OSS meter aggregator subscribe to.
+        /api/v1/source-events/ready event stream that the OSS meter aggregator (and any
+        out-of-tree downstream consumer) subscribes to.
 
         Per Phase 2 of the per-source services split, this artefact is the unit of
         independent deploy + open-source publication; orinuno (the monolith renamed
@@ -52,7 +52,7 @@
         <!--
             Producer-side event contract for /api/v1/source-events/ready. orinuno-source-kodik
             emits SourceCatalogEvent payloads identical in shape to what orinuno-app emits
-            today; consumers (external-bridge, OSS meter) require no change to subscribe.
+            today; any downstream consumer requires no change to subscribe.
         -->
         <dependency>
             <groupId>com.orinuno</groupId>

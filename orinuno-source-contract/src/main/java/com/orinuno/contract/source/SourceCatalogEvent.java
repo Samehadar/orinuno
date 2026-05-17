@@ -9,8 +9,8 @@ import java.util.Objects;
 
 /**
  * Producer-side event sealed family. Every interaction between a source bounded context (kodik /
- * jutsu / aniboom / sibnet / …) and any catalog consumer (in-process L3 sink, Kin's meter, future
- * OSS aggregators) crosses through one of these variants.
+ * jutsu / aniboom / sibnet / …) and any catalog consumer (the in-process L3 sink, the OSS meter
+ * aggregator, or any out-of-tree downstream) crosses through one of these variants.
  *
  * <p>Variants:
  *
@@ -19,16 +19,14 @@ import java.util.Objects;
  *       decoded any episode/variant URLs. This is what {@code KodikCatalogIngestion} and {@code
  *       JutsuCatalogIngestion} emit today; the canonical row is found-or-created from the chrome
  *       alone, episodes come later via {@link EpisodesUpdated}.
- *   <li>{@link MovieDiscovered} — film-shaped content, with one playable variant. Maps to meter's
- *       {@code ExportMovieRequest}.
+ *   <li>{@link MovieDiscovered} — film-shaped content, with one playable variant.
  *   <li>{@link SeriesDiscovered} — series-shaped content, with at least one season carrying at
- *       least one episode. Maps to meter's {@code ExportSerialRequest}.
+ *       least one episode.
  *   <li>{@link EpisodesUpdated} — incremental refresh: the title already exists in the consumer's
- *       catalog and the source observed new/updated episode rows. Maps to meter's {@code
- *       ExportSerialRequest} too (meter's EXTENDING strategy handles the merge).
+ *       catalog and the source observed new/updated episode rows. Consumers merge episodes onto the
+ *       existing canonical row.
  *   <li>{@link SourceRemoved} — the source no longer carries this title (Kodik /list dropped it,
- *       jut.su 404'd the slug). No meter equivalent today; OSS consumers may persist as a soft
- *       removal flag.
+ *       jut.su 404'd the slug). Consumers may persist as a soft removal flag.
  *   <li>{@link VariantDecoded} — a previously-discovered variant has had its playable CDN URL
  *       resolved (Kodik decoder ran, Aniboom token minted, …). Emitted by the bounded context that
  *       owns the decoder (today: {@code orinuno-app}'s {@code ParserService} for Kodik) so the

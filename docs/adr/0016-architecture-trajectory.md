@@ -12,7 +12,7 @@ After ADR 0015 orinuno reached a stable state with four SDK modules (`kodik-sdk-
 Three forces push the question into the open right now:
 
 1. **More sources are coming.** IDEA-AP-1 (Aniboom catalog), IDEA-AP-3 (Shikimori), IDEA-AP-4 (Sibnet ~5k+ titles) are all queued. If the answer is "split", the cost compounds with every new source we add inside the monolith.
-2. **The SaaS scenario is two-canon.** kodik-parser in downstream-repo pulls **raw per-source** data from orinuno (`/api/v1/parse/requests`, `/api/v1/export/ready`, `/api/v1/kodik/list`) and feeds it into `meter`, which already owns the universal canonical catalog (`catalog_content` + identity resolution by kinopoisk → imdb → shikimori → mdl → tmdb → (sourceType, sourceId), see [`meter/docs/content-export.md`](../../../downstream-repo/meter/docs/content-export.md) and [`CatalogContentFindOrCreateService`](../../../downstream-repo/meter/src/main/java/com/corporate/meter/service/CatalogContentFindOrCreateService.java)). orinuno's own canonical catalog (if we add one) is therefore for the **open-source consumer**, not for Kin.
+2. **The SaaS scenario is two-canon.** downstream consumer in external aggregator pulls **raw per-source** data from orinuno (`/api/v1/parse/requests`, `/api/v1/export/ready`, `/api/v1/kodik/list`) and feeds it into `meter`, which already owns the universal canonical catalog (`catalog_content` + identity resolution by kinopoisk → imdb → shikimori → mdl → tmdb → (sourceType, sourceId), see [`meter/docs/content-export.md`](../../../external meter/docs/content-export.md) and [`CatalogContentFindOrCreateService`](../../../external meter/src/main/java/com/<organisation>/meter/service/CatalogContentFindOrCreateService.java)). orinuno's own canonical catalog (if we add one) is therefore for the **open-source consumer**, not for the external aggregator.
 3. **jut.su has a real cache problem today.** ADR 0015 added catalog/search/info/episode/notice browser parity on top of the SDK, but `/api/v1/sources/jutsu/*` still hits live HTML on every request — there is no L1 cache, no incremental sync, no fallback when drift fires. This forces the question of "do per-source services need persistence?" before we add Aniboom or Sibnet.
 
 The reference projects (kodik-api-rust, kodikwrapper, AnimeParsers, KodikDownloader) are all libraries or single applications. None of them split into per-source services with an aggregator. AnimeParsers is the closest multi-source analog and its model is "several clients in one pip package; the caller picks the source". That's strong market evidence that the open-source audience expects "simple to deploy" over "distributed by design".
@@ -21,7 +21,7 @@ The reference projects (kodik-api-rust, kodikwrapper, AnimeParsers, KodikDownloa
 
 Adopt **Layout A — modular monolith with a universal canonical catalog as a separate bounded context inside `orinuno-app`**. Do **not** split into per-source services right now. Encode the trigger conditions for the future split (Layout B) explicitly so a later "let's distribute it" suggestion has to satisfy at least one of them.
 
-The decision rests on three observations: SDK modules are already extracted (60–70% of any future split), `episode_source`/`episode_video` are already provider-agnostic, and the SaaS consumer (kodik-parser) needs a **stable raw per-source contract**, not a canonical one. The split-now alternative would deliver zero value to current consumers (kodik-parser does not benefit) and pay a 5×ops cost for an open-source-only canonical layer. The stateless-gateway alternative would discard `orinuno_parse_request` and the universal catalog premise, which contradicts the project's positioning as a multi-vertical platform.
+The decision rests on three observations: SDK modules are already extracted (60–70% of any future split), `episode_source`/`episode_video` are already provider-agnostic, and the SaaS consumer (downstream consumer) needs a **stable raw per-source contract**, not a canonical one. The split-now alternative would deliver zero value to current consumers (downstream consumer does not benefit) and pay a 5×ops cost for an open-source-only canonical layer. The stateless-gateway alternative would discard `orinuno_parse_request` and the universal catalog premise, which contradicts the project's positioning as a multi-vertical platform.
 
 ### Source classification: catalog sources vs decoder sources
 
@@ -91,7 +91,7 @@ A new package `com.orinuno.catalog` inside `orinuno-app` owns L3. It exposes a `
 - `catalog_episode` — canonical episode `(content_id, season, episode)` referencing `catalog_content`.
 - `catalog_episode_source_link` — M:N link between canonical episode and per-source `episode_source` rows (so multiple sources can be attached to the same canonical episode).
 
-**`CatalogIdentityResolver`** (new) — analogue of meter's `CatalogContentFindOrCreateService` but without Kin business logic: `findOrCreate(sourceType, sourceId, externalIds…)`. Lookup order: `shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId)`.
+**`CatalogIdentityResolver`** (new) — analogue of meter's `CatalogContentFindOrCreateService` but without consumer business logic: `findOrCreate(sourceType, sourceId, externalIds…)`. Lookup order: `shikimori → mal → imdb → kinopoisk → mdl → tmdb → (sourceType, sourceId)`.
 
 **`CatalogIngestionService`** (new) — sink invoked synchronously from the kodik / jut.su contexts when a row is upserted. No Rabbit / Kafka in P1: same transaction, same process. If async becomes necessary later, we move to an outbox pattern (already pattern-proven by `kodik_calendar_outbox`).
 
@@ -126,7 +126,7 @@ These guards are **acceptance criteria** for P1a — without them hybrid-fallbac
 
 orinuno splits its REST surface into two contract groups (this is already almost the shape today; ADR 0016 makes it explicit and stable):
 
-#### Raw per-source — stable contract for downstream-repo/kodik-parser and any external consumer that wants source-level access
+#### Raw per-source — stable contract for external Kodik parser and any external consumer that wants source-level access
 
 | Endpoint | Status | Audit notes |
 |---|---|---|
@@ -137,7 +137,7 @@ orinuno splits its REST surface into two contract groups (this is already almost
 | `POST /api/v1/parse/decode/{contentId}` | stable | bulk decode |
 | `POST /api/v1/parse/decode/variant/{variantId}` | stable | single variant |
 | `GET /api/v1/export/{contentId}` | stable | per-content export |
-| `GET /api/v1/export/ready` | stable | `?updatedSince=...` watermark for kodik-parser |
+| `GET /api/v1/export/ready` | stable | `?updatedSince=...` watermark for downstream consumer |
 | `GET /api/v1/kodik/list` | stable | proxy with `Warning: 199` on drift |
 | `GET /api/v1/embed/{idType}/{id}` | stable | shortcut to Kodik `/get-player`; idempotent; no DB write |
 | `GET /api/v1/calendar` | stable | with `?enrich=true` |
@@ -150,7 +150,7 @@ orinuno splits its REST surface into two contract groups (this is already almost
 | `GET /api/v1/anime/{contentId}/episodes/{season}/{episode}/sources` | stable | `MultiSourceRanker` |
 | `GET /api/v1/health/{integration,decoder,schema-drift,tokens,dumps,decoder/path-cache,proxy}` | stable | observability |
 
-We promise backward compatibility on these endpoints because kodik-parser depends on them. Any change goes through OpenAPI snapshot diff (`docs-site/openapi.json`) before merge.
+We promise backward compatibility on these endpoints because downstream consumer depends on them. Any change goes through OpenAPI snapshot diff (`docs-site/openapi.json`) before merge.
 
 **New raw endpoint planned in P2** — `GET /api/v1/sources/{provider}/content/{externalId}` to give consumers a uniform "fetch by source's external id" path (currently you have to know that Kodik uses `/api/v1/embed/{idType}/{id}` and jut.su uses `/api/v1/sources/jutsu/anime/{slug}`).
 
@@ -161,7 +161,7 @@ We promise backward compatibility on these endpoints because kodik-parser depend
 - `GET /api/v1/catalog/content/{id}/episodes` — canonical episode tree.
 - `GET /api/v1/catalog/content/{id}/sources` — every source available for the canonical title (supersets the per-episode `MultiSourceController` for the "show me everything we have" use case).
 
-The canonical surface is **not** consumed by kodik-parser. It is for open-source-aggregator consumers (Telegram bots, alternative front-ends, third-party indexers).
+The canonical surface is **not** consumed by downstream consumer. It is for open-source-aggregator consumers (Telegram bots, alternative front-ends, third-party indexers).
 
 ### Boundary discipline (zoning rules — keep the split-cost low)
 
@@ -179,7 +179,7 @@ These are the cheap discipline rules that turn a future split into a refactor in
 - Maven structure (4 SDK modules + `orinuno-app`).
 - `MultiSourceRanker` ([`orinuno-app/src/main/java/com/orinuno/service/orchestration/MultiSourceRanker.java`](../../orinuno-app/src/main/java/com/orinuno/service/orchestration/MultiSourceRanker.java)) — works at the canonical-episode level and fits neatly into the new `catalog` context.
 - No Rabbit / Kafka. Canonical sink is synchronous, in the same transaction as the source upsert. If async becomes necessary, we use the outbox pattern already proven by `kodik_calendar_outbox`.
-- downstream-repo / kodik-parser untouched. All its calls (`/api/v1/parse/requests`, `/api/v1/export/ready`, `/api/v1/kodik/list`) keep their current contract.
+- external aggregator / downstream consumer untouched. All its calls (`/api/v1/parse/requests`, `/api/v1/export/ready`, `/api/v1/kodik/list`) keep their current contract.
 
 ## Triggers for moving to Layout B (per-source split)
 
@@ -196,7 +196,7 @@ The expected first trigger, if any, is (1) or (2) for jut.su — HTML scraping i
 
 ### Layout B — split now (4 source services + 1 aggregator)
 
-Cost: 5 docker containers, 4–5 databases, inter-service contract with versioning, separate Liquibase per service, distributed tracing, per-service DR strategy, and a developer experience where "run orinuno locally" means "run docker compose with 6 services". Value to current consumers: zero — kodik-parser does not benefit (it consumes raw per-source, which is exactly what this monolith already provides), and the open-source consumer loses the simplicity that makes the project competitive against AnimeParsers.
+Cost: 5 docker containers, 4–5 databases, inter-service contract with versioning, separate Liquibase per service, distributed tracing, per-service DR strategy, and a developer experience where "run orinuno locally" means "run docker compose with 6 services". Value to current consumers: zero — downstream consumer does not benefit (it consumes raw per-source, which is exactly what this monolith already provides), and the open-source consumer loses the simplicity that makes the project competitive against AnimeParsers.
 
 **Rejected**: no triggers exist today; cost is real, value is hypothetical.
 

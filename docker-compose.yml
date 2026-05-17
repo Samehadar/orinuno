@@ -201,16 +201,15 @@ services:
 
   # ────────────────────────────────────────────────────────────────────
   # ARCH-0017-FOLLOWUP-POSTER manual smoke profile. Spins up MinIO + a
-  # WireMock instance impersonating Kin's meter-api so we can run the
-  # full poster pipeline end-to-end on a developer laptop without
-  # connecting to the private downstream-repo meter service. Used by
-  # downstream-repo/scripts/e2e-poster-smoke.sh.
+  # WireMock instance impersonating an external meter-api so we can run
+  # the full poster pipeline end-to-end on a developer laptop without
+  # connecting to any out-of-tree downstream service.
   #
   # Run with:
   #   docker compose --profile e2e-poster up -d
   #
   # URLs (after start):
-  #   MinIO S3       → http://localhost:9000  (corporate / corporate-secret)
+  #   MinIO S3       → http://localhost:9000  (orinuno / orinuno-secret)
   #   MinIO console  → http://localhost:9001
   #   mock-meter     → http://localhost:9999  (POST /v1/content-export/)
   # ────────────────────────────────────────────────────────────────────
@@ -221,8 +220,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: corporate
-      MINIO_ROOT_PASSWORD: corporate-secret
+      MINIO_ROOT_USER: orinuno
+      MINIO_ROOT_PASSWORD: orinuno-secret
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
@@ -239,10 +238,10 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        until mc alias set local http://minio:9000 corporate corporate-secret; do sleep 1; done;
-        mc mb --ignore-existing local/corporate-test;
-        mc anonymous set public local/corporate-test;
-        echo "MinIO bucket corporate-test ready";
+        until mc alias set local http://minio:9000 orinuno orinuno-secret; do sleep 1; done;
+        mc mb --ignore-existing local/orinuno-test;
+        mc anonymous set public local/orinuno-test;
+        echo "MinIO bucket orinuno-test ready";
 
   mock-meter:
     image: wiremock/wiremock:3.13.2

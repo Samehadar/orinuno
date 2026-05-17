@@ -1,13 +1,12 @@
 ---
-title: kodik-parser integration guide
-description: End-to-end runbook for downstream consumers (kodik-parser first) — pre-flight checks, contract, throughput envelope, failure modes, observability.
+title: Downstream consumer integration guide
+description: End-to-end runbook for any downstream service that submits work to orinuno and consumes results — pre-flight checks, contract, throughput envelope, failure modes, observability.
 ---
 
 This page is the single entry point for any downstream service that wants
-to integrate with orinuno — primarily
-[kodik-parser](https://github.com/corporate/downstream-repo/tree/main/kodik-parser),
-but the contract below applies to any consumer that submits work and
-consumes results.
+to integrate with orinuno. The contract below applies to any consumer that
+submits work and consumes results — whether you wrap orinuno from a Java
+host, a Python discovery worker, or a TypeScript poller.
 
 If you only have 30 seconds: run the four pre-flight checks below, submit
 via `POST /api/v1/parse/requests`, and consume completion via
@@ -42,7 +41,7 @@ probe instead of fanning out across four URLs.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Consumer as Consumer (kodik-parser)
+    participant Consumer as Consumer (downstream-consumer)
     participant Submit as POST /parse/requests
     participant Backpressure as GET /parse/requests?limit=0
     participant Export as GET /export/ready?updatedSince=
@@ -54,7 +53,7 @@ sequenceDiagram
         Note over Consumer: pause submission, retry later
     else queue has headroom
         Consumer->>Submit: POST {title|kinopoiskId|...}
-        Note over Consumer,Submit: header X-Created-By: kodik-parser (required)
+        Note over Consumer,Submit: header X-Created-By: downstream-consumer (required)
         Submit-->>Consumer: 201 Created (new) | 200 OK (idempotent hit)
         Note over Worker: claims row, processes async (no Consumer involvement)
         loop polling every N minutes
@@ -72,7 +71,7 @@ POST /api/v1/parse/requests
 Host: orinuno:8085
 Content-Type: application/json
 X-API-KEY: <your key, when configured>
-X-Created-By: kodik-parser
+X-Created-By: downstream-consumer
 
 {
   "kinopoiskId": "326",
@@ -131,7 +130,7 @@ Hard topology constraints (today, single-instance only — see §6):
 - **One** decoder maintenance thread on the isolated
   `orinuno-decoder-maint-` pool (see [TD-PR-5](https://github.com/Samehadar/orinuno/blob/master/TECH_DEBT.md)).
 - **HikariCP `maximum-pool-size = 10`** (Spring Boot default — not yet
-  evaluated under sustained kodik-parser load).
+  evaluated under sustained downstream-consumer load).
 
 ### SLA targets (guideline, not contractual)
 
@@ -180,7 +179,7 @@ What to graph, what to alert on. All series are scraped at
 | `rate(orinuno_parse_requests_completed_total{outcome="DONE"}[5m])` | Throughput | drops to 0 while `PENDING > 0` |
 | `rate(orinuno_parse_requests_completed_total{outcome="FAILED"}[5m])` | Error rate | > 10 % of total completions for > 5 min |
 | `orinuno_parse_request_worker_tick_seconds{quantile="0.95"}` | Worker latency | > 5 s sustained |
-| `orinuno_inbound_throttle_total{consumer="kodik-parser"}` | Inbound throttling | non-zero (means consumer is being slowed down) |
+| `orinuno_inbound_throttle_total{consumer="downstream-consumer"}` | Inbound throttling | non-zero (means consumer is being slowed down) |
 | `orinuno_kodik_calendar_fetch_total{outcome="error"}` | Calendar health | sustained > 0 |
 
 ### Pre-built dashboards
