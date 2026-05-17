@@ -24,7 +24,7 @@ Java 21, Spring Boot 3.4.6 (WebFlux), MyBatis, MySQL 8.0, Liquibase, SpringDoc O
 
 ## Conventions
 
-- This is an **open-source standalone** project. No imports from private projects (downstream-repo, corporate, etc.).
+- This is an **open-source standalone** project. No imports from private projects (external aggregator, <organisation>, etc.).
 - No comments in code unless explaining non-obvious intent.
 - Do not rename existing methods or fields without explicit request.
 - Do not perform major refactoring unless explicitly asked.

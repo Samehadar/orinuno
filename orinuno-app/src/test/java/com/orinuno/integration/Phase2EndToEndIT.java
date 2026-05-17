@@ -293,7 +293,7 @@ class Phase2EndToEndIT {
     @Test
     @DisplayName(
             "GET /parse/requests?limit=0 returns empty rows and X-Total-Count header so"
-                    + " kodik-parser can read pending-queue depth without payload")
+                    + " downstream consumer can read pending-queue depth without payload")
     void listLimitZeroExposesTotalCountHeader() {
         when(parserService.searchInternal(any(ParseRequestDto.class), any()))
                 .thenReturn(Mono.never());

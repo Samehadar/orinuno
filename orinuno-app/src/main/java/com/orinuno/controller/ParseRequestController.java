@@ -30,8 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(
         name = "ParseRequests",
         description =
-                "Async parse-request log: submit a request and poll completion. kodik-parser must"
-                        + " not poll status here — use GET /api/v1/export/ready?updatedSince=")
+                "Async parse-request log: submit a request and poll completion. downstream consumer"
+                        + " must not poll status here — use GET /api/v1/export/ready?updatedSince=")
 public class ParseRequestController {
 
     private final ParseRequestService parseRequestService;

@@ -302,7 +302,7 @@ REST endpoints (orinuno-app): `GET /api/v1/sources/jutsu/{catalog,search,anime/{
 
 #### IDEA-AP-3: Shikimori интеграция
 
-**Приоритет:** Высокий (полезно для downstream-repo)
+**Приоритет:** Высокий (полезно для external aggregator)
 **Сложность:** Средняя
 **Референс:** `AnimeParsers/src/anime_parsers_ru/parser_shikimori_async.py`
 
@@ -604,38 +604,38 @@ P4 — жить в monolith, пока не сработает один из тр
 **Статус:** Реализовано в этом PR.
 **ADR:** [`docs/adr/0017-source-event-contract.md`](docs/adr/0017-source-event-contract.md)
 
-**Контекст:** ADR 0016 закрепил modular monolith как трajectory; ADR 0017 закрывает оставшийся пробел в boundary-discipline — producer-side wire format между source bounded context и любым consumer'ом (in-process L3 sink, Kin's meter через будущий `external-bridge`, OSS aggregator). До этого PR контракт был типизирован catalog-internal записями (`CatalogIdentityRequest`), что блокировало Maven Central публикацию и делало любую внешнюю интеграцию (kodik-parser shrinking, OSS подписчики) обходом catalog'а напрямую.
+**Контекст:** ADR 0016 закрепил modular monolith как трajectory; ADR 0017 закрывает оставшийся пробел в boundary-discipline — producer-side wire format между source bounded context и любым consumer'ом (in-process L3 sink, the external meter через будущий `external bridge`, OSS aggregator). До этого PR контракт был типизирован catalog-internal записями (`CatalogIdentityRequest`), что блокировало Maven Central публикацию и делало любую внешнюю интеграцию (downstream consumer shrinking, OSS подписчики) обходом catalog'а напрямую.
 
 **Что сделано:**
-- Новый Maven-модуль `orinuno-source-contract` (sibling рядом с SDK-модулями): pure DTOs (`SourceIdentifier`, `ExternalIds`, `Provenance`, `ContentKindHint`, `SourceContentInfo`, `SourceSeason`, `SourceEpisode`, `SourceEpisodeVariant`), sealed `SourceCatalogEvent` с пятью вариантами (`TitleObserved` / `MovieDiscovered` / `SeriesDiscovered` / `EpisodesUpdated` / `SourceRemoved`), функциональный интерфейс `SourceEventEmitter`. Зависимости: `jackson-annotations`, `jakarta.annotation-api`, `lombok` (provided). **Без Spring, без jsoup, без slf4j, без Kin-типов.** Готов к публикации на Maven Central через тот же pipeline, что планируется для SDK-модулей (см. `IDEA-SDK-4`).
+- Новый Maven-модуль `orinuno-source-contract` (sibling рядом с SDK-модулями): pure DTOs (`SourceIdentifier`, `ExternalIds`, `Provenance`, `ContentKindHint`, `SourceContentInfo`, `SourceSeason`, `SourceEpisode`, `SourceEpisodeVariant`), sealed `SourceCatalogEvent` с пятью вариантами (`TitleObserved` / `MovieDiscovered` / `SeriesDiscovered` / `EpisodesUpdated` / `SourceRemoved`), функциональный интерфейс `SourceEventEmitter`. Зависимости: `jackson-annotations`, `jakarta.annotation-api`, `lombok` (provided). **Без Spring, без jsoup, без slf4j, без consumer-coupled типов.** Готов к публикации на Maven Central через тот же pipeline, что планируется для SDK-модулей (см. `IDEA-SDK-4`).
 - Golden-file JSON shape stability test (`JsonShapeStabilityTest` + 5 fixture-файлов в `src/test/resources/com/orinuno/contract/source/golden/`) — фиксирует wire format. Любая случайная переиначка контракта (rename, reorder, type change) ломает тест до merge. Discriminator: `@JsonTypeInfo(NAME)` с `kind` property (kebab-case значения `title-observed` / `movie-discovered` / …).
 - В `orinuno-app`: новый `CatalogSinkEventEmitter` (`com.orinuno.catalog.ingestion`) — default in-process `@Component`, реализующий `SourceEventEmitter`. Переводит `SourceCatalogEvent` обратно в `CatalogIdentityRequest` и зовёт `CatalogPublicApi.findOrCreateContent(...)`. Failure isolation сместилась с per-bridge try/catch на one-shot inside emitter.
 - Рефакторинг `KodikCatalogIngestion` (`com.orinuno.service`) и `JutsuCatalogIngestion` (`com.orinuno.jutsu.sync`): теперь зависят от `SourceEventEmitter` (а не от `CatalogPublicApi`); строят `SourceCatalogEvent.TitleObserved` (с `Provenance`, открыто-string `sourceType`, `ExternalIds` builder) и эмитят. Helper-методы `mapKind(...)`, `parseYear(...)`, `resolveSourceId(...)` остались статическими и продолжают тестироваться unit-тестами.
 - Адаптация unit-тестов: `KodikCatalogIngestionTest` и `JutsuCatalogIngestionTest` теперь мокают `SourceEventEmitter` и проверяют форму эмитированного события. Добавлен `CatalogSinkEventEmitterTest` (10 кейсов: kodik / jutsu happy paths, all 5 variants handling, unknown sourceType drop, resolver-exception swallow, null event, kindHint mapping).
 - `CatalogIngestionIT` (e2e Testcontainers MySQL) **остаётся зелёным без правок** — Spring подтягивает default emitter автоматически, поведение byte-identical.
-- ADR 0017 описал audit table meter `ContentExportRequest` → `SourceCatalogEvent` (Kin-coupled hot spots: closed `SourceType` enum → open-string, value-object id wrappers → plain `@Nullable String`, `filepath` → `mediaUrl`, Kin enums → open strings); добавлено правило #7 в boundary discipline ADR 0016.
+- ADR 0017 описал audit table meter `ContentExportRequest` → `SourceCatalogEvent` (consumer-coupled hot spots: closed `SourceType` enum → open-string, value-object id wrappers → plain `@Nullable String`, `filepath` → `mediaUrl`, consumer-coupled enums → open strings); добавлено правило #7 в boundary discipline ADR 0016.
 
 **Что осталось (out of scope этого PR):**
 - **Maven Central publish** — переиспользует pipeline от `IDEA-SDK-4` (всё ещё PENDING на нашей стороне). Когда первый OSS consumer материализуется — публикуем артефакт.
-- **`OutboxEventEmitter` + `<context>_event_outbox` таблица** — deferred. Пишем outbox-implementation только когда появится второй consumer (Kin's `external-bridge` или remote OSS aggregator). До тех пор default in-process emitter — единственный.
+- **`OutboxEventEmitter` + `<context>_event_outbox` таблица** — deferred. Пишем outbox-implementation только когда появится второй consumer (the external aggregator's `external bridge` или remote OSS aggregator). До тех пор default in-process emitter — единственный.
 - **Episode-level emit** (`MovieDiscovered`, `SeriesDiscovered`, `EpisodesUpdated` с реальными вариантами) — пока default emitter форвардит только chrome через `findOrCreateContent`, эпизоды игнорируются. Реализуется когда P2 (canonical REST API) расширит resolver на canonical episodes.
 
 ---
 
 ### ARCH-0017-FOLLOWUP-POSTER: posters в SourceContentInfo — **DONE** (2026-05-10)
 
-**Статус:** Реализовано в этом PR (Stages 1–5). Закрывает регрессию, которую внёс ARCH-0017 Stage C (cutover `kodik-parser`): новый pipeline на `SourceCatalogEvent` отбрасывал `posterFilepath` (передавал `null` в `MeterSourceBridge`), и свежие meter-записи приходили без обложек. Возврат к старому контракту (`KodikContentExportDto.posterUrl()`) был отвергнут — он Kin-specific и не годится для OSS-consumer'ов; вместо этого расширили wire-format.
+**Статус:** Реализовано в этом PR (Stages 1–5). Закрывает регрессию, которую внёс ARCH-0017 Stage C (cutover the downstream consumer): новый pipeline на `SourceCatalogEvent` отбрасывал `posterFilepath` (передавал `null` в `MeterSourceBridge`), и свежие meter-записи приходили без обложек. Возврат к старому контракту (`KodikContentExportDto.posterUrl()`) был отвергнут — он consumer-specific и не годится для OSS-consumer'ов; вместо этого расширили wire-format.
 
 **Что сделано:**
 - В `orinuno-source-contract::SourceContentInfo` добавлены поля `posterUrl`, `bigPosterUrl`, `screenshotUrls` (`List<String>`), `trailerUrls` (`List<String>`). Все nullable / non-empty; `@JsonInclude(NON_EMPTY)` гарантирует, что отсутствующие значения не появятся в JSON и старые fixtures (`title-observed.json`, `series-discovered.json`, …) остаются bit-identical. Builder получил соответствующие методы.
 - `JsonShapeStabilityTest` дополнен новым кейсом `movieDiscoveredWithPostersShape()` + новым golden-файлом `movie-discovered-with-posters.json` — locking shape для wire-format с заполненными poster-полями. Существующие fixtures **не менялись** (NON_EMPTY режет пустые коллекции).
 - В `orinuno-app::SourceEventMapper` (Stage 3) `buildInfo(...)` теперь парсит `KodikContent.materialData` (через `Jackson`) и вытягивает `poster_url_original` (приоритет) → `poster_url` → `anime_poster_url` → `drama_poster_url` для `posterUrl`; `poster_url_original` отдельно для `bigPosterUrl`; колонку `screenshots` (отдельный JSON-array) — для `screenshotUrls`. `trailerUrls` пока пустой (Kodik не отдаёт). Добавлены 4 новых unit-теста.
-- В `downstream-repo::external-bridge` (Stage 4) введён record `PosterAttachments(posterFilepath, bigPosterFilepath, trailerFilepaths)` с `empty()` / `posterOnly(...)` factories. Сигнатуры `MeterSourceBridge.bridge(event, attachments)` и `SourceCatalogEventMapper.toExportRequest(event, attachments)` теперь принимают `PosterAttachments` вместо `String posterFilepath`. `commonInfoOf(...)` пробрасывает `bigPosterFilepath` и `trailerFilepaths` (если не пусто) в meter's `ContentCommonInfo`. +5 новых тестов.
-- В `downstream-repo::kodik-parser::KodikExportScheduler` (Stage 5) восстановлен poster pipeline: новый метод `downloadPostersIfAvailable(event, kodikId)` читает URLs из `event.info()` (`posterUrl` + screenshots fallback, отдельно `bigPosterUrl`), скачивает через `KodikMediaDownloader.downloadAndStorePoster(...)` (тот же сервис, что использовался до cutover'а), оборачивает результат в `PosterAttachments` и передаёт в `bridge(...)`. Failure-tolerant: download error → `PosterAttachments.empty()`, экспорт продолжается. +3 новых теста.
+- В `external aggregator::external bridge` (Stage 4) введён record `PosterAttachments(posterFilepath, bigPosterFilepath, trailerFilepaths)` с `empty()` / `posterOnly(...)` factories. Сигнатуры `MeterSourceBridge.bridge(event, attachments)` и `SourceCatalogEventMapper.toExportRequest(event, attachments)` теперь принимают `PosterAttachments` вместо `String posterFilepath`. `commonInfoOf(...)` пробрасывает `bigPosterFilepath` и `trailerFilepaths` (если не пусто) в meter's `ContentCommonInfo`. +5 новых тестов.
+- В `external aggregator::downstream consumer::KodikExportScheduler` (Stage 5) восстановлен poster pipeline: новый метод `downloadPostersIfAvailable(event, kodikId)` читает URLs из `event.info()` (`posterUrl` + screenshots fallback, отдельно `bigPosterUrl`), скачивает через `KodikMediaDownloader.downloadAndStorePoster(...)` (тот же сервис, что использовался до cutover'а), оборачивает результат в `PosterAttachments` и передаёт в `bridge(...)`. Failure-tolerant: download error → `PosterAttachments.empty()`, экспорт продолжается. +3 новых теста.
 
 **Архитектурный смысл:**
 - `SourceCatalogEvent` теперь несёт **producer-side URLs** (что сорс показал). OSS-consumer (Telegram-бот, indexer) рендерит их напрямую.
-- `external-bridge::PosterAttachments` — Kin-side **MinIO object keys** (что Kin сложил у себя). Boundary между URL-семантикой и filepath-семантикой явный — никто не путает их в одном поле.
+- `external bridge::PosterAttachments` — consumer-side **MinIO object keys** (что консьюмер сложил у себя). Boundary между URL-семантикой и filepath-семантикой явный — никто не путает их в одном поле.
 - Мы НЕ ввели `meterapi.dto.ContentCommonInfo.previewImageFilepath` — этого поля в meter не существует (audit-table в ADR 0017 ошибочно его упоминал). Реальный набор: `posterFilepath` + `bigPosterFilepath` + `trailerFilepaths`.
 
 ---
@@ -647,13 +647,13 @@ P4 — жить в monolith, пока не сработает один из тр
 Что вошло в Phase 2:
 
 1. **Async request log** — таблица `orinuno_parse_request`, контроллер `/api/v1/parse/requests`, `RequestWorker`, идемпотентность по SHA-256 канонического JSON, `phase` enum (QUEUED → SEARCHING → DECODING → DONE/FAILED), throttled progress + `recoverStale`.
-2. **Kodik /list proxy** — `GET /api/v1/kodik/list` (минимальный `KodikListItemView`, `next_page` в `KodikListPageView.nextPage`). Schema-drift в этом эндпоинте бьёт `Warning: 199 …` хедером, чтобы kodik-parser увидел drift, не получая полный сырой респонс.
+2. **Kodik /list proxy** — `GET /api/v1/kodik/list` (минимальный `KodikListItemView`, `next_page` в `KodikListPageView.nextPage`). Schema-drift в этом эндпоинте бьёт `Warning: 199 …` хедером, чтобы downstream consumer увидел drift, не получая полный сырой респонс.
 3. **API-key auth** — `ApiKeyAuthFilter` теперь покрывает `/api/v1/parse/requests` и `/api/v1/kodik` префиксы.
-4. **ContentExportDto v2** — добавлены `lastSeason`, `lastEpisode`, `episodesCount`, `animeStatus`, `dramaStatus`, `allStatus` и derived `ongoing`. Используются kodik-parser’ом для приоритизации онгоингов и выбора между gap-fill / fresh re-parse.
+4. **ContentExportDto v2** — добавлены `lastSeason`, `lastEpisode`, `episodesCount`, `animeStatus`, `dramaStatus`, `allStatus` и derived `ongoing`. Используются downstream consumer’ом для приоритизации онгоингов и выбора между gap-fill / fresh re-parse.
 
 Связанные пункты бэклога, которые **остаются** PENDING после Phase 2:
 
-- **PHASE-2-A: gap-fill из meter-api catalog** — заблокирован на стороне `downstream-repo/meter-api`: нужен эндпоинт `/catalog/missing-by-source?source=KODIK` для выдачи списка `kinopoiskId/shikimoriId/imdbId`, которых ещё нет в каталоге, отсортированных по приоритету. Без него kodik-parser discovery работает только в режиме «full Kodik /list pagination → submit на всё». Передать запрос в downstream-repo.
+- **PHASE-2-A: gap-fill из meter-api catalog** — заблокирован на стороне `external meter-api`: нужен эндпоинт `/catalog/missing-by-source?source=KODIK` для выдачи списка `kinopoiskId/shikimoriId/imdbId`, которых ещё нет в каталоге, отсортированных по приоритету. Без него downstream consumer discovery работает только в режиме «full Kodik /list pagination → submit на всё». Передать запрос в external aggregator.
 - **PHASE-2-B: операторский UI приоритетного добавления** — отложено до того, как операторский UI orinuno вырастет до уровня, на котором имеет смысл вводить ручные «срочные» сабмиты (`POST /api/v1/parse/requests` с приоритетом). Сейчас demo-сайт прямо ходит через `/parse/search`, для приоритетной очереди нужен отдельный экран.
 
 ### IDEA-1: REST endpoint для reference данных — **DONE** (2026-04-24)
@@ -670,7 +670,7 @@ P4 — жить в monolith, пока не сработает один из тр
 
 ### IDEA-4: Полный аудит `material_data` → сохранение в БД — **DONE** (2026-04-24)
 
-**Статус:** Реализовано в коммите `179cc8d`. `material_data` сериализуется в JSON-колонку `kodik_content.material_data` через Liquibase migration `20260424-material-data.xml`; mapping — в `KodikContentMapper`. Доступно на export для downstream-repo.
+**Статус:** Реализовано в коммите `179cc8d`. `material_data` сериализуется в JSON-колонку `kodik_content.material_data` через Liquibase migration `20260424-material-data.xml`; mapping — в `KodikContentMapper`. Доступно на export для external aggregator.
 
 ### IDEA-5: Полная автопагинация `/list` — **DONE** (2026-04-24)
 
@@ -696,7 +696,7 @@ P4 — жить в monolith, пока не сработает один из тр
 
 ### IDEA-DOWNLOAD-MP4LINK-SENTINEL: Фикс `mp4Link='true'` от geo-block — **DONE** (2026-04-25)
 
-**Статус:** Реализовано. `KodikVideoDecoderService.parseVideoResponse` раньше клал синтетический ключ `_geo_blocked: "true"` в мапу качеств для geo-блокированного контента; `ParserService.selectBestQuality` радостно выбирал строку `"true"` как "лучшее качество", и в экспорте у downstream-repo появлялся `mp4Link: "true"`. Теперь декодер для geo-block возвращает пустую мапу (без sentinel'ов), а `selectBestQuality`, `VideoDownloadService.pickBestQualityUrl` и `StreamController.pickBestQuality` защитно пропускают ключи начинающиеся с `_` и значения, которые не начинаются с `http`. Liquibase-миграция `20260425010000_cleanup_invalid_mp4_link.sql` обнуляет пре-существующие битые записи на первом старте.
+**Статус:** Реализовано. `KodikVideoDecoderService.parseVideoResponse` раньше клал синтетический ключ `_geo_blocked: "true"` в мапу качеств для geo-блокированного контента; `ParserService.selectBestQuality` радостно выбирал строку `"true"` как "лучшее качество", и в экспорте у external aggregator появлялся `mp4Link: "true"`. Теперь декодер для geo-block возвращает пустую мапу (без sentinel'ов), а `selectBestQuality`, `VideoDownloadService.pickBestQualityUrl` и `StreamController.pickBestQuality` защитно пропускают ключи начинающиеся с `_` и значения, которые не начинаются с `http`. Liquibase-миграция `20260425010000_cleanup_invalid_mp4_link.sql` обнуляет пре-существующие битые записи на первом старте.
 
 ### IDEA-DOWNLOAD-PROXY: Playwright через прокси-пул
 
@@ -713,64 +713,64 @@ Kodik блокирует плеер по IP в части регионов (по
 
 **Что не делаем:** резидентные прокси, ротацию per-request. Достаточно per-context (один прокси на один download).
 
-### E2E-PHASE0-FINDINGS: Реальные проблемы интеграции с kodik-parser
+### E2E-PHASE0-FINDINGS: Реальные проблемы интеграции с downstream consumer
 
-**Контекст:** 2026-04-25, поднимали kodik-parser из `downstream-repo/docker/docker-compose.yml` локально. Поллинг `/api/v1/export/ready` завёлся (`Fetched 3 items from sourcekodik`), DTO`KodikContentExportDto` мапятся в `ExportSerialRequest` корректно, mp4-ссылки из `materialData` доходят до `Episode.filepath`/`EpisodeVariant.filepath`. Но дальше пайплайн ломается на нескольких узких местах. Это **issues downstream-repo**, но они блокируют Phase 0 интеграции, поэтому фиксируем здесь, а параллельно создаём задачи в `downstream-repo/kodik-parser`.
+**Контекст:** 2026-04-25, поднимали downstream consumer из `the external compose stack` локально. Поллинг `/api/v1/export/ready` завёлся (`Fetched 3 items from sourcekodik`), DTO`KodikContentExportDto` мапятся в `ExportSerialRequest` корректно, mp4-ссылки из `materialData` доходят до `Episode.filepath`/`EpisodeVariant.filepath`. Но дальше пайплайн ломается на нескольких узких местах. Это **issues external aggregator**, но они блокируют Phase 0 интеграции, поэтому фиксируем здесь, а параллельно создаём задачи в `external Kodik parser`.
 
-#### E2E-1: kodik-parser не читает свой `application.yml` для storage/meter-api
+#### E2E-1: downstream consumer не читает свой `application.yml` для storage/meter-api
 
-**Где:** `kodik-parser/src/main/resources/application.yml` против `storage-spring-boot-starter` и `meter-api-spring-boot-starter`.
+**Где:** `downstream consumer/src/main/resources/application.yml` против `storage-spring-boot-starter` и `meter-api-spring-boot-starter`.
 
 **Что нашли:**
 - `application.yml` декларирует `storage.minio.{endpoint,access-key,secret-key,bucket}`, но `MinioStorageProperty` имеет `@ConfigurationProperties(prefix = "minio")` и требует обязательные `minio.url`, `minio.default-region`, `minio.default-bucket-name`, `minio.default-base-folder`, `minio.access-key`, `minio.access-secret`. Старт без них валится с `must not be blank`.
 - `application.yml` использует `meter-api.url`, а `MeterApiProperty` ждёт `meter.base-url`. Тоже падает.
 
-**Что значит:** конфигурация в `application.yml` **не используется**, kodik-parser фактически собирает настройки только из env с правильными именами (`MINIO_URL`, `METER_BASE_URL`, …). В prod-окружении это, видимо, маскируется централизованным ConfigMap, но при первом локальном подъёме сервис не стартует.
+**Что значит:** конфигурация в `application.yml` **не используется**, downstream consumer фактически собирает настройки только из env с правильными именами (`MINIO_URL`, `METER_BASE_URL`, …). В prod-окружении это, видимо, маскируется централизованным ConfigMap, но при первом локальном подъёме сервис не стартует.
 
 **Что делаем:**
-- Создать issue в downstream-repo: переписать `kodik-parser/application.yml` на актуальные ключи стартеров (`minio.*`, `meter.base-url`).
-- В `docs-site` orinuno добавить раздел "Локальный e2e с kodik-parser" с явным списком env (см. ниже в комментарии).
+- Создать issue в external aggregator: переписать `downstream consumer/application.yml` на актуальные ключи стартеров (`minio.*`, `meter.base-url`).
+- В `docs-site` orinuno добавить раздел "Локальный e2e с downstream consumer" с явным списком env (см. ниже в комментарии).
 
-#### E2E-2: kodik-parser не выполняет миграции при старте
+#### E2E-2: downstream consumer не выполняет миграции при старте
 
-**Где:** `kodik-parser/pom.xml`, `kodik-parser/src/main/resources/application.yml`.
+**Где:** `downstream consumer/pom.xml`, `downstream consumer/src/main/resources/application.yml`.
 
-**Что нашли:** `pom.xml` содержит `liquibase-maven-plugin`, но **нет** runtime-зависимости `liquibase-core`. Spring Boot autoconfig для liquibase не активируется → `application.yml`-секция `spring.liquibase.change-log` бесполезна. На старте kodik-parser валится при первом INSERT/SELECT с `Table 'parser_kodik.kodik_export_state' doesn't exist`.
+**Что нашли:** `pom.xml` содержит `liquibase-maven-plugin`, но **нет** runtime-зависимости `liquibase-core`. Spring Boot autoconfig для liquibase не активируется → `application.yml`-секция `spring.liquibase.change-log` бесполезна. На старте downstream consumer валится при первом INSERT/SELECT с `Table 'parser_kodik.kodik_export_state' doesn't exist`.
 
-**Решение (для downstream-repo):** добавить `org.liquibase:liquibase-core` в `kodik-parser/pom.xml`. Тогда стартер автоматически отработает changelog при старте (как уже сделано в orinuno).
+**Решение (для external aggregator):** добавить `org.liquibase:liquibase-core` в `downstream consumer/pom.xml`. Тогда стартер автоматически отработает changelog при старте (как уже сделано в orinuno).
 
-**Workaround:** перед запуском парсера руками гонять `./mvnw -pl kodik-parser liquibase:update`.
+**Workaround:** перед запуском парсера руками гонять `./mvnw -pl downstream consumer liquibase:update`.
 
-#### E2E-3: kodik-parser теряет state неудачных попыток экспорта
+#### E2E-3: downstream consumer теряет state неудачных попыток экспорта
 
-**Где:** `kodik-parser/.../KodikExportScheduler.java::processExportItem`.
+**Где:** `downstream consumer/.../KodikExportScheduler.java::processExportItem`.
 
 **Что нашли:** при ошибке `meterApiService.exportContent(...).block()` (например, meter-api недоступен) парсер делает `exportStateRepository.updateStatus(kodikId, FAILED)` — `UPDATE kodik_export_state … WHERE kodik_content_id = ?`. Но если запись ещё не создана (а она создаётся только при успешном `upsert(...)` в happy-path), `UPDATE` ничего не меняет. В итоге:
 - В таблице **нет ни одной записи** про content_id, который попадал в polling.
 - Каждый цикл (раз в `KODIK_POLL_INTERVAL_MS`) пытается заново всё то же самое.
 - Невозможно увидеть из БД, кого пытались экспортировать и сколько раз.
 
-**Решение (для downstream-repo):**
+**Решение (для external aggregator):**
 - В `processExportItem` сначала `upsert(state with PENDING)` → потом `downloadPoster` → `meterApi.exportContent` → `upsert(state with EXPORTED)`. В catch — `upsert(state with FAILED, error_message)`.
 - Завести retry-counter и `next_retry_at` для backoff (после 3 неудач — отложить на час).
 
 #### E2E-4: poster берётся из `screenshots[0]`, что семантически неверно
 
-**Где:** `kodik-parser/.../KodikExportScheduler.java::downloadPosterIfAvailable`.
+**Где:** `downstream consumer/.../KodikExportScheduler.java::downloadPosterIfAvailable`.
 
 **Что нашли:** `dto.screenshots()` в orinuno-DTO — это **превью кадров серии** (`https://i.kodikres.com/screenshots/seria/.../1.jpg`), а не **постер фильма** (kinopoisk URL). Использовать первый кадр первой серии как poster содержимого — плохо для UX.
 
-Кроме того, на тестовом прогоне ни одного лога "Stored poster" / "Failed to download poster" не было — то есть downloader даже не отрабатывал, хотя в DTO от orinuno `screenshots` непустой. Возможная причина: `getReadyForExport` вызывается без `with_material_data=true` в kodik-parser (нужно проверить `SourceKodikClient`), и orinuno возвращает урезанный DTO. Это уже **issue orinuno** — наш `/export/ready` должен явно возвращать список постеров (kinopoisk thumbnails) отдельным полем.
+Кроме того, на тестовом прогоне ни одного лога "Stored poster" / "Failed to download poster" не было — то есть downloader даже не отрабатывал, хотя в DTO от orinuno `screenshots` непустой. Возможная причина: `getReadyForExport` вызывается без `with_material_data=true` в downstream consumer (нужно проверить `SourceKodikClient`), и orinuno возвращает урезанный DTO. Это уже **issue orinuno** — наш `/export/ready` должен явно возвращать список постеров (kinopoisk thumbnails) отдельным полем.
 
 **Решение (orinuno-side):**
 - В `ContentExportDto` добавить поле `posterUrl` (берём из `materialData.poster_url`), а `screenshots` оставить как кадры серии.
 - В `docs-site/openapi.json` отразить поле.
 
-**Решение (downstream-repo-side):** менять `downloadPosterIfAvailable` так, чтобы качал `dto.posterUrl()` (новое поле) вместо `screenshots[0]`.
+**Решение (external aggregator-side):** менять `downloadPosterIfAvailable` так, чтобы качал `dto.posterUrl()` (новое поле) вместо `screenshots[0]`.
 
-#### E2E-5: kodik-parser отдаёт временные mp4 ссылки в meter-api
+#### E2E-5: downstream consumer отдаёт временные mp4 ссылки в meter-api
 
-**Где:** `kodik-parser/.../KodikMeterMapper.java`.
+**Где:** `downstream consumer/.../KodikMeterMapper.java`.
 
 **Что нашли:** в `ExportSerialRequest` поля `Episode.filepath` и `EpisodeVariant.filepath` заполняются прямой mp4-ссылкой из orinuno, например:
 
@@ -779,7 +779,7 @@ https://cloud.solodcdn.com/useruploads/.../182560b4eb150ea6418ecd7790375f91:2026
 ```
 
 В URL зашит timestamp expires (`:2026042514` ≈ через 24-48 часов). Если meter-api сохранит это значение в БД как-есть и отдаст пользователям через сутки — все ссылки протухнут. Для долговременного хранения нужно либо:
-1. kodik-parser скачивает mp4 сам и кладёт в minio (как с poster), а в meter-api отдаёт уже минио-путь;
+1. downstream consumer скачивает mp4 сам и кладёт в minio (как с poster), а в meter-api отдаёт уже минио-путь;
 2. или meter-api сам проксирует mp4 (single-flight cache);
 3. или контракт меняется так, что meter-api всегда дёргает orinuno re-decode перед раздачей.
 
@@ -787,49 +787,49 @@ https://cloud.solodcdn.com/useruploads/.../182560b4eb150ea6418ecd7790375f91:2026
 
 #### Итог Phase 0
 
-- ✅ Цикл orinuno → kodik-parser работает (поллинг, маппинг, фильтрация по `lastPollTimestamp`).
-- ❌ kodik-parser в нынешнем виде не запускается из коробки (E2E-1, E2E-2).
+- ✅ Цикл orinuno → downstream consumer работает (поллинг, маппинг, фильтрация по `lastPollTimestamp`).
+- ❌ downstream consumer в нынешнем виде не запускается из коробки (E2E-1, E2E-2).
 - ❌ State management хрупкий (E2E-3).
 - ❌ Контракт по постерам и mp4-ссылкам нуждается в доработке (E2E-4, E2E-5).
 - ⏭️ Полноценный e2e с meter-api не делали — поднимать всю обвязку (Postgres, Kafka, ES) ради проверки одного UNAUTHORIZED-вызова дороже, чем ценность.
 
 ### E2E-PHASE0-LIVE-RUN-FINDINGS: Реальный прогон (2026-04-26)
 
-**Контекст:** прошли полный цикл `orinuno → kodik-parser → meter-stub → MinIO`
-с реальной инфраструктурой downstream-repo compose (`storage`, `percona`),
+**Контекст:** прошли полный цикл `orinuno → downstream consumer → meter-stub → MinIO`
+с реальной инфраструктурой external aggregator compose (`storage`, `percona`),
 Liquibase-миграциями применёнными вручную, и HTTP-стабом meter на `:8082`,
 который умеет переключаться между `ok` и `fail` режимами. Все 7 ready-items
 прошли путь `PENDING → EXPORTED` в успешном сценарии, и `PENDING → FAILED →
 back-off → retry → EXPORTED` в негативном. Ниже — что **нашлось живого**, что
 unit-тесты не поймали.
 
-#### LIVE-1 [PUNTED → downstream-repo team]: meter-api контракт `success` обязателен (`MeterApiService` NPE на `null`)
+#### LIVE-1 [PUNTED → external aggregator team]: meter-api контракт `success` обязателен (`MeterApiService` NPE на `null`)
 
-**Статус:** _передано команде downstream-repo_. Записано в
-`downstream-repo/kodik-parser/BACKLOG.md` для коллег. Сами **не делаем**:
+**Статус:** _передано команде external aggregator_. Записано в
+`external Kodik parser/BACKLOG.md` для коллег. Сами **не делаем**:
 `MeterApiService` — shared library, и любая правка в нём затрагивает все
-парсеры (`parser-alloha`, `parser-seasonvars`, …), а не только kodik-parser.
+парсеры (`parser-alloha`, `parser-seasonvars`, …), а не только downstream consumer.
 Эта правка должна идти через owner shared starter.
 
-**Где:** `downstream-repo/meter-api-spring-boot-starter/.../MeterApiService.java:34`.
+**Где:** `external meter-api starter/.../MeterApiService.java:34`.
 
 **Что нашли:** `exportContent` делает `if (!response.success()) {...}` без
 null-check. Если meter возвращает `{}` (например, ошибка сериализации,
 старая версия meter, тестовый стаб) — летит `NullPointerException: Cannot
 invoke "java.lang.Boolean.booleanValue()" because the return value of
 "ContentExportResponse.success()" is null`. Эта ошибка маскирует реальную
-причину сбоя в `error_message` kodik-parser.
+причину сбоя в `error_message` downstream consumer.
 
-**Решение (для команды downstream-repo):** проверять
+**Решение (для команды external aggregator):** проверять
 `Boolean.TRUE.equals(response.success())`, а на null трактовать как
 "контракт нарушен" и падать с понятной диагностикой
 (`UnableToExportContentException("meter returned response without 'success' field")`).
-До тех пор kodik-parser продолжит ловить такие ответы как обычные
+До тех пор downstream consumer продолжит ловить такие ответы как обычные
 исключения — back-off retry-канал уже закрывает worst case.
 
 #### LIVE-2 [DONE]: `st.kp.yandex.net` отдаёт `403 Forbidden` без User-Agent / Referer
 
-**Где:** `downstream-repo/kodik-parser/.../KodikMediaDownloader.java`.
+**Где:** `external Kodik parser/.../KodikMediaDownloader.java`.
 
 **Что нашли:** 5 из 7 элементов имели `posterUrl=https://st.kp.yandex.net/...`
 (KinoPoisk thumbnails). Yandex анти-хотлинк блокирует пустой User-Agent →
@@ -837,7 +837,7 @@ WebClient получает 403 Forbidden → `posterFilepath=null` → meter п�
 запись без постера. Только записи с `https://shikimori.io/uploads/poster/...`
 скачались успешно (24-40 KB JPEG, попали в `local/movies/kodik/posters/`).
 
-**Решение (реализовано в downstream-repo/kodik-parser):**
+**Решение (реализовано в external Kodik parser):**
 - WebClient теперь штампит `User-Agent: Mozilla/5.0 (...) Chrome/135.0.0.0`
   на каждый GET постера.
 - `Referer` подбирается по домену: `kinopoisk.ru/` для `*.yandex.net` /
@@ -852,16 +852,16 @@ WebClient получает 403 Forbidden → `posterFilepath=null` → meter п�
 
 #### LIVE-3 [DONE]: scheduler не возвращался к FAILED-записям (retry pipeline missing)
 
-**Где:** `kodik-parser/.../KodikExportScheduler.java`.
+**Где:** `downstream consumer/.../KodikExportScheduler.java`.
 
-**Что нашли:** когда meter был недоступен, kodik-parser ставил
+**Что нашли:** когда meter был недоступен, downstream consumer ставил
 `status=FAILED, next_retry_at=now+backoff`. После восстановления meter
 запись **никогда не получала retry**, потому что `lastPollTimestamp` уже
 сдвинут в "сейчас", и orinuno возвращает `No new content`. То есть
 `next_retry_at` существует в схеме, но никто его не использует. FAILED
 оседали в БД навсегда.
 
-**Решение (реализовано в kodik-parser живого прогона):**
+**Решение (реализовано в downstream consumer живого прогона):**
 - Repo: `findRetryReady(now, limit)` → `SELECT kodik_content_id FROM ... WHERE
   status='FAILED' AND next_retry_at <= ? ORDER BY next_retry_at ASC LIMIT ?`.
 - Scheduler: после основного poll-цикла безусловно вызывать `retryFailed()`,
@@ -873,7 +873,7 @@ WebClient получает 403 Forbidden → `posterFilepath=null` → meter п�
 
 #### LIVE-4 [DONE]: MyBatis NPE на `markPending` (`No setter found for keyProperty 'id'`)
 
-**Где:** `kodik-parser/.../KodikExportStateMapper.xml::markPending`.
+**Где:** `downstream consumer/.../KodikExportStateMapper.xml::markPending`.
 
 **Что нашли:** `<insert useGeneratedKeys="true" keyProperty="id">` с парам-
 типом `Long kodikContentId` (примитив-обёртка). MyBatis пытается записать
@@ -884,25 +884,25 @@ generated key обратно в `Long` и валится с `No setter found for
 **Решение (реализовано):** убрать `useGeneratedKeys="true" keyProperty="id"`
 из `<insert id="markPending">`. Generated id никем не используется.
 
-#### LIVE-5 [DONE]: дефолты `application.yml` kodik-parser не совпадают с
+#### LIVE-5 [DONE]: дефолты `application.yml` downstream consumer не совпадают с
 `docker/docker-compose.yml`
 
-**Где:** `kodik-parser/src/main/resources/application.yml`.
+**Где:** `downstream consumer/src/main/resources/application.yml`.
 
-**Что нашли:** дефолты были `MINIO_KEY=minioadmin`, `MINIO_BUCKET=corporate`,
+**Что нашли:** дефолты были `MINIO_KEY=minioadmin`, `MINIO_BUCKET=orinuno`,
 `DB_PASSWORD=root`. Compose-стек поднимает MinIO с `secret1234/secret1234`,
 bucket `movies`, MySQL `root/123`. Без явных env-overrides сервис не
 авторизовался ни в MinIO, ни в БД.
 
 **Решение (реализовано):** дефолты в `application.yml` приведены к значениям
-из `docker/docker-compose.yml`. Теперь kodik-parser стартует **без
-ENV-overrides** на нативном downstream-repo compose.
+из `docker/docker-compose.yml`. Теперь downstream consumer стартует **без
+ENV-overrides** на нативном external aggregator compose.
 
 #### Что E2E-3 теперь покрывает
 
 Полный цикл проверен живым прогоном:
 
-1. `meter` режим **fail** + рестарт kodik-parser → 7 записей `PENDING → FAILED`,
+1. `meter` режим **fail** + рестарт downstream consumer → 7 записей `PENDING → FAILED`,
    `retry_count=1`, `next_retry_at=now+30s`.
 2. Внутри back-off-окна: следующий poll-цикл выбирает FAILED-id из БД,
    `findRetryReady` возвращает 0 (next_retry_at в будущем) → ничего не делается.
@@ -914,7 +914,7 @@ ENV-overrides** на нативном downstream-repo compose.
 #### Что E2E-4 теперь покрывает
 
 `posterUrl` приходит из orinuno (см. orinuno-side fix `ContentExportDto.posterUrl`
-извлекается из `material_data.poster_url_original`/`poster_url`). kodik-parser
+извлекается из `material_data.poster_url_original`/`poster_url`). downstream consumer
 читает `dto.posterUrl()` первым приоритетом, на null-валидном — fallback на
 `screenshots[0]`. На реальном датасете 7 ready-items: 7/7 имеют `posterUrl`,
 5 от kinopoisk → 403 (LIVE-2), 2 от shikimori → попадают в MinIO с
@@ -933,7 +933,7 @@ ENV-overrides** на нативном downstream-repo compose.
 
 Формат: POST JSON на конфигурируемый URL (`orinuno.webhooks.url`).
 
-### IDEA-7: Geo-block detection для downstream-repo
+### IDEA-7: Geo-block detection для external aggregator
 
 **Приоритет:** Средний
 **Сложность:** Реализована частично
@@ -941,7 +941,7 @@ ENV-overrides** на нативном downstream-repo compose.
 
 Текущий `GeoBlockDetector` анализирует `blocked_countries` и `blocked_seasons` из Kodik API. Расширить для:
 - Автоматической фильтрации контента по стране пользователя
-- Включения geo-block информации в export DTO для downstream-repo
+- Включения geo-block информации в export DTO для external aggregator
 - Статистики: "сколько контента заблокировано в RU"
 
 ### IDEA-8: Prometheus метрики
@@ -1243,7 +1243,7 @@ Kodik применяет многоуровневую защиту. Это зн�
 2. **Schema drift detection** — ни один конкурент этого не имеет
 3. **Video download через Playwright** — обход CDN protection, уникальная реализация
 4. **67 live API stability тестов** — покрытие стабильности внешнего API
-5. **Export API** — готов для интеграции с downstream-repo
+5. **Export API** — готов для интеграции с external aggregator
 
 ### Наши слабые стороны
 

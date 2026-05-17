@@ -115,7 +115,7 @@ runtime cheat sheet:
 | Stream endpoint hangs ~30 s on first call | `GET /stream/{id}` blocks | Local file missing, kicks Playwright synchronously | Pre-download via `POST /download/{id}` then call `/stream` |
 | HLS endpoint returns 502 | none from manifest body | Decoder returned no m3u8-eligible URL | Fall back to download or embed pathway |
 | Embed endpoint returns 404 | `error: Kodik has no player for…` | Kodik genuinely has no player for that external id | Don't retry — the id is wrong or unsupported |
-| Embed endpoint returns 503 | `error: registry empty` | Token registry empty | See [kodik-parser integration → §1](/orinuno/operations/kodik-parser-integration/#1-pre-flight-checklist) |
+| Embed endpoint returns 503 | `error: registry empty` | Token registry empty | See [downstream consumer integration → §1](/orinuno/operations/downstream consumer-integration/#1-pre-flight-checklist) |
 
 ## See also
 
@@ -123,4 +123,4 @@ runtime cheat sheet:
 - [Video decoding](/orinuno/architecture/video-decoding/) — the 8-step pipeline used by both Playwright and WebClient paths
 - [HLS manifest](/orinuno/architecture/hls-manifest/) — the live-decode manifest endpoint
 - [API → Embed](/orinuno/api/embed/) — the iframe-only shortcut
-- [kodik-parser integration](/orinuno/operations/kodik-parser-integration/) — observability and rate-limit context
+- [downstream consumer integration](/orinuno/operations/downstream consumer-integration/) — observability and rate-limit context

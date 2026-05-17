@@ -27,7 +27,7 @@ Reasons:
 
 ## Allowed exception: `KodikListProxyService` GET fallback
 
-`KodikListProxyService` proxies `/list` calls to a downstream consumer (kodik-parser). If a consumer ever insists on GET (because their HTTP layer lacks POST middleware, or their auditing pipeline only accepts idempotent verbs), we MAY add a GET-pass-through MODE to `KodikListProxyService` only.
+`KodikListProxyService` proxies `/list` calls to a downstream consumer (downstream consumer). If a consumer ever insists on GET (because their HTTP layer lacks POST middleware, or their auditing pipeline only accepts idempotent verbs), we MAY add a GET-pass-through MODE to `KodikListProxyService` only.
 
 This MUST be opt-in via configuration (`orinuno.kodik.list.method=POST|GET`, default `POST`), MUST NOT change `KodikApiClient`, and MUST be covered by a stability test that asserts byte-identical bodies for both methods.
 

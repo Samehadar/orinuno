@@ -214,8 +214,8 @@ public class HealthController {
     }
 
     /**
-     * Aggregated readiness probe for downstream consumers (kodik-parser first). One call instead of
-     * four — see operations/kodik-parser-integration §1.
+     * Aggregated readiness probe for downstream consumers (downstream consumer first). One call
+     * instead of four — see operations/downstream consumer-integration §1.
      *
      * <p>Status is the worst of the per-check verdicts:
      *
@@ -230,9 +230,9 @@ public class HealthController {
     @Operation(
             summary = "Aggregated readiness for downstream consumers (READY/DEGRADED/BLOCKED)",
             description =
-                    "Single endpoint for kodik-parser (and similar) to check before submitting"
-                            + " work. Aggregates token registry, schema-drift, parse-request queue"
-                            + " depth.")
+                    "Single endpoint for downstream consumer (and similar) to check before"
+                        + " submitting work. Aggregates token registry, schema-drift, parse-request"
+                        + " queue depth.")
     public ResponseEntity<Map<String, Object>> integrationHealth() {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("service", "orinuno");

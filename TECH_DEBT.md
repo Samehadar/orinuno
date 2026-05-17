@@ -45,9 +45,9 @@ progress updates and `recoverStale` for crash recovery. The existing synchronous
 The follow-ups below are now tracked individually (TD-PR-1..TD-PR-3) instead of
 a single umbrella item.
 
-**Reference:** upstream-source parser in downstream-repo uses RabbitMQ + State Machine.
+**Reference:** <another-upstream> parser in external aggregator uses RabbitMQ + State Machine.
 We deliberately picked DB-polling instead because orinuno is a standalone
-service and kodik-parser is the only consumer of the request log.
+service and downstream consumer is the only consumer of the request log.
 
 ## TD-PR-1: Single-thread RequestWorker
 
@@ -82,7 +82,7 @@ into a new `kodik_list_debug_log` table for offline replay/diff. Default off.
 ## TD-PR-4: /list nextPage cursor — token leakage
 
 **Priority:** Low
-**Discovered:** 2026-04-26 (live integration: kodik-parser discovery loop ↔
+**Discovered:** 2026-04-26 (live integration: downstream consumer discovery loop ↔
 orinuno /api/v1/kodik/list).
 
 **Context:** `KodikListProxyService` rewrites the upstream Kodik
@@ -91,10 +91,10 @@ orinuno /api/v1/kodik/list).
 back unchanged. The encoded upstream URL still contains
 `token=<kodik-token>` because `KodikApiClient.postForMapAbsoluteUrl(...)` POSTs
 the raw absolute URL to Kodik and there is no token-injection branch on that
-path. Net effect: the Kodik token bleeds into kodik-parser's
+path. Net effect: the Kodik token bleeds into downstream consumer's
 `kodik_discovery_state.last_next_page` column.
 
-**Why it's only Low:** kodik-parser and orinuno share the same trust boundary
+**Why it's only Low:** downstream consumer and orinuno share the same trust boundary
 in the current deployment (both internal services, both behind the same API
 key). The leak is *intra-stack* and never reaches an external client.
 
@@ -207,7 +207,7 @@ behind the `e2e` Maven profile + JUnit 5 `@Tag("e2e")`.
   seasons → episodes → variants tree.
 - `listLimitZeroExposesTotalCountHeader` — `GET /parse/requests?limit=0`
   returns empty rows + `X-Total-Count` header (the contract
-  kodik-parser's discovery-loop relies on for backpressure).
+  downstream consumer's discovery-loop relies on for backpressure).
 
 **How to run:**
 ```sh
@@ -297,7 +297,7 @@ google-java-format (AOSP) и/или с новыми SpotBugs-предупреж�
 шире: там только про CI-step, тут — про локальную обратную связь до
 push.
 
-**Scope:** касается только orinuno. downstream-repo / kodik-parser в
+**Scope:** касается только orinuno. external aggregator / downstream consumer в
 этом раунде не трогаем — там и Spotless/SpotBugs не подключены, и
 любая правка quality-pipeline затронет другие парсеры.
 
@@ -316,22 +316,22 @@ push.
 - Backend: `DownloadState` gained `expectedTotalBytes`; `DownloadProgress` tracks `expectedTotalBytes` (from `Content-Length`) and increments `totalBytes` as each `DataBuffer` is written. A fast-path in `VideoDownloadService.downloadWithStrategy` now goes straight to the CDN when `variant.mp4_link` is already decoded, cutting time-to-first-byte from ~37s (Playwright timeout) to ~2s.
 - Frontend: `ContentDetailView.vue` introduced `ProgressView` with three modes (`segments`, `bytes`, `indeterminate`), a `phaseHint` (`Browser handshake`, `Direct MP4 (CDN)`, `Playwright timed out — falling back to direct MP4`), and an `elapsed` timer in every mode so stalled downloads are obvious.
 
-## Phase 0 e2e — Cross-Repo Issues with kodik-parser (NEW 2026-04-25)
+## Phase 0 e2e — Cross-Repo Issues with downstream consumer (NEW 2026-04-25)
 
 **Priority:** High (blocks full integration)
-**Context:** Spent a session bringing `downstream-repo/kodik-parser` up locally against orinuno (with the corporate-VPN access to `harbor.internal.tech`). Polling cycle works (`Fetched 3 items from sourcekodik`), DTO mapping into `ExportSerialRequest` is correct, but the rest of the pipeline has five concrete defects. Full breakdown (with code refs and proposed fixes) lives in `BACKLOG.md` → section **E2E-PHASE0-FINDINGS**. Short version:
+**Context:** Spent a session bringing `external Kodik parser` up locally against orinuno (with the corporate-VPN access to `<corp-registry>`). Polling cycle works (`Fetched 3 items from sourcekodik`), DTO mapping into `ExportSerialRequest` is correct, but the rest of the pipeline has five concrete defects. Full breakdown (with code refs and proposed fixes) lives in `BACKLOG.md` → section **E2E-PHASE0-FINDINGS**. Short version:
 
-- **E2E-1** — `kodik-parser/application.yml` declares `storage.minio.*` and `meter-api.url`, but `MinioStorageProperty`/`MeterApiProperty` use `prefix = "minio"` and `prefix = "meter"`. The application can't start on a clean local box without supplying `MINIO_URL`, `MINIO_ACCESS_KEY`, `MINIO_ACCESS_SECRET`, `MINIO_DEFAULT_BUCKET_NAME`, `MINIO_DEFAULT_BASE_FOLDER`, `MINIO_DEFAULT_REGION`, `METER_BASE_URL` envs by hand. Likely masked in prod by a central ConfigMap.
-- **E2E-2** — `kodik-parser/pom.xml` ships only the Liquibase Maven plugin, not `liquibase-core`, so Spring Boot autoconfig never runs migrations on startup. First DB call dies with `Table 'parser_kodik.kodik_export_state' doesn't exist`. Workaround: `mvn liquibase:update`.
+- **E2E-1** — `downstream consumer/application.yml` declares `storage.minio.*` and `meter-api.url`, but `MinioStorageProperty`/`MeterApiProperty` use `prefix = "minio"` and `prefix = "meter"`. The application can't start on a clean local box without supplying `MINIO_URL`, `MINIO_ACCESS_KEY`, `MINIO_ACCESS_SECRET`, `MINIO_DEFAULT_BUCKET_NAME`, `MINIO_DEFAULT_BASE_FOLDER`, `MINIO_DEFAULT_REGION`, `METER_BASE_URL` envs by hand. Likely masked in prod by a central ConfigMap.
+- **E2E-2** — `downstream consumer/pom.xml` ships only the Liquibase Maven plugin, not `liquibase-core`, so Spring Boot autoconfig never runs migrations on startup. First DB call dies with `Table 'parser_kodik.kodik_export_state' doesn't exist`. Workaround: `mvn liquibase:update`.
 - **E2E-3** — `KodikExportScheduler.processExportItem` only `upsert`s on success and `updateStatus(FAILED)` on error, but the row doesn't exist yet → `UPDATE` is a no-op → no record of failed attempts → every poll cycle retries from scratch and we lose visibility.
-- **E2E-4** — Poster is taken from `screenshots[0]`, which is a frame thumbnail, not a kinopoisk poster. Plus on the test run not a single "Stored poster" log fired even though `screenshots` was non-empty in DTO — likely because kodik-parser calls `/export/ready` without `with_material_data=true`, so orinuno returns a trimmed DTO. Need to add an explicit `posterUrl` field on orinuno's `ContentExportDto` and have kodik-parser download from there.
-- **E2E-5** — `Episode.filepath` and `EpisodeVariant.filepath` go to meter-api as raw, time-bombed Kodik CDN URLs (e.g. `…/720.mp4` with `:2026042514` expiry baked in). If meter-api persists them as-is, every export rots in ~24-48h. Need a contract decision: kodik-parser downloads to MinIO before exporting / meter-api proxies on demand / meter-api re-decodes from orinuno.
+- **E2E-4** — Poster is taken from `screenshots[0]`, which is a frame thumbnail, not a kinopoisk poster. Plus on the test run not a single "Stored poster" log fired even though `screenshots` was non-empty in DTO — likely because downstream consumer calls `/export/ready` without `with_material_data=true`, so orinuno returns a trimmed DTO. Need to add an explicit `posterUrl` field on orinuno's `ContentExportDto` and have downstream consumer download from there.
+- **E2E-5** — `Episode.filepath` and `EpisodeVariant.filepath` go to meter-api as raw, time-bombed Kodik CDN URLs (e.g. `…/720.mp4` with `:2026042514` expiry baked in). If meter-api persists them as-is, every export rots in ~24-48h. Need a contract decision: downstream consumer downloads to MinIO before exporting / meter-api proxies on demand / meter-api re-decodes from orinuno.
 
-**Owners:** E2E-1..E2E-3 are pure downstream-repo work. E2E-4 has an orinuno side (add `posterUrl` to export DTO + OpenAPI spec). E2E-5 is a contract-level discussion across both repos.
+**Owners:** E2E-1..E2E-3 are pure external aggregator work. E2E-4 has an orinuno side (add `posterUrl` to export DTO + OpenAPI spec). E2E-5 is a contract-level discussion across both repos.
 
 ## Phase 0 e2e — Live Run (UPDATED 2026-04-26)
 
-**Status:** Live dry-run executed against the official `downstream-repo/docker/docker-compose.yml` stack (`storage`, `storage-create-buckets`, `percona`, plus a Python HTTP stub for `meter-api` on `:8082`). orinuno boot, polling cycle, mapping into `ContentExportRequest`, MinIO write, and the freshly added retry channel were all exercised. Orinuno-side fixes (`posterUrl` on `ContentExportDto`, OpenAPI update, defensive filters in `ParserService.selectBestQuality`) and kodik-parser-side fixes (canonical `application.yml` defaults, state-machine, retry channel via `findRetryReady`) are all merged.
+**Status:** Live dry-run executed against the official `the external compose stack` stack (`storage`, `storage-create-buckets`, `percona`, plus a Python HTTP stub for `meter-api` on `:8082`). orinuno boot, polling cycle, mapping into `ContentExportRequest`, MinIO write, and the freshly added retry channel were all exercised. Orinuno-side fixes (`posterUrl` on `ContentExportDto`, OpenAPI update, defensive filters in `ParserService.selectBestQuality`) and downstream consumer-side fixes (canonical `application.yml` defaults, state-machine, retry channel via `findRetryReady`) are all merged.
 
 **What the live run covered (and what unit tests did not catch):**
 
@@ -343,13 +343,13 @@ push.
 
 **New issues discovered by the live run (all logged in `BACKLOG.md` → section `E2E-PHASE0-LIVE-RUN-FINDINGS`):**
 
-- **LIVE-1 [PUNTED → downstream-repo team]** — `MeterApiService.exportContent` calls `response.success().booleanValue()` without null-check; any meter response missing the field crashes kodik-parser with NPE. Should be `Boolean.TRUE.equals(response.success())` with an explicit "contract broken" exception otherwise. **Не делаем сами**: правка в shared `meter-api-spring-boot-starter` затрагивает все парсеры (`parser-alloha`, `parser-seasonvars`, …). Передано команде downstream-repo через `downstream-repo/kodik-parser/BACKLOG.md`.
+- **LIVE-1 [PUNTED → external aggregator team]** — `MeterApiService.exportContent` calls `response.success().booleanValue()` without null-check; any meter response missing the field crashes downstream consumer with NPE. Should be `Boolean.TRUE.equals(response.success())` with an explicit "contract broken" exception otherwise. **Не делаем сами**: правка в shared `meter-api-spring-boot-starter` затрагивает все парсеры (`parser-alloha`, `parser-seasonvars`, …). Передано команде external aggregator через `external Kodik parser/BACKLOG.md`.
 - **LIVE-2 [DONE]** — `KodikMediaDownloader` теперь штампит `User-Agent: Mozilla/5.0 ... Chrome/135.0.0.0` и доменно-специфичный `Referer` (`kinopoisk.ru/` для yandex.net, `shikimori.one/` для shikimori, `kodik.info/` для kodik mirror) на каждый запрос постера. Перегрузка `downloadAndStorePoster(primary, fallback, id)` падает с primary на `screenshots[0]` при любой ошибке (включая 403). Покрыто `KodikMediaDownloaderTest` (5 кейсов) + обновлёнными `KodikExportSchedulerTest` (11 кейсов).
 - **LIVE-3 [DONE]** — `findRetryReady` + `retryFailed()` pass + bug-fix для early-return в `pollAndExport`. FAILED-записи теперь прорабатываются по back-off расписанию.
 - **LIVE-4 [DONE]** — `useGeneratedKeys="true" keyProperty="id"` убран из `<insert id="markPending">` в `KodikExportStateMapper.xml`.
-- **LIVE-5 [DONE]** — Дефолты `kodik-parser/application.yml` (`MINIO_KEY=secret1234`, `MINIO_BUCKET=movies`, `DB_PASSWORD=123`) приведены к значениям `docker/docker-compose.yml`. `./mvnw spring-boot:run` стартует без env-overrides.
+- **LIVE-5 [DONE]** — Дефолты `downstream consumer/application.yml` (`MINIO_KEY=secret1234`, `MINIO_BUCKET=movies`, `DB_PASSWORD=123`) приведены к значениям `docker/docker-compose.yml`. `./mvnw spring-boot:run` стартует без env-overrides.
 
-**E2E-5 [BLOCKED → contract decision]** — `Episode.filepath` / `EpisodeVariant.filepath` всё ещё уходят в meter как сырые временные kodik CDN URLs с зашитым `:expiry`. Не правим односторонне: нужно решение от owner-а meter-api контракта, кто хранит финальный mp4 (kodik-parser скачивает в MinIO до экспорта / meter-api проксирует / meter-api re-decode через orinuno). Записано в `downstream-repo/kodik-parser/BACKLOG.md` как `E2E-5` для обсуждения на синке.
+**E2E-5 [BLOCKED → contract decision]** — `Episode.filepath` / `EpisodeVariant.filepath` всё ещё уходят в meter как сырые временные kodik CDN URLs с зашитым `:expiry`. Не правим односторонне: нужно решение от owner-а meter-api контракта, кто хранит финальный mp4 (downstream consumer скачивает в MinIO до экспорта / meter-api проксирует / meter-api re-decode через orinuno). Записано в `external Kodik parser/BACKLOG.md` как `E2E-5` для обсуждения на синке.
 
 ## Playwright Geo-block Mitigation via Proxy Rotation
 

@@ -16,13 +16,13 @@
     <name>orinuno-source-contract</name>
     <description>
         Producer-side event contract for orinuno content sources. Pure DTOs, no Spring, no
-        Kin-specific types. Sealed SourceCatalogEvent + supporting records (SourceIdentifier,
+        consumer-specific types. Sealed SourceCatalogEvent + supporting records (SourceIdentifier,
         ExternalIds, Provenance, SourceContentInfo, Source{Season,Episode,EpisodeVariant}) plus the
         SourceEventEmitter interface that source bounded contexts call into.
 
         See docs/adr/0017-source-event-contract.md for the audit table that maps meter's
         ContentExportRequest shape to this contract, and the rationale for keeping the artifact
-        Spring-free / Kin-free / publishable to Maven Central alongside the SDK modules.
+        Spring-free / consumer-neutral / publishable to Maven Central alongside the SDK modules.
     </description>
 
     <dependencies>

@@ -17,8 +17,8 @@ import reactor.core.publisher.Mono;
 
 /**
  * Thin proxy over Kodik /list — exposes the minimal {@link KodikListItemView} subset that
- * kodik-parser needs for discovery (gap-fill, ongoing detection). Tracks whether schema drift was
- * observed during this call so the controller can surface a Warning header.
+ * downstream consumer needs for discovery (gap-fill, ongoing detection). Tracks whether schema
+ * drift was observed during this call so the controller can surface a Warning header.
  */
 @Slf4j
 @Service

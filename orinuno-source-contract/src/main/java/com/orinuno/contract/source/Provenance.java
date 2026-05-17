@@ -12,8 +12,8 @@ import java.util.Objects;
  * from and *how* it was parsed so downstream consumers can reason about freshness, drift, and
  * parser-mode-specific gotchas without having to instrument the source contexts.
  *
- * <p>Meter does not consume any of these fields today (parser-* services in downstream-repo swallow
- * drift internally), so the Kin-side {@code external-bridge} drops the whole record on
+ * <p>Meter does not consume any of these fields today (parser-* services in external aggregator
+ * swallow drift internally), so the consumer-side {@code external bridge} drops the whole record on
  * translation. OSS L3 ingestion / drift dashboards persist them.
  *
  * <p>{@code parserMode} is intentionally a free-form string ("lenient" / "strict" for jut.su per

@@ -9,14 +9,15 @@ import java.util.Objects;
 /**
  * One playable variant for an episode (e.g. one translation track for a Kodik episode, one quality
  * level for a sibnet upload, one direct mp4 link). Mirrors meter's {@code EpisodeVariant} with the
- * Kin-coupled bits replaced:
+ * consumer-coupled bits replaced:
  *
  * <ul>
  *   <li>{@code identifier} stays the same shape (per-source key) but uses {@link SourceIdentifier}
  *       (open-string source type) instead of meter's closed {@code SourceType}.
  *   <li>{@code mediaUrl} replaces meter's {@code filepath} — meaning is the same (a URL/path that a
- *       player can resolve), but the field name no longer implies a MinIO key. Kin's {@code
- *       external-bridge} translates {@code mediaUrl} → {@code filepath} on its side.
+ *       player can resolve), but the field name no longer implies a MinIO key. the external
+ *       aggregator's {@code external bridge} translates {@code mediaUrl} → {@code filepath} on its
+ *       side.
  *   <li>{@code streamQuality} is a plain string ({@code "1080p"}, {@code "HD"}, …) instead of
  *       meter's closed {@code StreamQuality} enum.
  * </ul>
