@@ -8,8 +8,8 @@ import java.util.Objects;
 
 /**
  * Producer-side event sealed family. Every interaction between a source bounded context (kodik /
- * jutsu / aniboom / sibnet / …) and any catalog consumer (in-process L3 sink, the external meter, future
- * OSS aggregators) crosses through one of these variants.
+ * jutsu / aniboom / sibnet / …) and any catalog consumer (in-process L3 sink, the external meter,
+ * future OSS aggregators) crosses through one of these variants.
  *
  * <p>Variants:
  *

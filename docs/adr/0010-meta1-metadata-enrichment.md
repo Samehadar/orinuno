@@ -3,7 +3,7 @@
 - **Status**: Accepted (implementation deferred — independent of multi-provider work, but lower priority)
 - **Date**: 2026-05-02
 - **Deciders**: orinuno maintainers
-- **Related**: BACKLOG.md → IDEA-AP-3, [ADR 0007](0007-player5-shikimori-metadata-not-source.md), reference: downstream-repo `kinopoisk-db-updater` module, AnimeParsers `parser_shikimori_async.py`
+- **Related**: BACKLOG.md → IDEA-AP-3, [ADR 0007](0007-player5-shikimori-metadata-not-source.md), reference: external aggregator `kinopoisk-db-updater` module, AnimeParsers `parser_shikimori_async.py`
 
 ## Context
 
@@ -26,7 +26,7 @@ Three external sources cover this:
 | **Kinopoisk** (HD/Unofficial) | film + serial (RU) | Decent (REST) | API key | 100 req/day free |
 | **MyAnimeList** (via Jikan) | anime + manga (EN/JP) | Mature (REST) | None | 3 req/sec |
 
-downstream-repo already has a `kinopoisk-db-updater` module that knows how to talk to Kinopoisk. orinuno is open-source and standalone — it cannot import from downstream-repo, but it can mirror the same approach.
+external aggregator already has a `kinopoisk-db-updater` module that knows how to talk to Kinopoisk. orinuno is open-source and standalone — it cannot import from external aggregator, but it can mirror the same approach.
 
 ## Decision
 

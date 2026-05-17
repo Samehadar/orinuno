@@ -52,7 +52,7 @@ What it covers:
   Phase 2 metadata fields (`lastSeason`, `lastEpisode`,
   `episodesCount`) and the nested seasons/episodes/variants tree.
 - `GET /parse/requests?limit=0` exposes `X-Total-Count` (the
-  contract kodik-parser's discovery loop reads for backpressure).
+  contract downstream consumer's discovery loop reads for backpressure).
 
 ## Live integration tests
 

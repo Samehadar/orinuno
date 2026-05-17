@@ -19,7 +19,7 @@
 --      `kodik_calendar_outbox` for every observed change (see the next
 --      migration script).
 --
--- Downstream consumers (kodik-parser, frontend, notifications, etc.) read the
+-- Downstream consumers (downstream consumer, frontend, notifications, etc.) read the
 -- outbox to react to changes without having to poll the full calendar dump.
 
 CREATE TABLE IF NOT EXISTS kodik_calendar_state (

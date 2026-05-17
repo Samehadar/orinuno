@@ -9,20 +9,19 @@ import java.util.Objects;
 /**
  * Title-level metadata observed from an upstream source: localised titles, year, kind hint,
  * external ids, and producer-side URLs for posters/screenshots/trailers. Mirrors meter's {@code
- * ContentCommonInfo} (see {@code
- * external meter-api starter/.../ContentCommonInfo.java}) but stripped of
- * consumer-specific value-object wrappers and closed enums.
+ * ContentCommonInfo} (see {@code external meter-api starter/.../ContentCommonInfo.java}) but
+ * stripped of consumer-specific value-object wrappers and closed enums.
  *
  * <p>What this record carries vs. what it deliberately does not:
  *
  * <ul>
  *   <li>{@link #posterUrl}, {@link #bigPosterUrl}, {@link #screenshotUrls}, {@link #trailerUrls} —
  *       <em>fully-qualified producer-side URLs</em>. Open-source consumers can render them
- *       directly. consumer-side consumers ({@code downstream consumer} → {@code external bridge}) download
- *       them into MinIO and translate the resulting object keys into meter's {@code posterFilepath}
- *       / {@code bigPosterFilepath} / {@code trailerFilepaths} family. This is the shape promised
- *       by ADR 0017 §"Audit table — meter contract → orinuno-source-contract" and closes
- *       ARCH-0017-FOLLOWUP-POSTER.
+ *       directly. consumer-side consumers ({@code downstream consumer} → {@code external bridge})
+ *       download them into MinIO and translate the resulting object keys into meter's {@code
+ *       posterFilepath} / {@code bigPosterFilepath} / {@code trailerFilepaths} family. This is the
+ *       shape promised by ADR 0017 §"Audit table — meter contract → orinuno-source-contract" and
+ *       closes ARCH-0017-FOLLOWUP-POSTER.
  *   <li>{@code mediaUrl} for episode/movie playback lives on {@link SourceEpisodeVariant} (as it
  *       always did) — these fields are content-level chrome, not playable streams.
  *   <li>Audio/video quality enums stay as plain strings on the variant when relevant; this record

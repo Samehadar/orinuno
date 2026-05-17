@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Stage B of ARCH-0017: streams ready-for-export L1 rows as producer-side {@link
- * SourceCatalogEvent}s. Open consumers (the external aggregator's{@code external bridge}, future OSS aggregators)
- * drive incremental polling via {@code updatedSince}.
+ * SourceCatalogEvent}s. Open consumers (the external aggregator's {@code external bridge}, future
+ * OSS aggregators) drive incremental polling via {@code updatedSince}.
  *
  * <p>The legacy {@code /api/v1/export/ready} endpoint (proprietary {@code ContentExportDto}) stays
  * available throughout this PR for downstream consumer back-compat. It will be retired once Stage C
@@ -30,8 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(
         name = "Source Events",
         description =
-                "Producer-side SourceCatalogEvent stream — orinuno's open contract for any"
-                        + " consumer (external meter, OSS aggregators) to ingest source catalog state.")
+                "Producer-side SourceCatalogEvent stream — orinuno's open contract for any consumer"
+                        + " (external meter, OSS aggregators) to ingest source catalog state.")
 public class SourceEventController {
 
     private static final int DEFAULT_LIMIT = 20;

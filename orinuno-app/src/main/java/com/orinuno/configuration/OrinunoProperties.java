@@ -67,8 +67,8 @@ public class OrinunoProperties {
     /**
      * Inbound rate limit applied to {@code POST /api/v1/parse/requests}. Per-consumer
      * (X-Created-By) token bucket. Surfaced as the {@code orinuno_inbound_throttle_total}
-     * Prometheus counter and the integration health endpoint. See
-     * operations/downstream consumer-integration.
+     * Prometheus counter and the integration health endpoint. See operations/downstream
+     * consumer-integration.
      */
     @Data
     public static class InboundRateLimitProperties {

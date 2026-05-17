@@ -8,8 +8,8 @@ import java.util.Objects;
 /**
  * Third-party external-database identifiers harvested from a source's metadata. Every field is a
  * plain {@code @Nullable String} on purpose — this artifact does not depend on any project's
- * internal value-object wrappers, and consumers (the external meter, future OSS aggregators) re-wrap as
- * needed.
+ * internal value-object wrappers, and consumers (the external meter, future OSS aggregators)
+ * re-wrap as needed.
  *
  * <p>Coverage matches the union of:
  *

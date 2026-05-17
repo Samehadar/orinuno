@@ -9,7 +9,7 @@ The synchronous `POST /api/v1/parse/search` endpoint stays open for the
 entire decode cycle, which can run for tens of minutes on large anime
 serials (e.g. Naruto: 220 episodes × N translations). Phase 2 introduces
 an async parse-request log so callers — primarily
-[kodik-parser discovery](#kodik-parser-discovery-flow) — can submit work,
+[downstream consumer discovery](#downstream consumer-discovery-flow) — can submit work,
 get an id immediately, and poll progress (or, in production, react to
 `/api/v1/export/ready` updates) without holding HTTP connections open.
 
@@ -21,7 +21,7 @@ fastest path for human-driven exploration via the demo site.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Client as Client (kodik-parser discovery)
+    participant Client as Client (downstream consumer discovery)
     participant API as ParseRequestController
     participant Service as ParseRequestService
     participant DB as orinuno_parse_request
@@ -101,16 +101,16 @@ percentile budgets.
 | 220-episode serial decode                            | 30–90 min            | Bound by Kodik request-delay budget × variant count.             |
 | Stale RUNNING recovery                               | < 60 s               | `recoverStale` runs every 60 s, threshold = 5 min heartbeat.     |
 
-## No-polling rule for kodik-parser
+## No-polling rule for downstream consumer
 
-`kodik-parser` discovery **must not** poll
+the downstream consumer discovery **must not** poll
 `GET /api/v1/parse/requests/{id}` to drive its own state machine. The
 authoritative completion signal is the existing
 `GET /api/v1/export/ready?updatedSince=…` endpoint, which already powers
 the live integration tests. The parse-request log exists for
 observability and idempotency only.
 
-`GET /api/v1/parse/requests` (list) **is** allowed — kodik-parser uses it
+`GET /api/v1/parse/requests` (list) **is** allowed — downstream consumer uses it
 with `?status=PENDING&limit=0` to read the `X-Total-Count` header for
 backpressure ("does orinuno already have N pending requests?"). This is
 a single cheap query, not a per-id poll.
@@ -143,14 +143,14 @@ orinuno:
     max-page-limit: 200
 ```
 
-## kodik-parser discovery flow
+## downstream consumer discovery flow
 
 The full cross-service picture for the **discover → parse → consume → meter**
 journey looks like this:
 
 ```mermaid
 flowchart LR
-    subgraph PK["kodik-parser"]
+    subgraph PK["downstream consumer"]
         DSC[KodikDiscoveryScheduler]
         EXP[KodikExportScheduler]
         STATE[(parser_kodik MySQL)]
@@ -187,15 +187,15 @@ flowchart LR
     EXP <--> STATE
 ```
 
-The **only** synchronous coupling between kodik-parser and orinuno is
+The **only** synchronous coupling between downstream consumer and orinuno is
 discovery → submit. After `POST /parse/requests` returns, the two
 services run independent loops that meet again only when
-`KodikExportScheduler` polls `/export/ready`. kodik-parser never reads
+`KodikExportScheduler` polls `/export/ready`. downstream consumer never reads
 `/parse/requests/{id}` to drive its state machine — that's the
 no-polling rule above.
 
 Full flow with timing details: see
-[kodik-parser/README → "Sequence: end-to-end"](https://github.com/corporate/downstream-repo/blob/main/kodik-parser/README.md#sequence-end-to-end-discover-one-new-title--land-in-meter).
+[downstream consumer/README → "Sequence: end-to-end"](https://<private downstream repo>/blob/main/downstream consumer/README.md#sequence-end-to-end-discover-one-new-title--land-in-meter).
 
 ## See also
 

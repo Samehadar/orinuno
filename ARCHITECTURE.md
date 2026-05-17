@@ -674,7 +674,7 @@ deactivate DC
 ### 7. Async parse-request log
 
 Phase 2 turns synchronous Kodik searches into a durable, idempotent
-request log so `kodik-parser` discovery can fan out work without holding
+request log so the downstream consumer discovery can fan out work without holding
 HTTP connections open. The synchronous `POST /api/v1/parse/search`
 remains for the demo site / human exploration; this flow is for
 machine-driven discovery.
@@ -682,7 +682,7 @@ machine-driven discovery.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Client as kodik-parser
+    participant Client as downstream consumer
     participant API as ParseRequestController
     participant Service as ParseRequestService
     participant DB as orinuno_parse_request
@@ -722,7 +722,7 @@ sequenceDiagram
 - **Idempotency** — submit returns the existing active row (200) instead of inserting on duplicates. Hash is computed over a canonical JSON form (sorted keys, normalized strings, null fields stripped).
 - **At-most-one worker per row** — `SELECT … FOR UPDATE SKIP LOCKED` plus the explicit `markClaimed` update inside `ParseRequestQueueService.@Transactional`. The queue service is a separate Spring bean specifically so that `@Transactional` is honoured (Spring's proxy is bypassed on intra-class self-invocation, hence the split from `RequestWorker`).
 - **Heartbeats, not timeouts** — `ThrottledProgressReporter` updates `last_heartbeat_at` on every flush; `recoverStale` uses that column instead of wall-clock duration.
-- **No-polling for kodik-parser** — discovery treats `GET /api/v1/export/ready?updatedSince=…` as the completion signal. The list endpoint is allowed only with `?status=PENDING&limit=0` to read `X-Total-Count` for backpressure.
+- **No-polling for downstream consumer** — discovery treats `GET /api/v1/export/ready?updatedSince=…` as the completion signal. The list endpoint is allowed only with `?status=PENDING&limit=0` to read `X-Total-Count` for backpressure.
 
 See [`docs-site/architecture/parse-requests`](docs-site/src/content/docs/architecture/parse-requests.md) for the full SLA table, configuration knobs and the no-polling rationale.
 
@@ -869,9 +869,9 @@ sequenceDiagram
 2. **Идемпотентность** — на своей стороне ведите состояние «экспортировано / ошибка» по `kinopoisk_id` или `orinuno_content_id`, чтобы переигровка не создавала дубли.
 3. **Отдельное хранилище ассетов** — mp4/скриншоты/постеры лучше складывать в отдельное хранилище (S3/MinIO/CDN), а не гонять напрямую с Kodik CDN каждый раз — ссылки TTL-ом стираются.
 
-### Async submit pattern (kodik-parser discovery)
+### Async submit pattern (downstream consumer discovery)
 
-For machine-driven discovery (e.g. kodik-parser gap-filling missing
+For machine-driven discovery (e.g. downstream consumer gap-filling missing
 titles in meter-api), use the async parse-request log instead of the
 synchronous `/parse/search`:
 
