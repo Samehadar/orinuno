@@ -1,0 +1,26 @@
+# Local commit gate. Standalone binary — install once:
+#   brew install lefthook && lefthook install
+# Bypass a single commit with: git commit --no-verify
+pre-commit:
+  parallel: true
+  commands:
+    secrets:
+      # Generic secret scan of the staged diff. Skips gracefully if neither
+      # scanner is installed (CI is the enforcing gate; this is dev convenience).
+      run: |
+        if command -v betterleaks >/dev/null 2>&1; then
+          betterleaks git --staged --redact --verbose
+        elif command -v gitleaks >/dev/null 2>&1; then
+          gitleaks git --staged --redact --verbose
+        else
+          echo "[lefthook] no betterleaks/gitleaks on PATH — skipping secret scan" >&2
+        fi
+    forbidden-markers:
+      # Forbidden-marker scan using your LOCAL, uncommitted marker config.
+      # Enable by exporting ORINUNO_KW_CONFIG=/path/to/gitleaks-keywords.toml
+      run: |
+        if [ -n "${ORINUNO_KW_CONFIG:-}" ] && command -v betterleaks >/dev/null 2>&1; then
+          betterleaks dir . --config "$ORINUNO_KW_CONFIG" --redact --verbose
+        else
+          echo "[lefthook] ORINUNO_KW_CONFIG unset or betterleaks absent — skipping marker scan" >&2
+        fi
