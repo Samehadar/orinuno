@@ -11,7 +11,15 @@ title = "orinuno secret scan (generic)"
 useDefault = true
 
 [allowlist]
-description = "Public GitHub-search JSON dumps under docs/research/data are research fixtures, not secrets."
+description = "Known-benign false positives: bulk research fixtures, vendored third-party docs, and doc placeholders."
 paths = [
+  # Public GitHub-search JSON dumps — research fixtures, not secrets.
   '''docs/research/data/.*''',
+  # Vendored third-party READMEs (not our code); they carry the public, shared
+  # kodik demo token in usage examples.
+  '''docs/vendor/.*''',
+]
+stopwords = [
+  # API-doc example uses an obvious placeholder value, not a real key.
+  "your-secret",
 ]
