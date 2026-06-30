@@ -1,0 +1,17 @@
+# Generic secret-scan config for betterleaks / gitleaks (default ruleset).
+#
+# The FORBIDDEN-MARKER rules (private repo/org/brand names) are deliberately
+# NOT in this file — keeping them here would re-leak the very list we scan for.
+# They live in the CI secret GITLEAKS_KEYWORD_CONFIG_B64 and are injected at
+# scan time (see .github/workflows/secret-scan.yml, pass 2). Locally, point
+# ORINUNO_KW_CONFIG at your own uncommitted gitleaks-keywords.toml.
+title = "orinuno secret scan (generic)"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public GitHub-search JSON dumps under docs/research/data are research fixtures, not secrets."
+paths = [
+  '''docs/research/data/.*''',
+]

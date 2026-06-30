@@ -55,3 +55,8 @@ orinuno-source-jutsu/data/
 ### Python (helper scripts under scripts/research/) ###
 __pycache__/
 *.pyc
+
+### Forbidden-marker guard — the keyword list must NEVER be committed ###
+gitleaks-keywords*.toml
+forbidden*.txt
+*.local.toml
